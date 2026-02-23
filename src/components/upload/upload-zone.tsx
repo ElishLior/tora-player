@@ -1,56 +1,85 @@
 'use client';
 
 import { useCallback, useState, useRef } from 'react';
-import { Upload, FileAudio, X } from 'lucide-react';
+import { Upload, FileAudio, X, GripVertical } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { isAudioFile, extractAudioMetadata, formatFileSize, type AudioMetadata } from '@/lib/audio-utils';
 
-interface UploadZoneProps {
-  onFileSelected: (file: File, metadata: AudioMetadata) => void;
-  disabled?: boolean;
+export interface SelectedFile {
+  file: File;
+  metadata: AudioMetadata;
 }
 
-export function UploadZone({ onFileSelected, disabled }: UploadZoneProps) {
+interface UploadZoneProps {
+  onFilesSelected: (files: SelectedFile[]) => void;
+  disabled?: boolean;
+  multiple?: boolean;
+  // Legacy single-file callback
+  onFileSelected?: (file: File, metadata: AudioMetadata) => void;
+}
+
+export function UploadZone({ onFilesSelected, onFileSelected, disabled, multiple = true }: UploadZoneProps) {
   const t = useTranslations('lessons');
   const [isDragging, setIsDragging] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<SelectedFile[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleFile = useCallback(async (file: File) => {
+  const processFiles = useCallback(async (fileList: File[]) => {
     setError(null);
-
-    if (!isAudioFile(file)) {
-      setError('Unsupported audio format. Please upload MP3, WAV, OGG, M4A, FLAC, or WebM.');
-      return;
-    }
-
-    // 500MB limit
-    if (file.size > 500 * 1024 * 1024) {
-      setError('File too large. Maximum size is 500MB.');
-      return;
-    }
-
     setIsProcessing(true);
-    setSelectedFile(file);
 
-    try {
-      const metadata = await extractAudioMetadata(file);
-      onFileSelected(file, metadata);
-    } catch {
-      setError('Could not read audio file metadata.');
-    } finally {
-      setIsProcessing(false);
+    const validFiles: SelectedFile[] = [];
+
+    for (const file of fileList) {
+      if (!isAudioFile(file)) {
+        setError('קובץ לא נתמך. העלה MP3, WAV, OGG, M4A, FLAC או WebM.');
+        continue;
+      }
+
+      if (file.size > 500 * 1024 * 1024) {
+        setError('קובץ גדול מדי. מקסימום 500MB.');
+        continue;
+      }
+
+      try {
+        const metadata = await extractAudioMetadata(file);
+        validFiles.push({ file, metadata });
+      } catch {
+        validFiles.push({
+          file,
+          metadata: {
+            duration: 0,
+            format: file.type || 'audio/mpeg',
+            fileSize: file.size,
+          },
+        });
+      }
     }
-  }, [onFileSelected]);
+
+    if (validFiles.length > 0) {
+      const newFiles = multiple
+        ? [...selectedFiles, ...validFiles]
+        : validFiles.slice(0, 1);
+
+      setSelectedFiles(newFiles);
+      onFilesSelected(newFiles);
+
+      if (onFileSelected && newFiles.length > 0) {
+        onFileSelected(newFiles[0].file, newFiles[0].metadata);
+      }
+    }
+
+    setIsProcessing(false);
+  }, [multiple, selectedFiles, onFilesSelected, onFileSelected]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file) handleFile(file);
-  }, [handleFile]);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) processFiles(files);
+  }, [processFiles]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -62,25 +91,39 @@ export function UploadZone({ onFileSelected, disabled }: UploadZoneProps) {
   }, []);
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) handleFile(file);
-  }, [handleFile]);
-
-  const clearSelection = useCallback(() => {
-    setSelectedFile(null);
-    setError(null);
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) processFiles(files);
     if (inputRef.current) inputRef.current.value = '';
-  }, []);
+  }, [processFiles]);
+
+  const removeFile = useCallback((index: number) => {
+    const newFiles = selectedFiles.filter((_, i) => i !== index);
+    setSelectedFiles(newFiles);
+    onFilesSelected(newFiles);
+    setError(null);
+  }, [selectedFiles, onFilesSelected]);
+
+  const moveFile = useCallback((fromIndex: number, toIndex: number) => {
+    if (toIndex < 0 || toIndex >= selectedFiles.length) return;
+    const newFiles = [...selectedFiles];
+    const [moved] = newFiles.splice(fromIndex, 1);
+    newFiles.splice(toIndex, 0, moved);
+    setSelectedFiles(newFiles);
+    onFilesSelected(newFiles);
+  }, [selectedFiles, onFilesSelected]);
+
+  const totalSize = selectedFiles.reduce((sum, f) => sum + f.file.size, 0);
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
+      {/* Drop zone */}
       <div
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onClick={() => !disabled && inputRef.current?.click()}
         className={`
-          flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-8
+          flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-6
           transition-colors cursor-pointer
           ${isDragging ? 'border-primary bg-primary/5' : 'border-muted-foreground/25 hover:border-primary/50'}
           ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
@@ -93,34 +136,73 @@ export function UploadZone({ onFileSelected, disabled }: UploadZoneProps) {
           className="hidden"
           onChange={handleInputChange}
           disabled={disabled}
+          multiple={multiple}
         />
 
-        {selectedFile ? (
-          <div className="flex items-center gap-3">
-            <FileAudio className="h-8 w-8 text-primary" />
-            <div className="text-start">
-              <p className="font-medium">{selectedFile.name}</p>
-              <p className="text-sm text-muted-foreground">{formatFileSize(selectedFile.size)}</p>
-            </div>
-            <button
-              onClick={(e) => { e.stopPropagation(); clearSelection(); }}
-              className="rounded-full p-1 hover:bg-muted"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        ) : (
-          <>
-            <Upload className="h-10 w-10 text-muted-foreground mb-3" />
-            <p className="text-sm text-muted-foreground text-center">
-              {isProcessing ? t('loading') : t('dragOrClick')}
-            </p>
-            <p className="text-xs text-muted-foreground/60 mt-1">
-              MP3, WAV, OGG, M4A, FLAC, WebM (max 500MB)
-            </p>
-          </>
-        )}
+        <Upload className="h-8 w-8 text-muted-foreground mb-2" />
+        <p className="text-sm text-muted-foreground text-center">
+          {isProcessing ? t('loading') : (selectedFiles.length > 0 ? 'לחץ להוסיף עוד קבצים' : t('dragOrClick'))}
+        </p>
+        <p className="text-xs text-muted-foreground/60 mt-1">
+          MP3, WAV, OGG, M4A, FLAC, WebM (עד 500MB לקובץ)
+        </p>
       </div>
+
+      {/* Selected files list */}
+      {selectedFiles.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium">
+              {selectedFiles.length} {selectedFiles.length === 1 ? 'קובץ' : 'קבצים'} ({formatFileSize(totalSize)})
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            {selectedFiles.map((sf, index) => (
+              <div
+                key={`${sf.file.name}-${index}`}
+                className="flex items-center gap-2 rounded-lg border bg-background p-2.5"
+              >
+                {multiple && selectedFiles.length > 1 && (
+                  <div className="flex flex-col gap-0.5">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); moveFile(index, index - 1); }}
+                      disabled={index === 0}
+                      className="text-muted-foreground hover:text-foreground disabled:opacity-30 p-0.5"
+                      title="הזז למעלה"
+                    >
+                      <GripVertical className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
+
+                <FileAudio className="h-5 w-5 text-primary flex-shrink-0" />
+
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{sf.file.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatFileSize(sf.file.size)}
+                    {sf.metadata.duration > 0 && ` · ${Math.floor(sf.metadata.duration / 60)}:${String(Math.round(sf.metadata.duration % 60)).padStart(2, '0')}`}
+                  </p>
+                </div>
+
+                {multiple && selectedFiles.length > 1 && (
+                  <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                    {index + 1}
+                  </span>
+                )}
+
+                <button
+                  onClick={(e) => { e.stopPropagation(); removeFile(index); }}
+                  className="rounded-full p-1 hover:bg-muted flex-shrink-0"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {error && (
         <p className="text-sm text-destructive">{error}</p>

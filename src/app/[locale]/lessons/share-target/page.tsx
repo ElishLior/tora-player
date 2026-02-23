@@ -6,8 +6,9 @@ import { useTranslations } from 'next-intl';
 import { Loader2, CheckCircle2, AlertTriangle, MessageSquare, FileAudio } from 'lucide-react';
 import { parseWhatsAppText, type ParsedWhatsAppMessage } from '@/lib/whatsapp-parser';
 import { createLesson } from '@/actions/lessons';
-import { useUpload } from '@/hooks/use-upload';
+import { useUpload, type FileWithMeta } from '@/hooks/use-upload';
 import type { AudioMetadata } from '@/lib/audio-utils';
+import { formatFileSize } from '@/lib/audio-utils';
 
 type ShareStep = 'receiving' | 'preview' | 'saving' | 'done' | 'error';
 
@@ -15,11 +16,11 @@ export default function ShareTargetPage() {
   const t = useTranslations('lessons');
   const tCommon = useTranslations('common');
   const router = useRouter();
-  const { status: uploadStatus, progress, upload } = useUpload();
+  const { status: uploadStatus, progress, uploadMultiple, fileProgresses } = useUpload();
 
   const [step, setStep] = useState<ShareStep>('receiving');
   const [sharedText, setSharedText] = useState('');
-  const [sharedFile, setSharedFile] = useState<File | null>(null);
+  const [sharedFiles, setSharedFiles] = useState<File[]>([]);
   const [parsed, setParsed] = useState<ParsedWhatsAppMessage | null>(null);
   const [hebrewTitle, setHebrewTitle] = useState('');
   const [title, setTitle] = useState('');
@@ -47,15 +48,20 @@ export default function ShareTargetPage() {
         .join('\n');
 
       // Check for file shares via the File Handling API / POST data
-      // Files are available if the page was navigated via share_target POST
       if ('launchQueue' in navigator) {
         // @ts-expect-error - launchQueue is not yet in TypeScript types
         navigator.launchQueue.setConsumer(async (launchParams: { files: FileSystemHandle[] }) => {
           if (launchParams.files?.length > 0) {
-            const fileHandle = launchParams.files[0] as FileSystemFileHandle;
-            const file = await fileHandle.getFile();
-            if (file.type.startsWith('audio/')) {
-              setSharedFile(file);
+            const audioFiles: File[] = [];
+            for (const handle of launchParams.files) {
+              const fileHandle = handle as FileSystemFileHandle;
+              const file = await fileHandle.getFile();
+              if (file.type.startsWith('audio/')) {
+                audioFiles.push(file);
+              }
+            }
+            if (audioFiles.length > 0) {
+              setSharedFiles(audioFiles);
             }
           }
         });
@@ -73,10 +79,16 @@ export default function ShareTargetPage() {
           const formText = formData.get('text') as string;
           const textFromForm = [formTitle, formText].filter(Boolean).join('\n');
 
-          // Extract audio file
-          const audioFile = formData.get('audio') as File;
-          if (audioFile && audioFile.size > 0) {
-            setSharedFile(audioFile);
+          // Extract audio files (can be multiple)
+          const audioFiles: File[] = [];
+          const audioField = formData.getAll('audio');
+          for (const item of audioField) {
+            if (item instanceof File && item.size > 0) {
+              audioFiles.push(item);
+            }
+          }
+          if (audioFiles.length > 0) {
+            setSharedFiles(audioFiles);
           }
 
           if (textFromForm) {
@@ -113,7 +125,7 @@ export default function ShareTargetPage() {
       }
     } catch (err) {
       console.error('Error processing shared data:', err);
-      setError('Failed to process shared data');
+      setError('שגיאה בעיבוד התוכן');
       setStep('error');
     }
   }
@@ -127,7 +139,7 @@ export default function ShareTargetPage() {
       formData.set('hebrew_title', hebrewTitle);
       formData.set('description', description);
       formData.set('date', date);
-      formData.set('source_type', sharedFile ? 'whatsapp' : 'whatsapp');
+      formData.set('source_type', 'whatsapp');
       if (parsed?.partNumber) {
         formData.set('part_number', String(parsed.partNumber));
       }
@@ -140,16 +152,19 @@ export default function ShareTargetPage() {
 
       const lessonId = result.data!.id;
 
-      // Upload audio file if present
-      if (sharedFile) {
-        const meta: AudioMetadata = {
-          duration: 0,
-          format: sharedFile.type || 'audio/mpeg',
-          sampleRate: 44100,
-          channels: 1,
-          fileSize: sharedFile.size,
-        };
-        await upload(sharedFile, lessonId, meta);
+      // Upload audio files if present
+      if (sharedFiles.length > 0) {
+        const filesWithMeta: FileWithMeta[] = sharedFiles.map((file) => ({
+          file,
+          metadata: {
+            duration: 0,
+            format: file.type || 'audio/mpeg',
+            sampleRate: 44100,
+            channels: 1,
+            fileSize: file.size,
+          } as AudioMetadata,
+        }));
+        await uploadMultiple(filesWithMeta, lessonId);
       }
 
       setStep('done');
@@ -160,10 +175,10 @@ export default function ShareTargetPage() {
       }, 1500);
     } catch (err) {
       console.error('Error saving lesson:', err);
-      setError('Failed to save lesson');
+      setError('שגיאה בשמירת השיעור');
       setStep('error');
     }
-  }, [title, date, hebrewTitle, description, parsed, sharedText, sharedFile, upload, router]);
+  }, [title, date, hebrewTitle, description, parsed, sharedText, sharedFiles, uploadMultiple, router]);
 
   return (
     <div className="mx-auto max-w-lg space-y-6 p-4" dir="rtl">
@@ -186,11 +201,15 @@ export default function ShareTargetPage() {
             <span>התקבל תוכן מוואטסאפ</span>
           </div>
 
-          {/* Audio file indicator */}
-          {sharedFile && (
-            <div className="flex items-center gap-2 rounded-lg bg-blue-50 dark:bg-blue-950/30 p-3 text-sm text-blue-700 dark:text-blue-300">
-              <FileAudio className="h-4 w-4 flex-shrink-0" />
-              <span>קובץ שמע: {sharedFile.name} ({(sharedFile.size / 1024 / 1024).toFixed(1)} MB)</span>
+          {/* Audio files indicator */}
+          {sharedFiles.length > 0 && (
+            <div className="space-y-1.5">
+              {sharedFiles.map((file, i) => (
+                <div key={i} className="flex items-center gap-2 rounded-lg bg-blue-50 dark:bg-blue-950/30 p-3 text-sm text-blue-700 dark:text-blue-300">
+                  <FileAudio className="h-4 w-4 flex-shrink-0" />
+                  <span className="truncate">{file.name} ({formatFileSize(file.size)})</span>
+                </div>
+              ))}
             </div>
           )}
 
@@ -208,7 +227,7 @@ export default function ShareTargetPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">שם באנגלית</label>
+              <label className="block text-sm font-medium mb-1">שם השיעור</label>
               <input
                 type="text"
                 value={title}
@@ -258,7 +277,7 @@ export default function ShareTargetPage() {
             onClick={handleSave}
             className="w-full rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
-            שמור שיעור
+            שמירה
           </button>
         </div>
       )}
@@ -268,14 +287,27 @@ export default function ShareTargetPage() {
         <div className="flex flex-col items-center justify-center py-20 space-y-4">
           <Loader2 className="h-10 w-10 animate-spin text-primary" />
           <p className="text-muted-foreground">
-            {uploadStatus === 'uploading' ? `מעלה קובץ... ${progress}%` : 'שומר שיעור...'}
+            {uploadStatus === 'uploading' ? `מעלה קבצים... ${progress}%` : 'שומר שיעור...'}
           </p>
-          {sharedFile && progress > 0 && (
+          {sharedFiles.length > 0 && progress > 0 && (
             <div className="w-full max-w-xs bg-muted rounded-full h-2">
               <div
                 className="bg-primary h-2 rounded-full transition-all"
                 style={{ width: `${progress}%` }}
               />
+            </div>
+          )}
+          {/* Per-file progress */}
+          {fileProgresses.length > 1 && (
+            <div className="w-full max-w-xs space-y-1">
+              {fileProgresses.map((fp, i) => (
+                <div key={i} className="flex items-center gap-2 text-xs">
+                  <span className="truncate flex-1 text-muted-foreground">{fp.fileName}</span>
+                  {fp.status === 'uploading' && <span className="text-primary">{fp.progress}%</span>}
+                  {fp.status === 'complete' && <span className="text-green-500">✓</span>}
+                  {fp.status === 'error' && <span className="text-destructive">✗</span>}
+                </div>
+              ))}
             </div>
           )}
         </div>

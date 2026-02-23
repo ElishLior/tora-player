@@ -92,8 +92,41 @@ export default async function LessonDetailPage({ params }: Props) {
       </div>
 
       {/* Player */}
-      {lesson.audio_url && (
+      {(lesson.audio_url || (lesson.audio_files && lesson.audio_files.length > 0)) && (
         <LessonPlayerClient lesson={lesson} />
+      )}
+
+      {/* Audio files list (when multiple) */}
+      {lesson.audio_files && lesson.audio_files.length > 1 && (
+        <section>
+          <h2 className="text-lg font-bold mb-3">
+            {locale === 'he' ? 'קבצי שמע' : 'Audio Files'}
+          </h2>
+          <div className="space-y-2">
+            {lesson.audio_files
+              .sort((a, b) => a.sort_order - b.sort_order)
+              .map((audio, index) => (
+                <div
+                  key={audio.id}
+                  className="flex items-center justify-between rounded-lg border p-3"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded">
+                      {index + 1}
+                    </span>
+                    <div>
+                      <p className="font-medium text-sm" dir="rtl">
+                        {audio.original_name || `${locale === 'he' ? 'חלק' : 'Part'} ${index + 1}`}
+                      </p>
+                      {audio.duration > 0 && (
+                        <p className="text-xs text-muted-foreground">{formatDuration(audio.duration)}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+          </div>
+        </section>
       )}
 
       {/* Multi-part links */}

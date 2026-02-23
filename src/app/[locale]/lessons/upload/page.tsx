@@ -4,12 +4,11 @@ import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { ArrowRight, Link as LinkIcon } from 'lucide-react';
-import { UploadZone } from '@/components/upload/upload-zone';
+import { UploadZone, type SelectedFile } from '@/components/upload/upload-zone';
 import { WhatsAppInput } from '@/components/upload/whatsapp-input';
 import { UploadProgress } from '@/components/upload/upload-progress';
-import { useUpload } from '@/hooks/use-upload';
+import { useUpload, type FileWithMeta } from '@/hooks/use-upload';
 import { createLesson } from '@/actions/lessons';
-import type { AudioMetadata } from '@/lib/audio-utils';
 import type { ParsedWhatsAppMessage } from '@/lib/whatsapp-parser';
 import { Link } from '@/i18n/routing';
 
@@ -17,10 +16,9 @@ export default function UploadPage() {
   const t = useTranslations('lessons');
   const tCommon = useTranslations('common');
   const router = useRouter();
-  const { status, progress, error: uploadError, upload } = useUpload();
+  const { status, progress, error: uploadError, fileProgresses, uploadMultiple } = useUpload();
 
-  const [file, setFile] = useState<File | null>(null);
-  const [metadata, setMetadata] = useState<AudioMetadata | null>(null);
+  const [files, setFiles] = useState<SelectedFile[]>([]);
   const [parsedMessage, setParsedMessage] = useState<ParsedWhatsAppMessage | null>(null);
   const [title, setTitle] = useState('');
   const [hebrewTitle, setHebrewTitle] = useState('');
@@ -31,12 +29,11 @@ export default function UploadPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  const handleFileSelected = useCallback((f: File, meta: AudioMetadata) => {
-    setFile(f);
-    setMetadata(meta);
-    // Auto-fill title from filename if empty
-    if (!title) {
-      const name = f.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+  const handleFilesSelected = useCallback((selectedFiles: SelectedFile[]) => {
+    setFiles(selectedFiles);
+    // Auto-fill title from first filename if empty
+    if (!title && selectedFiles.length > 0) {
+      const name = selectedFiles[0].file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
       setTitle(name);
     }
   }, [title]);
@@ -68,18 +65,22 @@ export default function UploadPage() {
 
       const result = await createLesson(formData);
       if (result.error) {
-        setFormError('Failed to create lesson');
+        console.error('Create lesson error:', result.error);
+        setFormError('שגיאה ביצירת השיעור');
         setIsSubmitting(false);
         return;
       }
 
       const lessonId = result.data!.id;
 
-      if (mode === 'upload' && file && metadata) {
-        // Upload the file
-        await upload(file, lessonId, metadata);
+      if (mode === 'upload' && files.length > 0) {
+        // Upload all files
+        const filesWithMeta: FileWithMeta[] = files.map((f) => ({
+          file: f.file,
+          metadata: f.metadata,
+        }));
+        await uploadMultiple(filesWithMeta, lessonId);
       } else if (mode === 'url' && importUrl) {
-        // Import from URL
         await fetch('/api/import-url', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -90,14 +91,14 @@ export default function UploadPage() {
       // Navigate to the lesson
       router.push(`/lessons/${lessonId}`);
     } catch {
-      setFormError('An error occurred');
+      setFormError('אירעה שגיאה');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const isUploading = status === 'uploading' || status === 'processing';
-  const canSubmit = (mode === 'upload' ? !!file : !!importUrl) && !isUploading && !isSubmitting;
+  const canSubmit = (mode === 'upload' ? files.length > 0 : !!importUrl) && !isUploading && !isSubmitting;
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 p-4">
@@ -132,7 +133,11 @@ export default function UploadPage() {
       <form onSubmit={handleSubmit} className="space-y-5">
         {/* Audio Source */}
         {mode === 'upload' ? (
-          <UploadZone onFileSelected={handleFileSelected} disabled={isUploading} />
+          <UploadZone
+            onFilesSelected={handleFilesSelected}
+            disabled={isUploading}
+            multiple={true}
+          />
         ) : (
           <div className="relative">
             <LinkIcon className="absolute start-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -197,6 +202,26 @@ export default function UploadPage() {
 
         {/* Upload Progress */}
         <UploadProgress progress={progress} status={status} error={uploadError || undefined} />
+
+        {/* Per-file progress when uploading multiple */}
+        {fileProgresses.length > 1 && (
+          <div className="space-y-1.5">
+            {fileProgresses.map((fp, i) => (
+              <div key={i} className="flex items-center gap-2 text-xs">
+                <span className="truncate flex-1 text-muted-foreground">{fp.fileName}</span>
+                {fp.status === 'uploading' && (
+                  <span className="text-primary">{fp.progress}%</span>
+                )}
+                {fp.status === 'complete' && (
+                  <span className="text-green-500">✓</span>
+                )}
+                {fp.status === 'error' && (
+                  <span className="text-destructive">✗</span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Error */}
         {formError && (

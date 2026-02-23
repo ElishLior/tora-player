@@ -18,7 +18,7 @@ export async function getRecentLessons(supabase: SupabaseClient, limit = 20) {
 export async function getLessonById(supabase: SupabaseClient, id: string) {
   const { data, error } = await supabase
     .from('lessons')
-    .select('*, series(*), snippets(*), bookmarks(*)')
+    .select('*, series(*), snippets(*), bookmarks(*), audio_files:lesson_audio(*)')
     .eq('id', id)
     .single();
 

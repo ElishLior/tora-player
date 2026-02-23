@@ -33,12 +33,26 @@ export interface Lesson {
   updated_at: string;
 }
 
+export interface LessonAudio {
+  id: string;
+  lesson_id: string;
+  file_key: string;
+  audio_url: string;
+  original_name: string | null;
+  file_size: number;
+  duration: number;
+  codec: string;
+  sort_order: number;
+  created_at: string;
+}
+
 export interface LessonWithRelations extends Lesson {
   series?: Series | null;
   parts?: Lesson[];
   snippets?: Snippet[];
   progress?: PlaybackProgress | null;
   bookmarks?: Bookmark[];
+  audio_files?: LessonAudio[];
 }
 
 export interface Snippet {
