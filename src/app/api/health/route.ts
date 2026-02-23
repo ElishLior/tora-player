@@ -23,9 +23,9 @@ export async function GET() {
 
   if (supabaseUrl && supabaseKey) {
     try {
-      // Lightweight connectivity check using the Supabase REST health endpoint
-      const response = await fetch(`${supabaseUrl}/rest/v1/`, {
-        method: 'HEAD',
+      // Lightweight connectivity check - query lessons table with limit 0
+      const response = await fetch(`${supabaseUrl}/rest/v1/lessons?select=id&limit=0`, {
+        method: 'GET',
         headers: {
           apikey: supabaseKey,
           Authorization: `Bearer ${supabaseKey}`,
