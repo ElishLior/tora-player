@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Desktop_Commander__read_file",
+      "Bash(test -f \"/Users/liorelisha/Tora player/package.json\")",
+      "Bash(npm install:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx next build:*)",
+      "Bash(npx tailwindcss --help:*)",
+      "Bash(npm ls:*)",
+      "Bash(babysitter task:post:*)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(lsof:*)",
+      "Bash(xargs kill:*)",
+      "Bash(babysitter run:iterate:*)",
+      "Bash(babysitter run:status:*)",
+      "Bash(\"/Users/liorelisha/Tora player/.a5c/runs/01KJ55Z0DTPCEK8M09484QJ7V3/tasks/01KJ5DM469NGD9QW20G25CA6BY/output.json\":*)",
+      "mcp__Control_Chrome__open_url",
+      "mcp__Control_Chrome__get_current_tab",
+      "Bash(npx next lint:*)",
+      "mcp__Control_Chrome__get_page_content",
+      "Bash(npx next:*)",
+      "mcp__Control_Chrome__execute_javascript",
+      "Bash(node -e:*)",
+      "Bash(pbcopy:*)",
+      "Bash(npx eslint:*)",
+      "Bash(curl:*)",
+      "Bash(brew list:*)",
+      "Bash(\"/Users/liorelisha/Tora player/.a5c/runs/01KJ55Z0DTPCEK8M09484QJ7V3/tasks/01KJ62WFBXD0W3EVX8P3G72AZ4/output.json\":*)",
+      "Bash(\"/Users/liorelisha/Tora player/.a5c/runs/01KJ55Z0DTPCEK8M09484QJ7V3/tasks/01KJ63DXKB88DT25QGNBM2PD9Q/output.json\":*)",
+      "Bash(npx vercel:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)"
+    ]
+  }
+}
