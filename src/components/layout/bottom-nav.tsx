@@ -33,8 +33,8 @@ export function BottomNav({ locale }: { locale: string }) {
   return (
     <nav
       className={cn(
-        'fixed inset-x-0 z-40 border-t border-border bg-background/95 backdrop-blur-lg safe-area-bottom',
-        hasMiniPlayer ? 'bottom-[60px]' : 'bottom-0'
+        'fixed inset-x-0 z-40 border-t border-[hsl(0,0%,18%)] bg-background safe-area-bottom',
+        hasMiniPlayer ? 'bottom-[56px]' : 'bottom-0'
       )}
       role="navigation"
       aria-label="Main navigation"
@@ -54,19 +54,19 @@ export function BottomNav({ locale }: { locale: string }) {
               className={cn(
                 'flex flex-col items-center justify-center gap-0.5 px-3 py-1.5 min-w-[64px] transition-colors',
                 isActive
-                  ? 'text-primary'
+                  ? 'text-foreground'
                   : 'text-muted-foreground hover:text-foreground'
               )}
             >
               <item.icon
                 className={cn('h-5 w-5', isActive && 'stroke-[2.5]')}
               />
-              <span className="text-[10px] font-medium leading-tight">
+              <span className={cn(
+                'text-[10px] leading-tight',
+                isActive ? 'font-bold' : 'font-medium'
+              )}>
                 {isRTL ? item.labelHe : item.labelEn}
               </span>
-              {isActive && (
-                <div className="absolute top-0 h-0.5 w-8 rounded-full bg-primary" />
-              )}
             </Link>
           );
         })}

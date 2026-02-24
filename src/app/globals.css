@@ -3,49 +3,60 @@
 @tailwind utilities;
 
 @layer base {
+  /* Spotify-inspired dark theme — dark by default */
   :root {
-    --background: 40 33% 96%;
-    --foreground: 240 33% 13%;
-    --primary: 43 87% 38%;
+    --background: 0 0% 7%;
+    --foreground: 0 0% 95%;
+    --primary: 141 73% 42%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 212 53% 23%;
-    --secondary-foreground: 0 0% 100%;
-    --accent: 43 63% 58%;
-    --accent-foreground: 240 33% 13%;
-    --muted: 33 27% 91%;
-    --muted-foreground: 220 9% 46%;
-    --card: 0 0% 100%;
-    --card-foreground: 240 33% 13%;
-    --border: 33 24% 86%;
-    --input: 33 24% 86%;
-    --ring: 43 87% 38%;
+    --secondary: 0 0% 18%;
+    --secondary-foreground: 0 0% 95%;
+    --accent: 0 0% 18%;
+    --accent-foreground: 0 0% 95%;
+    --muted: 0 0% 15%;
+    --muted-foreground: 0 0% 64%;
+    --card: 0 0% 11%;
+    --card-foreground: 0 0% 95%;
+    --popover: 0 0% 13%;
+    --popover-foreground: 0 0% 95%;
+    --border: 0 0% 18%;
+    --input: 0 0% 18%;
+    --ring: 141 73% 42%;
     --radius: 0.75rem;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 33% 13%;
+
+    /* Spotify-specific surface tokens */
+    --surface-elevated: 0 0% 14%;
+    --surface-highlight: 0 0% 20%;
+    --surface-press: 0 0% 24%;
   }
 
+  /* Keep .dark identical (force dark everywhere) */
   .dark {
-    --background: 240 33% 8%;
-    --foreground: 33 27% 90%;
-    --primary: 43 63% 58%;
-    --primary-foreground: 240 33% 8%;
-    --secondary: 212 43% 30%;
-    --secondary-foreground: 33 27% 90%;
-    --accent: 43 87% 38%;
-    --accent-foreground: 33 27% 90%;
-    --muted: 240 33% 13%;
-    --muted-foreground: 220 9% 60%;
-    --card: 240 33% 10%;
-    --card-foreground: 33 27% 90%;
-    --border: 240 20% 18%;
-    --input: 240 20% 18%;
-    --ring: 43 63% 58%;
-    --destructive: 0 63% 31%;
+    --background: 0 0% 7%;
+    --foreground: 0 0% 95%;
+    --primary: 141 73% 42%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 18%;
+    --secondary-foreground: 0 0% 95%;
+    --accent: 0 0% 18%;
+    --accent-foreground: 0 0% 95%;
+    --muted: 0 0% 15%;
+    --muted-foreground: 0 0% 64%;
+    --card: 0 0% 11%;
+    --card-foreground: 0 0% 95%;
+    --popover: 0 0% 13%;
+    --popover-foreground: 0 0% 95%;
+    --border: 0 0% 18%;
+    --input: 0 0% 18%;
+    --ring: 141 73% 42%;
+    --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-    --popover: 240 33% 10%;
-    --popover-foreground: 33 27% 90%;
+
+    --surface-elevated: 0 0% 14%;
+    --surface-highlight: 0 0% 20%;
+    --surface-press: 0 0% 24%;
   }
 }
 
@@ -55,10 +66,64 @@
   }
   body {
     @apply bg-background text-foreground;
+    -webkit-font-smoothing: antialiased;
   }
 }
 
 /* RTL support */
 [dir="rtl"] {
   text-align: right;
+}
+
+/* Custom scrollbar for dark theme */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: hsl(0 0% 7%);
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(0 0% 24%);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(0 0% 30%);
+}
+
+/* Equalizer animation for playing track */
+@keyframes equalizer-bar {
+  0%, 100% { height: 4px; }
+  50% { height: 16px; }
+}
+
+.equalizer-bar {
+  width: 3px;
+  border-radius: 1.5px;
+  animation: equalizer-bar 0.8s ease-in-out infinite;
+}
+.equalizer-bar:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.equalizer-bar:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+/* Smooth page transitions */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}
+
+/* Player slide-up animation */
+@keyframes slide-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }

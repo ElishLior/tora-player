@@ -1,6 +1,7 @@
 'use client';
 
 import { Howl } from 'howler';
+import { normalizeAudioUrl } from '@/lib/audio-url';
 
 /**
  * Singleton audio engine wrapping Howler.js.
@@ -16,8 +17,11 @@ class AudioEngine {
   private animationFrameId: number | null = null;
 
   load(url: string, options?: { startPosition?: number }) {
+    // Normalize the URL to use stream proxy instead of direct R2
+    const normalizedUrl = normalizeAudioUrl(url) || url;
+
     // Don't reload same track
-    if (this.currentUrl === url && this.howl) {
+    if (this.currentUrl === normalizedUrl && this.howl) {
       if (options?.startPosition) {
         this.howl.seek(options.startPosition);
       }
@@ -26,10 +30,10 @@ class AudioEngine {
 
     // Cleanup previous
     this.unload();
-    this.currentUrl = url;
+    this.currentUrl = normalizedUrl;
 
     this.howl = new Howl({
-      src: [url],
+      src: [normalizedUrl],
       html5: true, // Required for streaming long audio files
       preload: true,
       onload: () => {

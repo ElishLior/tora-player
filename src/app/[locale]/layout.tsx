@@ -36,16 +36,16 @@ export default async function LocaleLayout({ children, params }: Props) {
   const isRTL = locale === 'he';
 
   return (
-    <html lang={locale} dir={isRTL ? 'rtl' : 'ltr'} suppressHydrationWarning>
+    <html lang={locale} dir={isRTL ? 'rtl' : 'ltr'} className="dark" suppressHydrationWarning>
       <body className={`${inter.variable} font-sans antialiased bg-background text-foreground min-h-screen`} suppressHydrationWarning>
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+        <ThemeProvider attribute="class" defaultTheme="dark" forcedTheme="dark" enableSystem={false}>
           <NextIntlClientProvider messages={messages}>
             <div className="flex min-h-screen flex-col">
               {/* Header */}
               <Header locale={locale} />
 
               {/* Main content - padded for bottom nav + mini player */}
-              <main className="flex-1 container mx-auto px-4 py-6 pb-32">
+              <main className="flex-1 container mx-auto px-4 py-4 pb-36">
                 {children}
               </main>
             </div>

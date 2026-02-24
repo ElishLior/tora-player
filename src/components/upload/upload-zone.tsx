@@ -116,16 +116,16 @@ export function UploadZone({ onFilesSelected, onFileSelected, disabled, multiple
 
   return (
     <div className="space-y-3">
-      {/* Drop zone */}
+      {/* Drop zone — dark Spotify style */}
       <div
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onClick={() => !disabled && inputRef.current?.click()}
         className={`
-          flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-6
-          transition-colors cursor-pointer
-          ${isDragging ? 'border-primary bg-primary/5' : 'border-muted-foreground/25 hover:border-primary/50'}
+          flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-8
+          transition-all cursor-pointer
+          ${isDragging ? 'border-primary bg-primary/5 scale-[1.01]' : 'border-[hsl(0,0%,25%)] hover:border-primary/50 hover:bg-[hsl(var(--surface-elevated))]'}
           ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
         `}
       >
@@ -139,11 +139,13 @@ export function UploadZone({ onFilesSelected, onFileSelected, disabled, multiple
           multiple={multiple}
         />
 
-        <Upload className="h-8 w-8 text-muted-foreground mb-2" />
-        <p className="text-sm text-muted-foreground text-center">
+        <div className="rounded-full bg-[hsl(var(--surface-elevated))] p-3 mb-3">
+          <Upload className="h-6 w-6 text-muted-foreground" />
+        </div>
+        <p className="text-sm text-foreground font-medium text-center">
           {isProcessing ? t('loading') : (selectedFiles.length > 0 ? 'לחץ להוסיף עוד קבצים' : t('dragOrClick'))}
         </p>
-        <p className="text-xs text-muted-foreground/60 mt-1">
+        <p className="text-xs text-muted-foreground mt-1">
           MP3, WAV, OGG, M4A, FLAC, WebM (עד 500MB לקובץ)
         </p>
       </div>
@@ -151,17 +153,15 @@ export function UploadZone({ onFilesSelected, onFileSelected, disabled, multiple
       {/* Selected files list */}
       {selectedFiles.length > 0 && (
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-medium">
-              {selectedFiles.length} {selectedFiles.length === 1 ? 'קובץ' : 'קבצים'} ({formatFileSize(totalSize)})
-            </p>
-          </div>
+          <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+            {selectedFiles.length} {selectedFiles.length === 1 ? 'קובץ' : 'קבצים'} ({formatFileSize(totalSize)})
+          </p>
 
-          <div className="space-y-1.5">
+          <div className="space-y-1">
             {selectedFiles.map((sf, index) => (
               <div
                 key={`${sf.file.name}-${index}`}
-                className="flex items-center gap-2 rounded-lg border bg-background p-2.5"
+                className="flex items-center gap-2 rounded-lg bg-[hsl(var(--surface-elevated))] p-2.5"
               >
                 {multiple && selectedFiles.length > 1 && (
                   <div className="flex flex-col gap-0.5">
@@ -187,14 +187,14 @@ export function UploadZone({ onFilesSelected, onFileSelected, disabled, multiple
                 </div>
 
                 {multiple && selectedFiles.length > 1 && (
-                  <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                  <span className="text-[10px] text-muted-foreground bg-[hsl(var(--surface-highlight))] px-1.5 py-0.5 rounded-full">
                     {index + 1}
                   </span>
                 )}
 
                 <button
                   onClick={(e) => { e.stopPropagation(); removeFile(index); }}
-                  className="rounded-full p-1 hover:bg-muted flex-shrink-0"
+                  className="rounded-full p-1 hover:bg-[hsl(var(--surface-highlight))] flex-shrink-0 transition-colors"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>

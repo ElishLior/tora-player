@@ -3,6 +3,33 @@
 import { useState, useCallback } from 'react';
 import type { AudioMetadata } from '@/lib/audio-utils';
 
+function guessContentType(fileName: string): string {
+  const ext = fileName.split('.').pop()?.toLowerCase();
+  switch (ext) {
+    case 'mp3': return 'audio/mpeg';
+    case 'm4a': return 'audio/mp4';
+    case 'aac': return 'audio/aac';
+    case 'ogg': return 'audio/ogg';
+    case 'opus': return 'audio/opus';
+    case 'webm': return 'audio/webm';
+    case 'wav': return 'audio/wav';
+    case 'flac': return 'audio/flac';
+    default: return 'audio/mpeg';
+  }
+}
+
+/** Generate a simple UUID v4 */
+function uuid(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+// Chunk size: 3.5 MB (well under Vercel's 4.5 MB body limit)
+const CHUNK_SIZE = 3.5 * 1024 * 1024;
+
 type UploadStatus = 'idle' | 'uploading' | 'processing' | 'complete' | 'error';
 
 export interface FileUploadProgress {
@@ -47,52 +74,81 @@ export function useUpload(): UseUploadReturn {
     sortOrder: number = 0,
     onProgress?: (pct: number) => void,
   ): Promise<string | null> => {
-    // 1. Get presigned URL from our API
-    const presignRes = await fetch('/api/upload', {
+    const contentType = file.type || guessContentType(file.name);
+    const uploadId = uuid();
+    const totalParts = Math.ceil(file.size / CHUNK_SIZE);
+
+    // Step 1: Upload file in chunks
+    for (let partNumber = 0; partNumber < totalParts; partNumber++) {
+      const start = partNumber * CHUNK_SIZE;
+      const end = Math.min(start + CHUNK_SIZE, file.size);
+      const chunk = file.slice(start, end);
+
+      const formData = new FormData();
+      formData.append('uploadId', uploadId);
+      formData.append('partNumber', String(partNumber));
+      formData.append('chunk', chunk, `chunk_${partNumber}`);
+
+      // Use XHR for progress tracking on each chunk
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+
+        xhr.upload.addEventListener('progress', (e) => {
+          if (e.lengthComputable) {
+            // Overall progress = completed chunks + current chunk progress
+            const chunkProgress = e.loaded / e.total;
+            const overallPct = Math.round(((partNumber + chunkProgress) / totalParts) * 90); // 90% for uploads, 10% for assembly
+            onProgress?.(overallPct);
+          }
+        });
+
+        xhr.addEventListener('load', () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve();
+          } else {
+            let msg = `Chunk upload failed (${xhr.status})`;
+            try {
+              const data = JSON.parse(xhr.responseText);
+              if (data.error) msg = data.error;
+            } catch { /* ignore */ }
+            reject(new Error(msg));
+          }
+        });
+
+        xhr.addEventListener('error', () => reject(new Error('Upload failed — network error')));
+        xhr.addEventListener('timeout', () => reject(new Error('Upload timed out')));
+
+        xhr.open('POST', '/api/upload/chunk');
+        xhr.timeout = 120000; // 2 min per chunk
+        xhr.send(formData);
+      });
+    }
+
+    // Step 2: Assemble chunks and upload to R2
+    onProgress?.(92);
+
+    const completeRes = await fetch('/api/upload/complete', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        uploadId,
+        totalParts,
         lessonId,
         fileName: file.name,
-        contentType: file.type || 'audio/mpeg',
+        contentType,
         fileSize: file.size,
         sortOrder,
       }),
     });
 
-    if (!presignRes.ok) {
-      throw new Error('Failed to get upload URL');
+    if (!completeRes.ok) {
+      const data = await completeRes.json().catch(() => ({}));
+      throw new Error(data.error || `Failed to complete upload (${completeRes.status})`);
     }
 
-    const { uploadUrl, publicUrl } = await presignRes.json();
-
-    // 2. Upload directly to R2 using presigned URL with progress tracking
-    await new Promise<void>((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-
-      xhr.upload.addEventListener('progress', (e) => {
-        if (e.lengthComputable) {
-          const pct = Math.round((e.loaded / e.total) * 100);
-          onProgress?.(pct);
-        }
-      });
-
-      xhr.addEventListener('load', () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          resolve();
-        } else {
-          reject(new Error(`Upload failed with status ${xhr.status}`));
-        }
-      });
-
-      xhr.addEventListener('error', () => reject(new Error('Upload failed')));
-
-      xhr.open('PUT', uploadUrl);
-      xhr.setRequestHeader('Content-Type', file.type || 'audio/mpeg');
-      xhr.send(file);
-    });
-
-    return publicUrl;
+    const result = await completeRes.json();
+    onProgress?.(100);
+    return result.publicUrl;
   }, []);
 
   // Upload a single file (backward compatible)

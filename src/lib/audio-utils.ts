@@ -14,7 +14,8 @@ const SUPPORTED_AUDIO_TYPES = [
   'audio/mpeg',       // mp3
   'audio/mp4',        // m4a, aac
   'audio/aac',
-  'audio/ogg',
+  'audio/ogg',        // ogg vorbis
+  'audio/opus',       // opus
   'audio/webm',
   'audio/wav',
   'audio/x-wav',

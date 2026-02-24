@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/i18n/routing';
 import { useTranslations } from 'next-intl';
 import { Loader2, CheckCircle2, AlertTriangle, MessageSquare, FileAudio } from 'lucide-react';
 import { parseWhatsAppText, type ParsedWhatsAppMessage } from '@/lib/whatsapp-parser';

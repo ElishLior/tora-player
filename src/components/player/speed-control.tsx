@@ -25,18 +25,24 @@ export function SpeedControl({ speed, onSpeedChange }: SpeedControlProps) {
     }
   }, [isOpen]);
 
+  const isCustomSpeed = speed !== 1;
+
   return (
     <div className="relative" ref={menuRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="rounded-full px-2.5 py-1 text-xs font-bold tabular-nums hover:bg-muted transition-colors min-w-[3rem]"
+        className={`rounded-full border px-2.5 py-1 text-xs font-bold tabular-nums transition-colors min-w-[3rem] ${
+          isCustomSpeed
+            ? 'border-primary text-primary'
+            : 'border-[hsl(0,0%,30%)] text-muted-foreground hover:text-foreground hover:border-foreground'
+        }`}
         aria-label={`Playback speed: ${speed}x`}
       >
         {speed}x
       </button>
 
       {isOpen && (
-        <div className="absolute bottom-full mb-2 start-1/2 -translate-x-1/2 bg-popover border rounded-xl shadow-lg p-1 z-50">
+        <div className="absolute bottom-full mb-2 start-1/2 -translate-x-1/2 bg-[hsl(var(--surface-elevated))] border border-[hsl(0,0%,20%)] rounded-xl shadow-2xl p-1 z-50 min-w-[80px]">
           {SPEED_OPTIONS.map((opt) => (
             <button
               key={opt}
@@ -44,8 +50,10 @@ export function SpeedControl({ speed, onSpeedChange }: SpeedControlProps) {
                 onSpeedChange(opt);
                 setIsOpen(false);
               }}
-              className={`block w-full rounded-lg px-4 py-1.5 text-sm tabular-nums text-start transition-colors ${
-                opt === speed ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+              className={`block w-full rounded-lg px-4 py-2 text-sm tabular-nums text-center transition-colors ${
+                opt === speed
+                  ? 'bg-primary/20 text-primary font-bold'
+                  : 'text-foreground hover:bg-[hsl(var(--surface-highlight))]'
               }`}
             >
               {opt}x

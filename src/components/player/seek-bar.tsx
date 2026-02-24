@@ -12,6 +12,7 @@ interface SeekBarProps {
 export function SeekBar({ currentTime, duration, onSeek }: SeekBarProps) {
   const barRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [isHovering, setIsHovering] = useState(false);
   const [dragTime, setDragTime] = useState(0);
 
   const getTimeFromPosition = useCallback((clientX: number) => {
@@ -50,38 +51,48 @@ export function SeekBar({ currentTime, duration, onSeek }: SeekBarProps) {
 
   const displayTime = isDragging ? dragTime : currentTime;
   const progress = duration > 0 ? (displayTime / duration) * 100 : 0;
+  const remaining = duration > 0 ? duration - displayTime : 0;
+  const showThumb = isDragging || isHovering;
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-1.5">
       <div
         ref={barRef}
-        className="relative h-6 flex items-center cursor-pointer touch-none"
+        className="group relative h-5 flex items-center cursor-pointer touch-none"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
+        onMouseEnter={() => setIsHovering(true)}
+        onMouseLeave={() => setIsHovering(false)}
       >
-        {/* Track */}
-        <div className="absolute inset-x-0 h-1.5 rounded-full bg-muted">
-          {/* Progress */}
+        {/* Track — thin by default, slightly taller on hover */}
+        <div className={`absolute inset-x-0 rounded-full bg-[hsl(0,0%,24%)] transition-all ${
+          showThumb ? 'h-1' : 'h-0.5'
+        }`}>
+          {/* Progress — green */}
           <div
-            className="h-full rounded-full bg-primary transition-[width] duration-75"
+            className={`h-full rounded-full transition-[width] duration-75 ${
+              showThumb ? 'bg-primary' : 'bg-foreground'
+            }`}
             style={{ width: `${progress}%` }}
           />
         </div>
 
-        {/* Thumb */}
-        <div
-          className="absolute h-4 w-4 rounded-full bg-primary shadow-md transition-[left,right] duration-75"
-          style={{
-            [document.documentElement.dir === 'rtl' ? 'right' : 'left']: `calc(${progress}% - 8px)`,
-          }}
-        />
+        {/* Thumb — white dot, only visible on hover/drag */}
+        {showThumb && (
+          <div
+            className="absolute h-3 w-3 rounded-full bg-foreground shadow-lg transition-[left,right] duration-75"
+            style={{
+              [document.documentElement.dir === 'rtl' ? 'right' : 'left']: `calc(${progress}% - 6px)`,
+            }}
+          />
+        )}
       </div>
 
       {/* Time labels */}
-      <div className="flex justify-between text-xs text-muted-foreground tabular-nums">
+      <div className="flex justify-between text-[11px] text-muted-foreground tabular-nums">
         <span>{formatDuration(Math.round(displayTime))}</span>
-        <span>{duration > 0 ? formatDuration(Math.round(duration)) : '--:--'}</span>
+        <span>{duration > 0 ? `-${formatDuration(Math.round(remaining))}` : '--:--'}</span>
       </div>
     </div>
   );

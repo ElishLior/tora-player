@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { requireServerSupabaseClient } from '@/lib/supabase/server';
 import { createLessonSchema, updateLessonSchema } from '@/lib/validators';
-import type { Lesson, LessonWithRelations } from '@/types/database';
+import type { Lesson, LessonWithRelations, LessonAudio } from '@/types/database';
 
 export async function createLesson(formData: FormData) {
   const supabase = await requireServerSupabaseClient();
@@ -115,7 +115,7 @@ export async function getLesson(id: string) {
 
   const { data, error } = await supabase
     .from('lessons')
-    .select('*, series(*), snippets(*), bookmarks(*)')
+    .select('*, series(*), snippets(*), bookmarks(*), audio_files:lesson_audio(*)')
     .eq('id', id)
     .single();
 
@@ -143,6 +143,67 @@ export async function getLesson(id: string) {
   data.progress = progress;
 
   return { data: data as LessonWithRelations };
+}
+
+// --- Audio file management ---
+
+export async function getAudioFiles(lessonId: string) {
+  const supabase = await requireServerSupabaseClient();
+
+  const { data, error } = await supabase
+    .from('lesson_audio')
+    .select('*')
+    .eq('lesson_id', lessonId)
+    .order('sort_order', { ascending: true });
+
+  if (error) return { error: error.message };
+  return { data: data as LessonAudio[] };
+}
+
+export async function renameAudioFile(fileId: string, newName: string) {
+  const supabase = await requireServerSupabaseClient();
+
+  const { error } = await supabase
+    .from('lesson_audio')
+    .update({ original_name: newName })
+    .eq('id', fileId);
+
+  if (error) return { error: error.message };
+  revalidatePath('/[locale]', 'layout');
+  return { success: true };
+}
+
+export async function reorderAudioFiles(lessonId: string, fileIds: string[]) {
+  const supabase = await requireServerSupabaseClient();
+
+  // Update sort_order for each file based on its position in the array
+  const updates = fileIds.map((id, index) =>
+    supabase
+      .from('lesson_audio')
+      .update({ sort_order: index })
+      .eq('id', id)
+      .eq('lesson_id', lessonId)
+  );
+
+  const results = await Promise.all(updates);
+  const err = results.find((r) => r.error);
+  if (err?.error) return { error: err.error.message };
+
+  revalidatePath('/[locale]', 'layout');
+  return { success: true };
+}
+
+export async function deleteAudioFile(fileId: string) {
+  const supabase = await requireServerSupabaseClient();
+
+  const { error } = await supabase
+    .from('lesson_audio')
+    .delete()
+    .eq('id', fileId);
+
+  if (error) return { error: error.message };
+  revalidatePath('/[locale]', 'layout');
+  return { success: true };
 }
 
 export async function searchLessons(query: string) {

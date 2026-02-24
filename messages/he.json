@@ -57,7 +57,8 @@
     "noLessons": "אין שיעורים עדיין",
     "dragOrClick": "גרור קובץ לכאן או לחץ לבחירה",
     "pasteWhatsApp": "הדבק טקסט מווטסאפ",
-    "autoNamePreview": "שם מוצע:"
+    "autoNamePreview": "שם מוצע:",
+    "loading": "טוען..."
   },
   "player": {
     "play": "נגן",

@@ -1,11 +1,19 @@
 -- Migration 002: Allow anon role writes + add lesson_audio table for multi-file support
 -- =============================================================================
+-- This version uses DROP POLICY IF EXISTS before CREATE to be idempotent
 
 -- =============================================================================
 -- 1. ADD ANON WRITE POLICIES (single-admin app without auth)
 -- =============================================================================
 
--- LESSONS: allow anon insert/update/delete
+-- Drop existing policies first to make this idempotent
+DROP POLICY IF EXISTS "lessons_anon_insert" ON lessons;
+DROP POLICY IF EXISTS "lessons_anon_update" ON lessons;
+DROP POLICY IF EXISTS "lessons_anon_delete" ON lessons;
+DROP POLICY IF EXISTS "lessons_anon_read_all" ON lessons;
+DROP POLICY IF EXISTS "lessons_public_read" ON lessons;
+
+-- LESSONS: allow anon insert/update/delete + read all
 CREATE POLICY "lessons_anon_insert"
   ON lessons FOR INSERT
   TO anon
@@ -22,16 +30,17 @@ CREATE POLICY "lessons_anon_delete"
   TO anon
   USING (true);
 
--- Also allow anon to read ALL lessons (not just published)
 CREATE POLICY "lessons_anon_read_all"
   ON lessons FOR SELECT
   TO anon
   USING (true);
 
--- Drop the old restrictive anon read policy
-DROP POLICY IF EXISTS "lessons_public_read" ON lessons;
+-- SERIES
+DROP POLICY IF EXISTS "series_anon_insert" ON series;
+DROP POLICY IF EXISTS "series_anon_update" ON series;
+DROP POLICY IF EXISTS "series_anon_delete" ON series;
+DROP POLICY IF EXISTS "series_anon_read" ON series;
 
--- SERIES: allow anon insert/update/delete
 CREATE POLICY "series_anon_insert"
   ON series FOR INSERT
   TO anon
@@ -53,7 +62,11 @@ CREATE POLICY "series_anon_read"
   TO anon
   USING (true);
 
--- SNIPPETS: allow anon write
+-- SNIPPETS
+DROP POLICY IF EXISTS "snippets_anon_insert" ON snippets;
+DROP POLICY IF EXISTS "snippets_anon_update" ON snippets;
+DROP POLICY IF EXISTS "snippets_anon_delete" ON snippets;
+
 CREATE POLICY "snippets_anon_insert"
   ON snippets FOR INSERT
   TO anon
@@ -70,7 +83,13 @@ CREATE POLICY "snippets_anon_delete"
   TO anon
   USING (true);
 
--- PLAYLISTS: allow anon full access
+-- PLAYLISTS
+DROP POLICY IF EXISTS "playlists_anon_insert" ON playlists;
+DROP POLICY IF EXISTS "playlists_anon_update" ON playlists;
+DROP POLICY IF EXISTS "playlists_anon_delete" ON playlists;
+DROP POLICY IF EXISTS "playlists_anon_read" ON playlists;
+DROP POLICY IF EXISTS "playlists_public_read" ON playlists;
+
 CREATE POLICY "playlists_anon_insert"
   ON playlists FOR INSERT
   TO anon
@@ -92,10 +111,11 @@ CREATE POLICY "playlists_anon_read"
   TO anon
   USING (true);
 
--- Drop old restrictive policy
-DROP POLICY IF EXISTS "playlists_public_read" ON playlists;
+-- PLAYLIST_LESSONS
+DROP POLICY IF EXISTS "playlist_lessons_anon_insert" ON playlist_lessons;
+DROP POLICY IF EXISTS "playlist_lessons_anon_update" ON playlist_lessons;
+DROP POLICY IF EXISTS "playlist_lessons_anon_delete" ON playlist_lessons;
 
--- PLAYLIST_LESSONS: allow anon write
 CREATE POLICY "playlist_lessons_anon_insert"
   ON playlist_lessons FOR INSERT
   TO anon
@@ -112,7 +132,11 @@ CREATE POLICY "playlist_lessons_anon_delete"
   TO anon
   USING (true);
 
--- BOOKMARKS: allow anon write
+-- BOOKMARKS
+DROP POLICY IF EXISTS "bookmarks_anon_insert" ON bookmarks;
+DROP POLICY IF EXISTS "bookmarks_anon_update" ON bookmarks;
+DROP POLICY IF EXISTS "bookmarks_anon_delete" ON bookmarks;
+
 CREATE POLICY "bookmarks_anon_insert"
   ON bookmarks FOR INSERT
   TO anon
@@ -133,7 +157,7 @@ CREATE POLICY "bookmarks_anon_delete"
 -- 2. CREATE LESSON_AUDIO TABLE (multi-file audio per lesson)
 -- =============================================================================
 
-CREATE TABLE lesson_audio (
+CREATE TABLE IF NOT EXISTS lesson_audio (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   lesson_id UUID NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
   file_key TEXT NOT NULL,
@@ -147,13 +171,18 @@ CREATE TABLE lesson_audio (
 );
 
 -- Index for fast lookups
-CREATE INDEX idx_lesson_audio_lesson_id ON lesson_audio(lesson_id);
-CREATE INDEX idx_lesson_audio_sort ON lesson_audio(lesson_id, sort_order);
+CREATE INDEX IF NOT EXISTS idx_lesson_audio_lesson_id ON lesson_audio(lesson_id);
+CREATE INDEX IF NOT EXISTS idx_lesson_audio_sort ON lesson_audio(lesson_id, sort_order);
 
 -- Enable RLS
 ALTER TABLE lesson_audio ENABLE ROW LEVEL SECURITY;
 
--- Public read + anon/authenticated write
+-- Drop + recreate policies for lesson_audio
+DROP POLICY IF EXISTS "lesson_audio_read" ON lesson_audio;
+DROP POLICY IF EXISTS "lesson_audio_insert" ON lesson_audio;
+DROP POLICY IF EXISTS "lesson_audio_update" ON lesson_audio;
+DROP POLICY IF EXISTS "lesson_audio_delete" ON lesson_audio;
+
 CREATE POLICY "lesson_audio_read"
   ON lesson_audio FOR SELECT
   TO anon, authenticated
@@ -179,11 +208,9 @@ CREATE POLICY "lesson_audio_delete"
 -- 3. UPDATE TRIGGER FOR lesson_audio
 -- =============================================================================
 
--- When audio files change, update the lesson's total duration and primary audio_url
 CREATE OR REPLACE FUNCTION update_lesson_audio_summary()
 RETURNS TRIGGER AS $$
 BEGIN
-  -- Update lesson with total duration from all audio files
   UPDATE lessons
   SET
     duration = COALESCE((
@@ -205,6 +232,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trg_lesson_audio_summary ON lesson_audio;
 CREATE TRIGGER trg_lesson_audio_summary
   AFTER INSERT OR UPDATE OR DELETE ON lesson_audio
   FOR EACH ROW EXECUTE FUNCTION update_lesson_audio_summary();

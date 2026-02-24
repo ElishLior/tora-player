@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/i18n/routing';
 import { useTranslations } from 'next-intl';
 import { ArrowRight, Link as LinkIcon } from 'lucide-react';
 import { UploadZone, type SelectedFile } from '@/components/upload/upload-zone';
@@ -101,29 +101,29 @@ export default function UploadPage() {
   const canSubmit = (mode === 'upload' ? files.length > 0 : !!importUrl) && !isUploading && !isSubmitting;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6 p-4">
+    <div className="mx-auto max-w-2xl space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Link href="/lessons" className="rounded-full p-2 hover:bg-muted">
+        <Link href="/lessons" className="rounded-full p-2 text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--surface-highlight))] transition-colors">
           <ArrowRight className="h-5 w-5" />
         </Link>
-        <h1 className="text-2xl font-bold">{t('addLesson')}</h1>
+        <h1 className="text-xl font-bold">{t('addLesson')}</h1>
       </div>
 
-      {/* Mode Tabs */}
-      <div className="flex rounded-xl bg-muted p-1">
+      {/* Mode Tabs — Spotify pill style */}
+      <div className="flex rounded-full bg-[hsl(var(--surface-elevated))] p-1">
         <button
           onClick={() => setMode('upload')}
-          className={`flex-1 rounded-lg py-2 text-sm font-medium transition-colors ${
-            mode === 'upload' ? 'bg-background shadow-sm' : 'text-muted-foreground'
+          className={`flex-1 rounded-full py-2 text-sm font-bold transition-colors ${
+            mode === 'upload' ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'
           }`}
         >
           {t('uploadAudio')}
         </button>
         <button
           onClick={() => setMode('url')}
-          className={`flex-1 rounded-lg py-2 text-sm font-medium transition-colors ${
-            mode === 'url' ? 'bg-background shadow-sm' : 'text-muted-foreground'
+          className={`flex-1 rounded-full py-2 text-sm font-bold transition-colors ${
+            mode === 'url' ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'
           }`}
         >
           {t('importUrl')}
@@ -140,13 +140,13 @@ export default function UploadPage() {
           />
         ) : (
           <div className="relative">
-            <LinkIcon className="absolute start-3 top-3 h-4 w-4 text-muted-foreground" />
+            <LinkIcon className="absolute start-3.5 top-3.5 h-4 w-4 text-muted-foreground" />
             <input
               type="url"
               value={importUrl}
               onChange={(e) => setImportUrl(e.target.value)}
               placeholder="https://example.com/audio.mp3"
-              className="w-full rounded-xl border bg-background px-10 py-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="w-full rounded-xl bg-[hsl(var(--surface-elevated))] px-10 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 border-0"
               dir="ltr"
             />
           </div>
@@ -158,43 +158,43 @@ export default function UploadPage() {
         {/* Lesson Details */}
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1">{t('hebrewName')}</label>
+            <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">{t('hebrewName')}</label>
             <input
               type="text"
               value={hebrewTitle}
               onChange={(e) => setHebrewTitle(e.target.value)}
-              className="w-full rounded-xl border bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="w-full rounded-lg bg-[hsl(var(--surface-elevated))] px-4 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 border-0"
               dir="rtl"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">{t('lessonName')}</label>
+            <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">{t('lessonName')}</label>
             <input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full rounded-xl border bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="w-full rounded-lg bg-[hsl(var(--surface-elevated))] px-4 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 border-0"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">{t('date')}</label>
+            <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">{t('date')}</label>
             <input
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="w-full rounded-xl border bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="w-full rounded-lg bg-[hsl(var(--surface-elevated))] px-4 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 border-0"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">{t('description')}</label>
+            <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">{t('description')}</label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
-              className="w-full rounded-xl border bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 resize-y"
+              className="w-full rounded-lg bg-[hsl(var(--surface-elevated))] px-4 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 border-0 resize-y"
               dir="rtl"
             />
           </div>
@@ -210,10 +210,10 @@ export default function UploadPage() {
               <div key={i} className="flex items-center gap-2 text-xs">
                 <span className="truncate flex-1 text-muted-foreground">{fp.fileName}</span>
                 {fp.status === 'uploading' && (
-                  <span className="text-primary">{fp.progress}%</span>
+                  <span className="text-primary tabular-nums">{fp.progress}%</span>
                 )}
                 {fp.status === 'complete' && (
-                  <span className="text-green-500">✓</span>
+                  <span className="text-primary">✓</span>
                 )}
                 {fp.status === 'error' && (
                   <span className="text-destructive">✗</span>
@@ -228,11 +228,11 @@ export default function UploadPage() {
           <p className="text-sm text-destructive">{formError}</p>
         )}
 
-        {/* Submit */}
+        {/* Submit — Spotify-style green button */}
         <button
           type="submit"
           disabled={!canSubmit}
-          className="w-full rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full rounded-full bg-primary py-3.5 text-sm font-bold text-primary-foreground transition-all hover:bg-primary/90 hover:scale-[1.02] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100"
         >
           {isSubmitting || isUploading ? tCommon('loading') : tCommon('save')}
         </button>

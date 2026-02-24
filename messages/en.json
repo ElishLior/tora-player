@@ -57,7 +57,8 @@
     "noLessons": "No lessons yet",
     "dragOrClick": "Drag a file here or click to select",
     "pasteWhatsApp": "Paste text from WhatsApp",
-    "autoNamePreview": "Suggested name:"
+    "autoNamePreview": "Suggested name:",
+    "loading": "Loading..."
   },
   "player": {
     "play": "Play",
