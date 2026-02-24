@@ -90,7 +90,7 @@ export function LessonPlayerClient({ lesson }: LessonPlayerClientProps) {
           className="p-2 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30"
           disabled={!isCurrentLesson}
         >
-          <Skip15Back className="h-7 w-7" />
+          <Skip15Back className="h-7 w-7 rtl:-scale-x-100" />
         </button>
 
         <button
@@ -109,7 +109,7 @@ export function LessonPlayerClient({ lesson }: LessonPlayerClientProps) {
           className="p-2 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30"
           disabled={!isCurrentLesson}
         >
-          <Skip15Forward className="h-7 w-7" />
+          <Skip15Forward className="h-7 w-7 rtl:-scale-x-100" />
         </button>
 
         {/* Cast / broadcast */}

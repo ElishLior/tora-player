@@ -104,6 +104,20 @@ class AudioEngine {
     return this.howl?.playing() || false;
   }
 
+  /**
+   * Get the underlying HTML audio element (for Remote Playback / AirPlay).
+   * Howler.js stores it internally when html5 mode is used.
+   */
+  getAudioElement(): HTMLAudioElement | null {
+    if (!this.howl) return null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sounds = (this.howl as any)._sounds;
+    if (sounds && sounds.length > 0 && sounds[0]._node) {
+      return sounds[0]._node as HTMLAudioElement;
+    }
+    return null;
+  }
+
   unload() {
     this.stopTimeTracking();
     if (this.howl) {
