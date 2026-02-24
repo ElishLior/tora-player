@@ -4,6 +4,7 @@ import { Play, Pause, Cast } from 'lucide-react';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { SeekBar } from '@/components/player/seek-bar';
 import { SpeedControl } from '@/components/player/speed-control';
+import { handleCastClick } from '@/lib/cast-utils';
 import type { LessonWithRelations } from '@/types/database';
 import { normalizeAudioUrl } from '@/lib/audio-url';
 
@@ -113,29 +114,7 @@ export function LessonPlayerClient({ lesson }: LessonPlayerClientProps) {
 
         {/* Cast / broadcast */}
         <button
-          onClick={(e) => {
-            e.stopPropagation();
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const w = window as any;
-            if (w.cast?.framework) {
-              w.cast.framework.CastContext.getInstance().requestSession().catch(() => {});
-            } else {
-              // Load Cast SDK on first click
-              w['__onGCastApiAvailable'] = (ok: boolean) => {
-                if (ok) {
-                  try {
-                    const ctx = w.cast.framework.CastContext.getInstance();
-                    ctx.setOptions({ receiverApplicationId: 'CC1AD845', autoJoinPolicy: 'ORIGIN_SCOPED' });
-                    ctx.requestSession().catch(() => {});
-                  } catch { /* */ }
-                }
-              };
-              const s = document.createElement('script');
-              s.src = 'https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1';
-              s.async = true;
-              document.head.appendChild(s);
-            }
-          }}
+          onClick={(e) => { e.stopPropagation(); handleCastClick(); }}
           className="p-2 text-muted-foreground hover:text-foreground transition-colors"
           aria-label="Cast"
         >

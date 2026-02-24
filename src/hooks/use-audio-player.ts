@@ -98,6 +98,19 @@ export function useAudioPlayer() {
     store.setCurrentTime(time);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Skip forward/backward — update both store AND audio engine
+  const skipForward = useCallback((seconds = 15) => {
+    const newTime = Math.min(audioEngine.getCurrentTime() + seconds, audioEngine.getDuration());
+    audioEngine.seek(newTime);
+    store.setCurrentTime(newTime);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const skipBackward = useCallback((seconds = 15) => {
+    const newTime = Math.max(audioEngine.getCurrentTime() - seconds, 0);
+    audioEngine.seek(newTime);
+    store.setCurrentTime(newTime);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Play a specific track
   const playTrack = useCallback((track: AudioTrack, queue?: AudioTrack[], queueIndex?: number) => {
     if (queue) {
@@ -110,6 +123,8 @@ export function useAudioPlayer() {
   return {
     ...store,
     seekTo,
+    skipForward,
+    skipBackward,
     playTrack,
   };
 }
