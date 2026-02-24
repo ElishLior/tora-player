@@ -1,8 +1,8 @@
 'use client';
 
-import { Play, Pause, SkipForward, SkipBack, ChevronUp } from 'lucide-react';
+import { Play, Pause, Heart } from 'lucide-react';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
-import { formatDuration } from '@/lib/utils';
+import { CastButton } from './cast-button';
 
 export function MiniPlayer() {
   const {
@@ -11,8 +11,6 @@ export function MiniPlayer() {
     currentTime,
     duration,
     togglePlay,
-    skipForward,
-    skipBackward,
     toggleMiniPlayer,
   } = useAudioPlayer();
 
@@ -21,64 +19,61 @@ export function MiniPlayer() {
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
-    <div className="fixed bottom-0 inset-x-0 z-50 bg-background/95 backdrop-blur-lg border-t safe-area-bottom">
-      {/* Progress bar at top */}
-      <div className="h-0.5 bg-muted">
+    <div className="fixed bottom-0 inset-x-0 z-50 safe-area-bottom">
+      {/* Thin progress bar at very top — Spotify style */}
+      <div className="h-[2px] bg-[hsl(0,0%,24%)]">
         <div
           className="h-full bg-primary transition-[width] duration-200"
           style={{ width: `${progress}%` }}
         />
       </div>
 
-      <div className="flex items-center gap-3 px-4 py-2">
-        {/* Track info */}
-        <button
+      {/* Player bar */}
+      <div className="bg-[hsl(var(--surface-elevated))] backdrop-blur-xl">
+        <div
+          className="flex items-center gap-3 px-3 py-2 cursor-pointer"
           onClick={toggleMiniPlayer}
-          className="flex-1 min-w-0 text-start"
         >
-          <p className="text-sm font-medium truncate" dir="rtl">
-            {currentTrack.hebrewTitle || currentTrack.title}
-          </p>
-          <p className="text-xs text-muted-foreground truncate">
-            {currentTrack.seriesName} · {formatDuration(Math.round(currentTime))}
-          </p>
-        </button>
+          {/* Artwork / Icon */}
+          <div className="h-10 w-10 rounded-md bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center flex-shrink-0">
+            <span className="text-lg">📖</span>
+          </div>
 
-        {/* Controls */}
-        <div className="flex items-center gap-1">
+          {/* Track info */}
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold truncate text-foreground" dir="rtl">
+              {currentTrack.hebrewTitle || currentTrack.title}
+            </p>
+            <p className="text-xs text-muted-foreground truncate" dir="rtl">
+              {currentTrack.seriesName}
+            </p>
+          </div>
+
+          {/* Heart / Bookmark */}
           <button
-            onClick={() => skipBackward(15)}
-            className="rounded-full p-2 hover:bg-muted transition-colors"
-            aria-label="Skip back 15 seconds"
+            onClick={(e) => { e.stopPropagation(); }}
+            className="p-2 text-muted-foreground hover:text-foreground transition-colors"
+            aria-label="Bookmark"
           >
-            <SkipBack className="h-4 w-4" />
+            <Heart className="h-5 w-5" />
           </button>
 
+          {/* Cast — shows only when Cast device is available */}
+          <CastButton variant="mini" />
+
+          {/* Play/Pause */}
           <button
-            onClick={togglePlay}
-            className="rounded-full p-2 bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+            onClick={(e) => { e.stopPropagation(); togglePlay(); }}
+            className="p-1 text-foreground hover:scale-105 transition-transform"
             aria-label={isPlaying ? 'Pause' : 'Play'}
           >
-            {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5 ms-0.5" />}
-          </button>
-
-          <button
-            onClick={() => skipForward(15)}
-            className="rounded-full p-2 hover:bg-muted transition-colors"
-            aria-label="Skip forward 15 seconds"
-          >
-            <SkipForward className="h-4 w-4" />
+            {isPlaying ? (
+              <Pause className="h-6 w-6 fill-current" />
+            ) : (
+              <Play className="h-6 w-6 fill-current ms-0.5" />
+            )}
           </button>
         </div>
-
-        {/* Expand button */}
-        <button
-          onClick={toggleMiniPlayer}
-          className="rounded-full p-2 hover:bg-muted transition-colors"
-          aria-label="Expand player"
-        >
-          <ChevronUp className="h-4 w-4" />
-        </button>
       </div>
     </div>
   );
