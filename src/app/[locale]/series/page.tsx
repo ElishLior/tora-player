@@ -3,7 +3,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { getAllSeries } from '@/lib/supabase/queries';
 import { Link } from '@/i18n/routing';
 import { EmptyState } from '@/components/shared/empty-state';
-import { Library } from 'lucide-react';
+import { Library, Plus } from 'lucide-react';
 
 type Props = { params: Promise<{ locale: string }> };
 
@@ -24,7 +24,16 @@ export default async function SeriesPage({ params }: Props) {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">{t('title')}</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">{t('title')}</h1>
+        <Link
+          href="/lessons/upload"
+          className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 transition-colors"
+        >
+          <Plus className="h-4 w-4" />
+          <span>{locale === 'he' ? 'העלה קטע' : 'Upload'}</span>
+        </Link>
+      </div>
 
       {series.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -46,7 +55,16 @@ export default async function SeriesPage({ params }: Props) {
           ))}
         </div>
       ) : (
-        <EmptyState icon={Library} title={t('noSeries')} />
+        <div className="text-center space-y-4 py-12">
+          <EmptyState icon={Library} title={t('noSeries')} />
+          <Link
+            href="/lessons/upload"
+            className="inline-flex items-center gap-1.5 rounded-full bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground hover:bg-primary/90 transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            <span>{locale === 'he' ? 'העלה קטע קצר ראשון' : 'Upload first short clip'}</span>
+          </Link>
+        </div>
       )}
     </div>
   );
