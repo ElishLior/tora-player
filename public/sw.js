@@ -1,15 +1,11 @@
 // Tora Player Service Worker
-const CACHE_VERSION = 'tora-player-v1';
+const CACHE_VERSION = 'tora-player-v2';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DYNAMIC_CACHE = `${CACHE_VERSION}-dynamic`;
 const API_CACHE = `${CACHE_VERSION}-api`;
 
 // App shell resources to precache
 const APP_SHELL = [
-  '/',
-  '/he',
-  '/en',
-  '/offline',
   '/manifest.json',
 ];
 
@@ -93,9 +89,9 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Strategy 3: Stale-while-revalidate for page navigations
+  // Strategy 3: Network-first for page navigations (always get fresh content)
   if (isPageRequest(event.request)) {
-    event.respondWith(staleWhileRevalidate(event.request, DYNAMIC_CACHE));
+    event.respondWith(networkFirst(event.request, DYNAMIC_CACHE));
     return;
   }
 
