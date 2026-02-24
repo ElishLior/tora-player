@@ -64,17 +64,19 @@ export function CastButton({ variant = 'full', className = '' }: CastButtonProps
       return;
     }
 
-    if (!currentTrack) return;
+    if (isAvailable && currentTrack) {
+      const audioUrl = currentTrack.audioUrl;
+      const title = currentTrack.hebrewTitle || currentTrack.title;
+      const subtitle = currentTrack.seriesName || '';
+      await startCasting(audioUrl, title, subtitle);
+      return;
+    }
 
-    const audioUrl = currentTrack.audioUrl;
-    const title = currentTrack.hebrewTitle || currentTrack.title;
-    const subtitle = currentTrack.seriesName || '';
-
-    await startCasting(audioUrl, title, subtitle);
+    // If Cast SDK loaded but no track, still open the device picker
+    if (isAvailable) {
+      await startCasting('', '');
+    }
   };
-
-  // Don't render if Cast SDK is not available
-  if (!isAvailable) return null;
 
   if (variant === 'icon') {
     return (

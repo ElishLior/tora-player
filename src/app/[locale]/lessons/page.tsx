@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { getRecentLessons } from '@/lib/supabase/queries';
@@ -47,11 +49,12 @@ export default async function LessonsPage({ params, searchParams }: Props) {
   if (supabase) {
     try {
       if (q) {
+        const escaped = q.replace(/[%_\\]/g, '\\$&');
         const { data } = await supabase
           .from('lessons')
           .select('*, series(name, hebrew_name)')
           .eq('is_published', true)
-          .or(`title.ilike.%${q}%,hebrew_title.ilike.%${q}%,description.ilike.%${q}%`)
+          .or(`title.ilike.%${escaped}%,hebrew_title.ilike.%${escaped}%,description.ilike.%${escaped}%`)
           .order('date', { ascending: false })
           .limit(50);
         lessons = (data || []) as LessonWithRelations[];
@@ -66,27 +69,27 @@ export default async function LessonsPage({ params, searchParams }: Props) {
   const groups = groupByDate(lessons, locale);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 animate-fade-in">
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">{t('title')}</h1>
         <Link
           href="/lessons/upload"
-          className="flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+          className="flex items-center gap-1 rounded-full bg-primary px-3.5 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90 hover:scale-105 transition-all"
         >
-          <Plus className="h-4 w-4" />
+          <Plus className="h-3.5 w-3.5" />
           {t('addLesson')}
         </Link>
       </div>
 
       {/* Search */}
       <form className="relative">
-        <Search className="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Search className="absolute start-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <input
           name="q"
           defaultValue={q}
           placeholder={locale === 'he' ? 'חיפוש שיעורים...' : 'Search lessons...'}
-          className="w-full rounded-xl border bg-background ps-10 pe-4 py-2.5 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+          className="w-full rounded-full bg-[hsl(var(--surface-elevated))] ps-10 pe-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 border-0"
         />
       </form>
 
@@ -94,10 +97,10 @@ export default async function LessonsPage({ params, searchParams }: Props) {
       {groups.length > 0 ? (
         groups.map((group) => (
           <section key={group.label}>
-            <h2 className="text-lg font-semibold mb-3 text-muted-foreground">
+            <h2 className="text-sm font-bold mb-2 text-muted-foreground uppercase tracking-wider">
               {group.label}
             </h2>
-            <div className="space-y-3">
+            <div className="space-y-0.5">
               {group.lessons.map((lesson) => (
                 <LessonCard key={lesson.id} lesson={lesson} showProgress />
               ))}
