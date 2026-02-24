@@ -1,14 +1,11 @@
 'use client';
 
-import { useTranslations } from 'next-intl';
-import { useCast } from '@/hooks/use-cast';
-import { useAudioStore } from '@/stores/audio-store';
+import { useCallback, useState } from 'react';
 
 /** Google Cast / broadcast icon */
 function CastIcon({ className, connected }: { className?: string; connected?: boolean }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={className}>
-      {/* Outer screen frame */}
       <path
         d="M1 18V21H4C4 19.35 2.65 18 1 18Z"
         fill={connected ? 'currentColor' : 'none'}
@@ -46,51 +43,87 @@ function CastIcon({ className, connected }: { className?: string; connected?: bo
 }
 
 interface CastButtonProps {
-  /** 'full' = button with label (for full player), 'mini' = icon only (for mini player) */
   variant?: 'full' | 'mini' | 'icon';
+  label?: string;
   className?: string;
 }
 
-export function CastButton({ variant = 'full', className = '' }: CastButtonProps) {
-  const t = useTranslations('player');
-  const { isAvailable, isConnected, deviceName, startCasting, stopCasting } = useCast();
-  const currentTrack = useAudioStore((s) => s.currentTrack);
+export function CastButton({ variant = 'full', label = 'שדר', className = '' }: CastButtonProps) {
+  const [connected, setConnected] = useState(false);
+  const [deviceName, setDeviceName] = useState<string | null>(null);
 
-  const handleClick = async (e: React.MouseEvent) => {
+  const handleClick = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
 
-    if (isConnected) {
-      stopCasting();
-      return;
-    }
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const w = window as any;
 
-    if (isAvailable && currentTrack) {
-      const audioUrl = currentTrack.audioUrl;
-      const title = currentTrack.hebrewTitle || currentTrack.title;
-      const subtitle = currentTrack.seriesName || '';
-      await startCasting(audioUrl, title, subtitle);
-      return;
-    }
+      // If already connected, disconnect
+      if (connected && w.cast?.framework) {
+        const ctx = w.cast.framework.CastContext.getInstance();
+        ctx.endCurrentSession(true);
+        setConnected(false);
+        setDeviceName(null);
+        return;
+      }
 
-    // If Cast SDK loaded but no track, still open the device picker
-    if (isAvailable) {
-      await startCasting('', '');
+      // Try to load Cast SDK if not loaded
+      if (!w.cast?.framework) {
+        // Load SDK dynamically
+        await new Promise<void>((resolve) => {
+          if (w.cast?.framework) { resolve(); return; }
+
+          w['__onGCastApiAvailable'] = (available: boolean) => {
+            if (available) {
+              try {
+                const ctx = w.cast.framework.CastContext.getInstance();
+                ctx.setOptions({
+                  receiverApplicationId: 'CC1AD845',
+                  autoJoinPolicy: 'ORIGIN_SCOPED',
+                });
+              } catch { /* ignore */ }
+            }
+            resolve();
+          };
+
+          const script = document.createElement('script');
+          script.src = 'https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1';
+          script.async = true;
+          script.onerror = () => resolve();
+          document.head.appendChild(script);
+
+          setTimeout(resolve, 8000);
+        });
+      }
+
+      // Try to start a cast session
+      if (w.cast?.framework) {
+        const ctx = w.cast.framework.CastContext.getInstance();
+        await ctx.requestSession();
+        const session = ctx.getCurrentSession?.();
+        if (session) {
+          setConnected(true);
+          setDeviceName(session.getCastDevice?.()?.friendlyName || 'Cast Device');
+        }
+      }
+    } catch {
+      // User cancelled or Cast not available — silently ignore
     }
-  };
+  }, [connected]);
+
+  const colorClass = connected
+    ? 'text-primary'
+    : 'text-muted-foreground hover:text-foreground';
 
   if (variant === 'icon') {
     return (
       <button
         onClick={handleClick}
-        className={`p-2 transition-colors ${
-          isConnected
-            ? 'text-primary'
-            : 'text-muted-foreground hover:text-foreground'
-        } ${className}`}
-        aria-label={isConnected ? `${t('cast')} - ${deviceName}` : t('cast')}
-        title={isConnected ? `${t('cast')}: ${deviceName}` : t('cast')}
+        className={`p-2 transition-colors ${colorClass} ${className}`}
+        aria-label={connected ? `Cast: ${deviceName}` : 'Cast'}
       >
-        <CastIcon className="h-5 w-5" connected={isConnected} />
+        <CastIcon className="h-5 w-5" connected={connected} />
       </button>
     );
   }
@@ -99,32 +132,23 @@ export function CastButton({ variant = 'full', className = '' }: CastButtonProps
     return (
       <button
         onClick={handleClick}
-        className={`p-2 transition-colors ${
-          isConnected
-            ? 'text-primary'
-            : 'text-muted-foreground hover:text-foreground'
-        } ${className}`}
-        aria-label={isConnected ? `${t('cast')} - ${deviceName}` : t('cast')}
+        className={`p-2 transition-colors ${colorClass} ${className}`}
+        aria-label={connected ? `Cast: ${deviceName}` : 'Cast'}
       >
-        <CastIcon className="h-4 w-4" connected={isConnected} />
+        <CastIcon className="h-4 w-4" connected={connected} />
       </button>
     );
   }
 
-  // Full variant — icon + label (for full player secondary actions)
   return (
     <button
       onClick={handleClick}
-      className={`flex flex-col items-center gap-1.5 transition-colors ${
-        isConnected
-          ? 'text-primary'
-          : 'text-muted-foreground hover:text-foreground'
-      } ${className}`}
-      aria-label={isConnected ? `${t('cast')} - ${deviceName}` : t('cast')}
+      className={`flex flex-col items-center gap-1.5 transition-colors ${colorClass} ${className}`}
+      aria-label={connected ? `Cast: ${deviceName}` : 'Cast'}
     >
-      <CastIcon className="h-5 w-5" connected={isConnected} />
+      <CastIcon className="h-5 w-5" connected={connected} />
       <span className="text-[10px]">
-        {isConnected ? deviceName : t('cast')}
+        {connected ? deviceName : label}
       </span>
     </button>
   );
