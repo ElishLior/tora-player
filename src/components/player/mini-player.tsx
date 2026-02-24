@@ -1,8 +1,7 @@
 'use client';
 
-import { Play, Pause, Heart } from 'lucide-react';
+import { Play, Pause, Heart, Cast } from 'lucide-react';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
-import { CastButton } from './cast-button';
 
 export function MiniPlayer() {
   const {
@@ -58,8 +57,35 @@ export function MiniPlayer() {
             <Heart className="h-5 w-5" />
           </button>
 
-          {/* Cast — shows only when Cast device is available */}
-          <CastButton variant="mini" />
+          {/* Cast / broadcast */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const w = window as any;
+              if (w.cast?.framework) {
+                w.cast.framework.CastContext.getInstance().requestSession().catch(() => {});
+              } else {
+                w['__onGCastApiAvailable'] = (ok: boolean) => {
+                  if (ok) {
+                    try {
+                      const ctx = w.cast.framework.CastContext.getInstance();
+                      ctx.setOptions({ receiverApplicationId: 'CC1AD845', autoJoinPolicy: 'ORIGIN_SCOPED' });
+                      ctx.requestSession().catch(() => {});
+                    } catch { /* */ }
+                  }
+                };
+                const s = document.createElement('script');
+                s.src = 'https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1';
+                s.async = true;
+                document.head.appendChild(s);
+              }
+            }}
+            className="p-2 text-muted-foreground hover:text-foreground transition-colors"
+            aria-label="Cast"
+          >
+            <Cast className="h-4 w-4" />
+          </button>
 
           {/* Play/Pause */}
           <button

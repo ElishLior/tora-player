@@ -1,11 +1,10 @@
 'use client';
 
-import { Play, Pause, ChevronDown, Bookmark, Download, List } from 'lucide-react';
+import { Play, Pause, ChevronDown, Bookmark, Download, List, Cast } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { SeekBar } from './seek-bar';
 import { SpeedControl } from './speed-control';
-import { CastButton } from './cast-button';
 
 function Skip15Back({ className }: { className?: string }) {
   return (
@@ -159,7 +158,34 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
             <Download className="h-5 w-5" />
             <span className="text-[10px]">{t('download')}</span>
           </button>
-          <CastButton variant="full" />
+          <button
+            onClick={() => {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const w = window as any;
+              if (w.cast?.framework) {
+                w.cast.framework.CastContext.getInstance().requestSession().catch(() => {});
+              } else {
+                w['__onGCastApiAvailable'] = (ok: boolean) => {
+                  if (ok) {
+                    try {
+                      const ctx = w.cast.framework.CastContext.getInstance();
+                      ctx.setOptions({ receiverApplicationId: 'CC1AD845', autoJoinPolicy: 'ORIGIN_SCOPED' });
+                      ctx.requestSession().catch(() => {});
+                    } catch { /* */ }
+                  }
+                };
+                const s = document.createElement('script');
+                s.src = 'https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1';
+                s.async = true;
+                document.head.appendChild(s);
+              }
+            }}
+            className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+            aria-label="Cast"
+          >
+            <Cast className="h-5 w-5" />
+            <span className="text-[10px]">{t('cast') || 'שדר'}</span>
+          </button>
         </div>
       </div>
     </div>
