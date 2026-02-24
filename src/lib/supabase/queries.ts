@@ -175,7 +175,7 @@ export async function getPlaybackProgress(supabase: SupabaseClient, lessonId: st
 export async function getRecentProgress(supabase: SupabaseClient, limit = 10) {
   const { data, error } = await supabase
     .from('playback_progress')
-    .select('*, lesson:lessons(id, title, hebrew_title, duration, audio_url, series(name, hebrew_name))')
+    .select('*, lesson:lessons(id, title, hebrew_title, date, duration, audio_url, series(name, hebrew_name))')
     .eq('completed', false)
     .order('last_played_at', { ascending: false })
     .limit(limit);

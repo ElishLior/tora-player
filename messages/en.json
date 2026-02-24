@@ -4,7 +4,7 @@
     "home": "Home",
     "lessons": "Lessons",
     "playlists": "Playlists",
-    "series": "Series",
+    "series": "Short Clips",
     "bookmarks": "Bookmarks",
     "search": "Search",
     "settings": "Settings",
@@ -85,8 +85,8 @@
     "lessonsCount": "{count, plural, =0 {No lessons} =1 {1 lesson} other {# lessons}}"
   },
   "series": {
-    "title": "Series",
-    "noSeries": "No series yet"
+    "title": "Short Clips",
+    "noSeries": "No short clips yet"
   },
   "bookmarks": {
     "title": "Bookmarks",

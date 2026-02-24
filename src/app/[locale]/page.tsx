@@ -6,7 +6,7 @@ import { getRecentLessons, getRecentProgress, getAllSeries } from '@/lib/supabas
 import { LessonCard } from '@/components/lessons/lesson-card';
 import { EmptyState } from '@/components/shared/empty-state';
 import { Link } from '@/i18n/routing';
-import { BookOpen, ListMusic, Bookmark, Layers, Plus, ChevronLeft } from 'lucide-react';
+import { BookOpen, ListMusic, Bookmark, Scissors, Plus, ChevronLeft } from 'lucide-react';
 
 type Props = {
   params: Promise<{ locale: string }>;
@@ -79,7 +79,7 @@ export default async function HomePage({ params }: Props) {
             className="flex items-center gap-3 rounded-md bg-[hsl(var(--surface-elevated))] p-3 hover:bg-[hsl(var(--surface-highlight))] transition-colors"
           >
             <div className="h-8 w-8 rounded bg-gradient-to-br from-purple-500/40 to-purple-500/20 flex items-center justify-center">
-              <Layers className="h-4 w-4 text-purple-400" />
+              <Scissors className="h-4 w-4 text-purple-400" />
             </div>
             <span className="text-sm font-semibold">
               {tCommon('series')}

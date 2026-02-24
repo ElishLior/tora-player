@@ -4,9 +4,10 @@ import { getLessonById } from '@/lib/supabase/queries';
 import { notFound } from 'next/navigation';
 import { formatDuration } from '@/lib/utils';
 import { Link } from '@/i18n/routing';
-import { ArrowRight, Calendar, Clock, Edit, Play } from 'lucide-react';
+import { ArrowRight, Calendar, Clock, Edit } from 'lucide-react';
 import { LessonPlayerClient } from './lesson-player-client';
 import { ShareButton } from '@/components/shared/share-button';
+import { AudioFileList } from '@/components/lessons/audio-file-list';
 
 type Props = {
   params: Promise<{ locale: string; lessonId: string }>;
@@ -103,7 +104,7 @@ export default async function LessonDetailPage({ params }: Props) {
 
       {/* Description */}
       {lesson.description && (
-        <p className="text-sm text-muted-foreground leading-relaxed" dir="rtl">
+        <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line" dir="rtl">
           {lesson.description}
         </p>
       )}
@@ -113,38 +114,18 @@ export default async function LessonDetailPage({ params }: Props) {
         <LessonPlayerClient lesson={lesson} />
       )}
 
-      {/* Audio files list (tracklist style) */}
+      {/* Audio files list with playing indicator */}
       {lesson.audio_files && lesson.audio_files.length > 1 && (
-        <section>
-          <h2 className="text-sm font-bold mb-3 text-muted-foreground uppercase tracking-wider">
-            {locale === 'he' ? 'קבצי שמע' : 'Audio Files'}
-          </h2>
-          <div className="space-y-0.5">
-            {lesson.audio_files
-              .sort((a, b) => a.sort_order - b.sort_order)
-              .map((audio, index) => (
-                <div
-                  key={audio.id}
-                  className="flex items-center gap-3 rounded-md p-2.5 hover:bg-[hsl(var(--surface-highlight))] transition-colors group"
-                >
-                  <span className="text-sm font-medium text-muted-foreground w-5 text-center group-hover:hidden">
-                    {index + 1}
-                  </span>
-                  <Play className="h-4 w-4 text-foreground hidden group-hover:block w-5" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate" dir="rtl">
-                      {audio.original_name || `${locale === 'he' ? 'חלק' : 'Part'} ${index + 1}`}
-                    </p>
-                  </div>
-                  {audio.duration > 0 && (
-                    <span className="text-xs text-muted-foreground tabular-nums">
-                      {formatDuration(audio.duration)}
-                    </span>
-                  )}
-                </div>
-              ))}
-          </div>
-        </section>
+        <AudioFileList
+          lessonId={lesson.id}
+          lessonTitle={lesson.title}
+          hebrewTitle={lesson.hebrew_title || lesson.title}
+          lessonDate={lesson.date}
+          lessonDuration={lesson.duration}
+          seriesName={lesson.series?.hebrew_name || lesson.series?.name || undefined}
+          audioFiles={lesson.audio_files}
+          locale={locale}
+        />
       )}
 
       {/* Multi-part links */}

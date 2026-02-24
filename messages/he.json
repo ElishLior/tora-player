@@ -4,7 +4,7 @@
     "home": "בית",
     "lessons": "שיעורים",
     "playlists": "רשימות השמעה",
-    "series": "סדרות",
+    "series": "קטעים קצרים",
     "bookmarks": "סימניות",
     "search": "חיפוש",
     "settings": "הגדרות",
@@ -85,8 +85,8 @@
     "lessonsCount": "{count, plural, =0 {אין שיעורים} =1 {שיעור אחד} other {# שיעורים}}"
   },
   "series": {
-    "title": "סדרות",
-    "noSeries": "אין סדרות עדיין"
+    "title": "קטעים קצרים",
+    "noSeries": "אין קטעים קצרים עדיין"
   },
   "bookmarks": {
     "title": "סימניות",
