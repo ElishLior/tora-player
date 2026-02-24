@@ -75,8 +75,8 @@ export async function handleCastClick(): Promise<void> {
       document.documentElement.dir === 'rtl';
 
     alert(isHebrew
-      ? 'שידור Google Cast זמין רק בדפדפן Chrome.\n\nלרמקול Bluetooth: חבר דרך הגדרות הטלפון ← Bluetooth.\n\nל-AirPlay: השתמש במרכז הבקרה של המכשיר.'
-      : 'Google Cast is available in Chrome browser only.\n\nFor Bluetooth speakers: connect via your phone Settings → Bluetooth.\n\nFor AirPlay: use your device\'s Control Center.'
+      ? 'שידור Google Cast זמין רק בדפדפן Chrome במחשב או באנדרואיד.\n\nלרמקול Bluetooth: חבר דרך הגדרות הטלפון ← Bluetooth.\n\nל-AirPlay (אייפון): השתמש במרכז הבקרה ← שיקוף/שמע.'
+      : 'Google Cast is available in Chrome browser only (desktop or Android).\n\nFor Bluetooth speakers: connect via your phone Settings → Bluetooth.\n\nFor AirPlay (iPhone): use Control Center → Screen Mirroring/Audio.'
     );
     return;
   }

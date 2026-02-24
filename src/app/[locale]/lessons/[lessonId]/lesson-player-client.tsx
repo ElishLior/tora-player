@@ -78,8 +78,8 @@ export function LessonPlayerClient({ lesson }: LessonPlayerClientProps) {
         onSeek={seekTo}
       />
 
-      {/* Controls — dir="ltr" to prevent RTL from flipping arrows */}
-      <div dir="ltr" className="flex items-center justify-center gap-5">
+      {/* Controls */}
+      <div className="flex items-center justify-center gap-5">
         <SpeedControl
           speed={isCurrentLesson ? playbackSpeed : 1}
           onSpeedChange={setPlaybackSpeed}
@@ -100,7 +100,7 @@ export function LessonPlayerClient({ lesson }: LessonPlayerClientProps) {
           {isCurrentLesson && isPlaying ? (
             <Pause className="h-7 w-7 fill-current" />
           ) : (
-            <Play className="h-7 w-7 fill-current ms-0.5" />
+            <Play className="h-7 w-7 fill-current ml-0.5" />
           )}
         </button>
 

@@ -113,8 +113,8 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
           <SeekBar currentTime={currentTime} duration={duration} onSeek={seekTo} />
         </div>
 
-        {/* Main controls — dir="ltr" to prevent RTL from flipping arrows */}
-        <div dir="ltr" className="flex items-center justify-center gap-6 w-full max-w-md">
+        {/* Main controls */}
+        <div className="flex items-center justify-center gap-6 w-full max-w-md">
           <SpeedControl speed={playbackSpeed} onSpeedChange={setPlaybackSpeed} />
 
           <button
@@ -133,7 +133,7 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
             {isPlaying ? (
               <Pause className="h-8 w-8 fill-current" />
             ) : (
-              <Play className="h-8 w-8 fill-current ms-1" />
+              <Play className="h-8 w-8 fill-current ml-1" />
             )}
           </button>
 
