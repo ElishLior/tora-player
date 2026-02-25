@@ -41,6 +41,13 @@ export default async function LessonDetailPage({ params }: Props) {
           <ArrowRight className="h-5 w-5" />
         </Link>
         <div className="flex-1" />
+        <Link
+          href={`/lessons/${lessonId}/edit`}
+          className="rounded-full p-2 text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--surface-highlight))] transition-colors"
+          aria-label="Edit"
+        >
+          <Edit className="h-5 w-5" />
+        </Link>
         <ShareButton
           lessonId={lessonId}
           title={lesson.hebrew_title || lesson.title}

@@ -29,6 +29,14 @@ export const updateLessonSchema = z.object({
   part_number: z.number().int().positive().optional().nullable(),
   parent_lesson_id: z.string().uuid().optional().nullable(),
   is_published: z.boolean().optional(),
+  // Metadata fields
+  hebrew_date: z.string().optional().nullable(),
+  parsha: z.string().optional().nullable(),
+  teacher: z.string().optional().nullable(),
+  location: z.string().optional().nullable(),
+  summary: z.string().optional().nullable(),
+  lesson_type: z.string().optional().nullable(),
+  seder_number: z.number().int().positive().optional().nullable(),
 });
 
 export const createPlaylistSchema = z.object({

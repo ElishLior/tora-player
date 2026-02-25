@@ -51,12 +51,15 @@ export async function updateLesson(id: string, formData: FormData) {
   const supabase = await requireServerSupabaseClient();
 
   const raw: Record<string, unknown> = {};
-  const fields = ['title', 'hebrew_title', 'description', 'date', 'series_id', 'part_number', 'parent_lesson_id', 'is_published'];
+  const fields = [
+    'title', 'hebrew_title', 'description', 'date', 'series_id', 'part_number', 'parent_lesson_id', 'is_published',
+    'hebrew_date', 'parsha', 'teacher', 'location', 'summary', 'lesson_type', 'seder_number',
+  ];
 
   for (const field of fields) {
     const value = formData.get(field);
     if (value !== null) {
-      if (field === 'part_number') {
+      if (field === 'part_number' || field === 'seder_number') {
         raw[field] = value ? Number(value) : null;
       } else if (field === 'is_published') {
         raw[field] = value === 'true';
@@ -208,6 +211,55 @@ export async function deleteAudioFile(fileId: string) {
     .from('lesson_audio')
     .delete()
     .eq('id', fileId);
+
+  if (error) return { error: error.message };
+  revalidatePath('/[locale]', 'layout');
+  return { success: true };
+}
+
+// --- Image management ---
+
+export async function getImages(lessonId: string) {
+  const supabase = await requireServerSupabaseClient();
+
+  const { data, error } = await supabase
+    .from('lesson_images')
+    .select('*')
+    .eq('lesson_id', lessonId)
+    .order('sort_order', { ascending: true });
+
+  if (error) return { error: error.message };
+  return { data: data as LessonImage[] };
+}
+
+export async function deleteImage(imageId: string) {
+  const supabase = await requireServerSupabaseClient();
+
+  // Get the image record to find the R2 file key
+  const { data: image, error: fetchError } = await supabase
+    .from('lesson_images')
+    .select('file_key')
+    .eq('id', imageId)
+    .single();
+
+  if (fetchError || !image) {
+    return { error: fetchError?.message || 'Image not found' };
+  }
+
+  // Delete from R2
+  try {
+    const { deleteFromR2 } = await import('@/lib/r2');
+    await deleteFromR2(image.file_key);
+  } catch (err) {
+    console.error('R2 delete failed for image:', err);
+    // Continue to delete DB record even if R2 fails
+  }
+
+  // Delete from database
+  const { error } = await supabase
+    .from('lesson_images')
+    .delete()
+    .eq('id', imageId);
 
   if (error) return { error: error.message };
   revalidatePath('/[locale]', 'layout');
