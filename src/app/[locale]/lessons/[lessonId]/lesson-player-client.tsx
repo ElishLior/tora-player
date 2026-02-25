@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { Play, Pause, Cast, Volume2, X, ChevronRight, ChevronLeft, ChevronDown, StickyNote, Plus, Trash2, Pencil, Clock, Check } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Play, Pause, Cast, Volume2, X, ChevronRight, ChevronLeft, ChevronDown, StickyNote, Plus, Trash2, Pencil, Clock, Check, Scissors as ScissorsIcon } from 'lucide-react';
 import { useLocale } from 'next-intl';
+import { useSearchParams } from 'next/navigation';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { SeekBar } from '@/components/player/seek-bar';
 import { SpeedControl } from '@/components/player/speed-control';
@@ -45,6 +46,7 @@ interface LessonPlayerClientProps {
 
 export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) {
   const locale = useLocale();
+  const searchParams = useSearchParams();
   const {
     currentTrack,
     isPlaying,
@@ -61,6 +63,52 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
   } = useAudioPlayer();
 
   const isCurrentLesson = currentTrack?.id === lesson.id;
+
+  // ── Clip mode: read start/end from URL search params ──
+  const clipStartParam = searchParams.get('start');
+  const clipEndParam = searchParams.get('end');
+  const clipStart = clipStartParam ? parseFloat(clipStartParam) : null;
+  const clipEnd = clipEndParam ? parseFloat(clipEndParam) : null;
+  const isClipMode = clipStart !== null;
+  const clipSeekDoneRef = useRef(false);
+
+  // Auto-seek to clip start when the track loads for this lesson
+  useEffect(() => {
+    if (clipStart === null || clipSeekDoneRef.current) return;
+    if (!isCurrentLesson) return;
+    // Wait until duration is available (track loaded)
+    if (duration <= 0) return;
+
+    seekTo(clipStart);
+    clipSeekDoneRef.current = true;
+  }, [clipStart, isCurrentLesson, duration, seekTo]);
+
+  // Auto-play the lesson if clip link and not yet playing this lesson
+  useEffect(() => {
+    if (clipStart === null) return;
+    if (isCurrentLesson) return; // Already playing this lesson
+    if (clipSeekDoneRef.current) return; // Already handled
+
+    // Start playing the lesson so the seek effect above can fire
+    playTrack({
+      id: lesson.id,
+      title: lesson.title,
+      hebrewTitle: lesson.hebrew_title || lesson.title,
+      audioUrl: normalizeAudioUrl(lesson.audio_url) || lesson.audio_url!,
+      audioUrlFallback: normalizeAudioUrl(lesson.audio_url_fallback) || undefined,
+      duration: lesson.duration,
+      seriesName: lesson.series?.hebrew_name || lesson.series?.name || undefined,
+      date: lesson.date,
+    });
+  }, [clipStart, isCurrentLesson]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-pause at clip end
+  useEffect(() => {
+    if (clipEnd === null || !isCurrentLesson || !isPlaying) return;
+    if (currentTime >= clipEnd) {
+      togglePlay();
+    }
+  }, [clipEnd, currentTime, isCurrentLesson, isPlaying, togglePlay]);
 
   const handlePlay = () => {
     if (isCurrentLesson) {
@@ -161,6 +209,16 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
 
   return (
     <div className="space-y-4">
+      {/* Clip mode badge */}
+      {isClipMode && clipStart !== null && clipEnd !== null && (
+        <div className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary/10 border border-primary/20" dir="rtl">
+          <ScissorsIcon className="h-4 w-4 text-primary flex-shrink-0" />
+          <span className="text-sm font-medium text-primary">
+            מצב קטע: {formatDur(clipStart)} - {formatDur(clipEnd)}
+          </span>
+        </div>
+      )}
+
       <div className="rounded-xl bg-[hsl(var(--surface-elevated))] p-5 space-y-4">
         {/* Seek bar */}
         <SeekBar

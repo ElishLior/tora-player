@@ -72,7 +72,11 @@
     "download": "Download",
     "queue": "Play Queue",
     "nowPlaying": "Now Playing",
-    "upNext": "Up Next"
+    "upNext": "Up Next",
+    "drivingMode": "Driving Mode",
+    "shareClip": "Share Clip",
+    "noActiveLesson": "No active lesson",
+    "clipMode": "Clip Mode"
   },
   "playlists": {
     "title": "Playlists",

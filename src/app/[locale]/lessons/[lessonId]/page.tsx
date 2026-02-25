@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { getLessonById } from '@/lib/supabase/queries';
@@ -130,8 +131,11 @@ export default async function LessonDetailPage({ params }: Props) {
       )}
 
       {/* Player + Audio files + Image gallery (all inlined in one client component to avoid webpack dev chunk issue) */}
+      {/* Suspense needed because LessonPlayerClient uses useSearchParams for clip mode */}
       {(hasAudio || hasImages) && (
-        <LessonPlayerClient lesson={lesson} images={hasImages ? lesson.images : undefined} />
+        <Suspense fallback={null}>
+          <LessonPlayerClient lesson={lesson} images={hasImages ? lesson.images : undefined} />
+        </Suspense>
       )}
 
       {/* Multi-part links */}

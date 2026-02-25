@@ -72,7 +72,11 @@
     "download": "הורדה",
     "queue": "תור ניגון",
     "nowPlaying": "מתנגן כעת",
-    "upNext": "הבא בתור"
+    "upNext": "הבא בתור",
+    "drivingMode": "מצב נהיגה",
+    "shareClip": "שתף קטע",
+    "noActiveLesson": "אין שיעור פעיל",
+    "clipMode": "מצב קטע"
   },
   "playlists": {
     "title": "רשימות השמעה",

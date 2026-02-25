@@ -1,8 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { Play, Pause, ChevronDown, Bookmark, Download, List, Cast } from 'lucide-react';
+import { Play, Pause, ChevronDown, Bookmark, Download, List, Cast, Car, Scissors } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import { useRouter } from 'next/navigation';
+import { useLocale } from 'next-intl';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { SeekBar } from './seek-bar';
 import { SpeedControl } from './speed-control';
@@ -10,6 +12,7 @@ import { handleCastClick } from '@/lib/cast-utils';
 import { useBookmarksStore } from '@/stores/bookmarks-store';
 import { BookmarkDialog } from '@/components/bookmarks/bookmark-dialog';
 import { getTagInfo } from '@/components/bookmarks/bookmark-dialog';
+import { ShareClipDialog } from '@/components/player/share-clip-dialog';
 
 function Skip15Back({ className }: { className?: string }) {
   return (
@@ -50,8 +53,11 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
     setPlaybackSpeed,
   } = useAudioPlayer();
 
+  const locale = useLocale();
+  const router = useRouter();
   const bookmarks = useBookmarksStore((s) => s.bookmarks);
   const [showBookmarkDialog, setShowBookmarkDialog] = useState(false);
+  const [showShareClipDialog, setShowShareClipDialog] = useState(false);
 
   if (!currentTrack) return null;
 
@@ -191,7 +197,7 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
           </div>
 
           {/* Secondary actions */}
-          <div className="flex items-center justify-center gap-8 pt-2">
+          <div className="flex items-center justify-center gap-6 pt-2 flex-wrap">
             <button
               onClick={() => setShowBookmarkDialog(true)}
               className={`flex flex-col items-center gap-1.5 transition-colors ${
@@ -209,6 +215,20 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
                 )}
               </div>
               <span className="text-[10px]">{t('bookmark')}</span>
+            </button>
+            <button
+              onClick={() => setShowShareClipDialog(true)}
+              className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Scissors className="h-5 w-5" />
+              <span className="text-[10px]">שתף קטע</span>
+            </button>
+            <button
+              onClick={() => router.push(`/${locale}/driving`)}
+              className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Car className="h-5 w-5" />
+              <span className="text-[10px]">מצב נהיגה</span>
             </button>
             <button className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors">
               <Download className="h-5 w-5" />
@@ -232,6 +252,16 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
         onClose={() => setShowBookmarkDialog(false)}
         lessonId={currentTrack.id}
         position={currentTime}
+      />
+
+      {/* Share clip dialog */}
+      <ShareClipDialog
+        isOpen={showShareClipDialog}
+        onClose={() => setShowShareClipDialog(false)}
+        lessonId={currentTrack.id}
+        currentTime={currentTime}
+        duration={duration}
+        lessonTitle={currentTrack.hebrewTitle || currentTrack.title}
       />
     </>
   );
