@@ -14,7 +14,7 @@ import { audioEngine } from '@/lib/audio-engine';
  * Also manages Wake Lock to prevent device sleep during playback.
  */
 export function useMediaSession() {
-  const { currentTrack, isPlaying, currentTime, duration, playbackSpeed, play, pause, skipForward, skipBackward, nextTrack, previousTrack } = useAudioStore();
+  const { currentTrack, isPlaying, currentTime, duration, playbackSpeed } = useAudioStore();
   const lastPositionUpdate = useRef(0);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
 
@@ -143,20 +143,37 @@ export function useMediaSession() {
     }
   }, [currentTime, duration, currentTrack, playbackSpeed]);
 
-  // Set action handlers
+  // Set action handlers — use audioEngine directly + getState() for fresh state
   useEffect(() => {
     if (!('mediaSession' in navigator)) return;
 
     const handlers: [MediaSessionAction, MediaSessionActionHandler][] = [
-      ['play', () => play()],
-      ['pause', () => pause()],
-      ['seekforward', () => skipForward(15)],
-      ['seekbackward', () => skipBackward(15)],
-      ['nexttrack', () => nextTrack()],
-      ['previoustrack', () => previousTrack()],
+      ['play', () => { useAudioStore.getState().play(); }],
+      ['pause', () => { useAudioStore.getState().pause(); }],
+      ['seekforward', () => {
+        const newTime = Math.min(audioEngine.getCurrentTime() + 15, audioEngine.getDuration());
+        audioEngine.seek(newTime);
+        useAudioStore.getState().setCurrentTime(newTime);
+      }],
+      ['seekbackward', () => {
+        const newTime = Math.max(audioEngine.getCurrentTime() - 15, 0);
+        audioEngine.seek(newTime);
+        useAudioStore.getState().setCurrentTime(newTime);
+      }],
+      ['nexttrack', () => { useAudioStore.getState().nextTrack(); }],
+      ['previoustrack', () => {
+        const state = useAudioStore.getState();
+        if (audioEngine.getCurrentTime() > 3) {
+          audioEngine.seek(0);
+          state.setCurrentTime(0);
+        } else {
+          state.previousTrack();
+        }
+      }],
       ['seekto', (details) => {
         if (details.seekTime !== undefined) {
           audioEngine.seek(details.seekTime);
+          useAudioStore.getState().setCurrentTime(details.seekTime);
         }
       }],
     ];
@@ -178,5 +195,5 @@ export function useMediaSession() {
         }
       }
     };
-  }, [play, pause, skipForward, skipBackward, nextTrack, previousTrack]);
+  }, []); // Empty deps — handlers use getState() so they always read fresh state
 }
