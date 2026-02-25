@@ -1,6 +1,7 @@
 'use client';
 
 import { Play, Pause } from 'lucide-react';
+import { useRouter } from '@/i18n/routing';
 import { Link } from '@/i18n/routing';
 import { formatDuration } from '@/lib/utils';
 import { useAudioStore, type AudioTrack } from '@/stores/audio-store';
@@ -13,6 +14,7 @@ interface LessonCardProps {
 }
 
 export function LessonCard({ lesson, showProgress }: LessonCardProps) {
+  const router = useRouter();
   const currentTrack = useAudioStore((s) => s.currentTrack);
   const isPlaying = useAudioStore((s) => s.isPlaying);
   const togglePlay = useAudioStore((s) => s.togglePlay);
@@ -27,10 +29,21 @@ export function LessonCard({ lesson, showProgress }: LessonCardProps) {
   const handlePlay = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (isCurrentlyPlaying) {
+
+    if (isCurrentlyPlaying && isPlaying) {
+      // Pause — stay on current page
       togglePlay();
       return;
     }
+
+    if (isCurrentlyPlaying && !isPlaying) {
+      // Resume paused track — resume + navigate to lesson
+      togglePlay();
+      router.push(`/lessons/${lesson.id}`);
+      return;
+    }
+
+    // New track — start playing + navigate to lesson page
     if (!lesson.audio_url) return;
     setTrack({
       id: lesson.id,
@@ -42,6 +55,7 @@ export function LessonCard({ lesson, showProgress }: LessonCardProps) {
       seriesName: lesson.series?.hebrew_name || lesson.series?.name || undefined,
       date: lesson.date,
     });
+    router.push(`/lessons/${lesson.id}`);
   };
 
   return (
