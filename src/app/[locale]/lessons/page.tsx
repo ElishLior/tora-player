@@ -11,7 +11,7 @@ import type { LessonWithRelations } from '@/types/database';
 
 type Props = {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{ q?: string; type?: string }>;
 };
 
 function groupByDate(lessons: LessonWithRelations[], locale: string) {
@@ -39,7 +39,7 @@ function groupByDate(lessons: LessonWithRelations[], locale: string) {
 
 export default async function LessonsPage({ params, searchParams }: Props) {
   const { locale } = await params;
-  const { q } = await searchParams;
+  const { q, type: audioTypeFilter } = await searchParams;
   setRequestLocale(locale);
   const t = await getTranslations('lessons');
 
@@ -48,15 +48,38 @@ export default async function LessonsPage({ params, searchParams }: Props) {
   let lessons: LessonWithRelations[] = [];
   if (supabase) {
     try {
+      // If filtering by audio type, get matching lesson IDs first
+      let filterLessonIds: string[] | null = null;
+      if (audioTypeFilter) {
+        const { data: audioMatches } = await supabase
+          .from('lesson_audio')
+          .select('lesson_id')
+          .eq('audio_type', audioTypeFilter);
+        filterLessonIds = [...new Set((audioMatches || []).map((a: { lesson_id: string }) => a.lesson_id))];
+      }
+
       if (q) {
         const escaped = q.replace(/[%_\\]/g, '\\$&');
-        const { data } = await supabase
+        let query = supabase
           .from('lessons')
           .select('*, series(name, hebrew_name)')
           .eq('is_published', true)
           .or(`title.ilike.%${escaped}%,hebrew_title.ilike.%${escaped}%,description.ilike.%${escaped}%`)
           .order('date', { ascending: false })
           .limit(50);
+        if (filterLessonIds) {
+          query = query.in('id', filterLessonIds);
+        }
+        const { data } = await query;
+        lessons = (data || []) as LessonWithRelations[];
+      } else if (filterLessonIds) {
+        const { data } = await supabase
+          .from('lessons')
+          .select('*, series(name, hebrew_name)')
+          .eq('is_published', true)
+          .in('id', filterLessonIds)
+          .order('date', { ascending: false })
+          .limit(100);
         lessons = (data || []) as LessonWithRelations[];
       } else {
         lessons = await getRecentLessons(supabase, 100);
@@ -92,6 +115,34 @@ export default async function LessonsPage({ params, searchParams }: Props) {
           className="w-full rounded-full bg-[hsl(var(--surface-elevated))] ps-10 pe-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 border-0"
         />
       </form>
+
+      {/* Audio type filter tabs */}
+      <div className="flex gap-2" dir="rtl">
+        {[
+          { value: '', label: 'הכל' },
+          { value: 'סידור', label: 'סידור' },
+          { value: 'עץ חיים', label: 'עץ חיים' },
+        ].map((tab) => {
+          const isActive = (audioTypeFilter || '') === tab.value;
+          const params = new URLSearchParams();
+          if (q) params.set('q', q);
+          if (tab.value) params.set('type', tab.value);
+          const href = params.toString() ? `?${params.toString()}` : '?';
+          return (
+            <a
+              key={tab.value}
+              href={href}
+              className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors ${
+                isActive
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-[hsl(var(--surface-elevated))] text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {tab.label}
+            </a>
+          );
+        })}
+      </div>
 
       {/* Lesson groups */}
       {groups.length > 0 ? (

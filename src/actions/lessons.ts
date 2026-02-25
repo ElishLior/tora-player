@@ -184,6 +184,19 @@ export async function renameAudioFile(fileId: string, newName: string) {
   return { success: true };
 }
 
+export async function updateAudioType(fileId: string, audioType: string | null) {
+  const supabase = await requireServerSupabaseClient();
+
+  const { error } = await supabase
+    .from('lesson_audio')
+    .update({ audio_type: audioType || null })
+    .eq('id', fileId);
+
+  if (error) return { error: error.message };
+  revalidatePath('/[locale]', 'layout');
+  return { success: true };
+}
+
 export async function reorderAudioFiles(lessonId: string, fileIds: string[]) {
   const supabase = await requireServerSupabaseClient();
 

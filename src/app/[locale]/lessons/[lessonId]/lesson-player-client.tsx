@@ -197,13 +197,22 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
                     )}
                   </span>
 
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 flex items-center gap-2">
                     <p
                       className={`text-sm font-medium truncate ${active ? 'text-primary' : ''}`}
                       dir="rtl"
                     >
                       {audio.original_name || `${locale === 'he' ? 'חלק' : 'Part'} ${index + 1}`}
                     </p>
+                    {audio.audio_type && (
+                      <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${
+                        audio.audio_type === 'עץ חיים'
+                          ? 'bg-primary/15 text-primary'
+                          : 'bg-amber-500/15 text-amber-400'
+                      }`}>
+                        {audio.audio_type}
+                      </span>
+                    )}
                   </div>
 
                   {audio.duration > 0 && (

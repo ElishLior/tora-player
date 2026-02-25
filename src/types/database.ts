@@ -51,6 +51,7 @@ export interface LessonAudio {
   duration: number;
   codec: string;
   sort_order: number;
+  audio_type: string | null; // 'סידור' | 'עץ חיים' | custom
   created_at: string;
 }
 
