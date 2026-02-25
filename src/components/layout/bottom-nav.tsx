@@ -1,6 +1,6 @@
 'use client';
 
-import { Home, BookOpen, Search, ListMusic } from 'lucide-react';
+import { Home, BookOpen, Search, ListMusic, Bookmark } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useAudioStore } from '@/stores/audio-store';
@@ -17,6 +17,7 @@ const navItems: NavItem[] = [
   { href: '', labelHe: 'בית', labelEn: 'Home', icon: Home },
   { href: '/lessons', labelHe: 'שיעורים', labelEn: 'Lessons', icon: BookOpen },
   { href: '/search', labelHe: 'חיפוש', labelEn: 'Search', icon: Search },
+  { href: '/bookmarks', labelHe: 'סימניות', labelEn: 'Bookmarks', icon: Bookmark },
   { href: '/playlists', labelHe: 'רשימות', labelEn: 'Playlists', icon: ListMusic },
 ];
 
@@ -52,7 +53,7 @@ export function BottomNav({ locale }: { locale: string }) {
               key={item.href}
               href={fullHref}
               className={cn(
-                'flex flex-col items-center justify-center gap-0.5 px-3 py-1.5 min-w-[64px] transition-colors',
+                'flex flex-col items-center justify-center gap-0.5 px-3 py-1.5 min-w-[56px] transition-colors',
                 isActive
                   ? 'text-foreground'
                   : 'text-muted-foreground hover:text-foreground'

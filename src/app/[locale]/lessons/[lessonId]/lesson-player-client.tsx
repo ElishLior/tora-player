@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { Play, Pause, Cast, Volume2, X, ChevronRight, ChevronLeft } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Play, Pause, Cast, Volume2, X, ChevronRight, ChevronLeft, ChevronDown, StickyNote, Plus, Trash2, Pencil, Clock, Check } from 'lucide-react';
 import { useLocale } from 'next-intl';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { SeekBar } from '@/components/player/seek-bar';
@@ -9,6 +9,7 @@ import { SpeedControl } from '@/components/player/speed-control';
 import { handleCastClick } from '@/lib/cast-utils';
 import type { LessonWithRelations, LessonAudio, LessonImage } from '@/types/database';
 import { normalizeAudioUrl } from '@/lib/audio-url';
+import { getNotes, addNote, updateNote, deleteNote, type LocalNote } from '@/lib/local-notes';
 
 function Skip15Back({ className }: { className?: string }) {
   return (
@@ -103,6 +104,57 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
       date: lesson.date,
     });
   }
+
+  // ---- Notes state ----
+  const [notes, setNotes] = useState<LocalNote[]>([]);
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [newNoteText, setNewNoteText] = useState('');
+  const [attachTimestamp, setAttachTimestamp] = useState(false);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editingNoteText, setEditingNoteText] = useState('');
+
+  // Load notes from localStorage
+  useEffect(() => {
+    setNotes(getNotes(lesson.id));
+  }, [lesson.id]);
+
+  const refreshNotes = useCallback(() => {
+    setNotes(getNotes(lesson.id));
+  }, [lesson.id]);
+
+  const handleAddNote = () => {
+    const text = newNoteText.trim();
+    if (!text) return;
+    const ts = attachTimestamp && isCurrentLesson ? currentTime : undefined;
+    addNote(lesson.id, text, ts);
+    setNewNoteText('');
+    setAttachTimestamp(false);
+    refreshNotes();
+  };
+
+  const handleDeleteNote = (noteId: string) => {
+    deleteNote(lesson.id, noteId);
+    refreshNotes();
+  };
+
+  const handleStartEdit = (note: LocalNote) => {
+    setEditingNoteId(note.id);
+    setEditingNoteText(note.text);
+  };
+
+  const handleSaveEdit = () => {
+    if (editingNoteId && editingNoteText.trim()) {
+      updateNote(lesson.id, editingNoteId, editingNoteText.trim());
+      setEditingNoteId(null);
+      setEditingNoteText('');
+      refreshNotes();
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingNoteId(null);
+    setEditingNoteText('');
+  };
 
   const displayTime = isCurrentLesson ? currentTime : 0;
   const displayDuration = isCurrentLesson ? duration : lesson.duration;
@@ -231,6 +283,162 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
       {images && images.length > 0 && (
         <ImageGallerySection images={images} locale={locale} />
       )}
+
+      {/* ==================== Notes Section (inlined — local-first) ==================== */}
+      <div className="rounded-xl bg-[hsl(var(--surface-elevated))]" dir={locale === 'he' ? 'rtl' : 'ltr'}>
+        {/* Collapsible header */}
+        <button
+          onClick={() => setNotesOpen(!notesOpen)}
+          className="w-full flex items-center justify-between p-4 text-start"
+        >
+          <div className="flex items-center gap-2">
+            <StickyNote className="h-4 w-4 text-primary" />
+            <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">
+              {locale === 'he' ? 'הערות אישיות' : 'Personal Notes'}
+            </h2>
+            {notes.length > 0 && (
+              <span className="bg-primary/15 text-primary text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                {notes.length}
+              </span>
+            )}
+          </div>
+          <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${notesOpen ? 'rotate-180' : ''}`} />
+        </button>
+
+        {notesOpen && (
+          <div className="px-4 pb-4 space-y-3">
+            {/* New note input */}
+            <div className="space-y-2">
+              <textarea
+                value={newNoteText}
+                onChange={(e) => setNewNoteText(e.target.value)}
+                placeholder={locale === 'he' ? 'כתוב הערה...' : 'Write a note...'}
+                className="w-full rounded-lg bg-[hsl(0,0%,10%)] border border-[hsl(0,0%,20%)] px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 resize-none"
+                rows={2}
+                dir={locale === 'he' ? 'rtl' : 'ltr'}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                    handleAddNote();
+                  }
+                }}
+              />
+              <div className="flex items-center justify-between gap-3">
+                <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={attachTimestamp}
+                    onChange={(e) => setAttachTimestamp(e.target.checked)}
+                    className="rounded border-[hsl(0,0%,30%)] bg-[hsl(0,0%,10%)] text-primary focus:ring-primary/40"
+                  />
+                  <Clock className="h-3 w-3" />
+                  {locale === 'he' ? 'צרף זמן נוכחי' : 'Attach current time'}
+                  {attachTimestamp && isCurrentLesson && (
+                    <span className="text-primary font-mono font-bold">
+                      {formatDur(currentTime)}
+                    </span>
+                  )}
+                </label>
+                <button
+                  onClick={handleAddNote}
+                  disabled={!newNoteText.trim()}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  {locale === 'he' ? 'הוסף' : 'Add'}
+                </button>
+              </div>
+            </div>
+
+            {/* Notes list */}
+            {notes.length > 0 && (
+              <div className="space-y-2 pt-1">
+                {[...notes].reverse().map((note) => (
+                  <div
+                    key={note.id}
+                    className="rounded-lg bg-[hsl(0,0%,10%)] p-3 group"
+                  >
+                    {editingNoteId === note.id ? (
+                      /* Editing mode */
+                      <div className="space-y-2">
+                        <textarea
+                          value={editingNoteText}
+                          onChange={(e) => setEditingNoteText(e.target.value)}
+                          className="w-full rounded-lg bg-[hsl(0,0%,8%)] border border-primary/40 px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 resize-none"
+                          rows={2}
+                          dir={locale === 'he' ? 'rtl' : 'ltr'}
+                          autoFocus
+                        />
+                        <div className="flex gap-2 justify-end">
+                          <button
+                            onClick={handleCancelEdit}
+                            className="px-2.5 py-1 rounded-md text-xs text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            {locale === 'he' ? 'ביטול' : 'Cancel'}
+                          </button>
+                          <button
+                            onClick={handleSaveEdit}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-colors"
+                          >
+                            <Check className="h-3 w-3" />
+                            {locale === 'he' ? 'שמור' : 'Save'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      /* Display mode */
+                      <>
+                        <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
+                          {note.text}
+                        </p>
+                        <div className="flex items-center justify-between mt-2">
+                          <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                            {note.timestamp !== undefined && (
+                              <button
+                                onClick={() => seekTo(note.timestamp!)}
+                                className="flex items-center gap-1 text-primary hover:text-primary/80 font-mono font-bold"
+                              >
+                                <Clock className="h-3 w-3" />
+                                {formatDur(note.timestamp)}
+                              </button>
+                            )}
+                            <span>
+                              {new Date(note.createdAt).toLocaleDateString(locale === 'he' ? 'he-IL' : 'en-US')}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={() => handleStartEdit(note)}
+                              className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--surface-highlight))] transition-colors"
+                              aria-label={locale === 'he' ? 'ערוך' : 'Edit'}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteNote(note.id)}
+                              className="p-1 rounded text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                              aria-label={locale === 'he' ? 'מחק' : 'Delete'}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {notes.length === 0 && (
+              <p className="text-xs text-muted-foreground text-center py-3">
+                {locale === 'he'
+                  ? 'אין הערות עדיין. כתוב הערה ראשונה!'
+                  : 'No notes yet. Write your first note!'}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
