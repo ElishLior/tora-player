@@ -142,6 +142,7 @@ export const useAudioStore = create<AudioPlayerState>()(
         currentTime: state.currentTime,
         queue: state.queue,
         queueIndex: state.queueIndex,
+        isPlaying: state.isPlaying,
       }),
     }
   )

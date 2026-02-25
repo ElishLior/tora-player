@@ -146,6 +146,11 @@ class AudioEngine {
     return this.howl?.playing() || false;
   }
 
+  /** Check if the audio engine has a loaded Howl instance */
+  isLoaded(): boolean {
+    return this.howl !== null;
+  }
+
   /** Get the current audio URL being played */
   getCurrentUrl(): string | null {
     return this.currentUrl;

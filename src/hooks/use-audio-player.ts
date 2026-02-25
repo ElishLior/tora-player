@@ -54,15 +54,57 @@ export function useAudioPlayer() {
     }
   }, [store.currentTrack?.id, store.currentTrack?.audioUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Sync play/pause — only if a track is loaded
+  // Re-initialize audio when app comes back to foreground (browser may have killed audio context)
+  useEffect(() => {
+    function handleVisibilityChange() {
+      if (document.visibilityState !== 'visible') return;
+      const state = useAudioStore.getState();
+      if (!state.currentTrack?.audioUrl) return;
+
+      // If engine lost its state, re-load and resume
+      if (!audioEngine.isLoaded()) {
+        audioEngine.load(state.currentTrack.audioUrl, {
+          startPosition: state.currentTime > 0 ? state.currentTime : undefined,
+        });
+        const audioEl = audioEngine.getAudioElement();
+        if (audioEl) {
+          audioEl.setAttribute('playsinline', '');
+          audioEl.setAttribute('webkit-playsinline', '');
+        }
+        if (state.isPlaying) {
+          setTimeout(() => audioEngine.play(), 300);
+        }
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []); // Empty deps — uses getState() for fresh state
+
+  // Sync play/pause — re-load engine if needed, then play/pause
   useEffect(() => {
     if (!store.currentTrack) return;
     if (store.isPlaying) {
-      audioEngine.play();
+      // If engine is not loaded (e.g., after page refresh, browser killed audio),
+      // re-load the track first, then play
+      if (!audioEngine.isLoaded() && store.currentTrack.audioUrl) {
+        audioEngine.load(store.currentTrack.audioUrl, {
+          startPosition: store.currentTime > 0 ? store.currentTime : undefined,
+        });
+        const audioEl = audioEngine.getAudioElement();
+        if (audioEl) {
+          audioEl.setAttribute('playsinline', '');
+          audioEl.setAttribute('webkit-playsinline', '');
+        }
+        // Wait for Howler to finish loading before playing
+        setTimeout(() => audioEngine.play(), 300);
+      } else {
+        audioEngine.play();
+      }
     } else {
       audioEngine.pause();
     }
-  }, [store.isPlaying, store.currentTrack?.id]);
+  }, [store.isPlaying, store.currentTrack?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sync volume
   useEffect(() => {

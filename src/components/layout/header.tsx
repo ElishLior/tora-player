@@ -1,7 +1,8 @@
 'use client';
 
-import { Search } from 'lucide-react';
+import { Search, Play, Pause, Music } from 'lucide-react';
 import Link from 'next/link';
+import { useAudioStore } from '@/stores/audio-store';
 
 interface HeaderProps {
   locale: string;
@@ -9,6 +10,7 @@ interface HeaderProps {
 
 export function Header({ locale }: HeaderProps) {
   const isRTL = locale === 'he';
+  const { currentTrack, isPlaying, togglePlay, toggleMiniPlayer } = useAudioStore();
 
   return (
     <header className="sticky top-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-xl">
@@ -25,6 +27,31 @@ export function Header({ locale }: HeaderProps) {
         </Link>
 
         <div className="flex items-center gap-0.5">
+          {/* Now Playing indicator — shows when a track is loaded */}
+          {currentTrack && (
+            <button
+              onClick={toggleMiniPlayer}
+              className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors max-w-[140px]"
+              aria-label={isRTL ? 'מתנגן כעת' : 'Now Playing'}
+            >
+              <Music className="h-3 w-3 flex-shrink-0" />
+              <span className="truncate" dir="rtl">
+                {currentTrack.hebrewTitle || currentTrack.title}
+              </span>
+              <button
+                onClick={(e) => { e.stopPropagation(); togglePlay(); }}
+                className="flex-shrink-0 p-0.5"
+                aria-label={isPlaying ? 'Pause' : 'Play'}
+              >
+                {isPlaying ? (
+                  <Pause className="h-3 w-3 fill-current" />
+                ) : (
+                  <Play className="h-3 w-3 fill-current" />
+                )}
+              </button>
+            </button>
+          )}
+
           <Link
             href={`/${locale}/search`}
             className="rounded-full p-2 text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--surface-highlight))] transition-colors"
