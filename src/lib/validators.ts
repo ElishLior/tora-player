@@ -10,6 +10,14 @@ export const createLessonSchema = z.object({
   parent_lesson_id: z.string().uuid().optional().nullable(),
   source_text: z.string().optional(),
   source_type: z.enum(['upload', 'url_import', 'whatsapp']).default('upload'),
+  // Metadata fields
+  hebrew_date: z.string().optional().nullable(),
+  parsha: z.string().optional().nullable(),
+  teacher: z.string().optional().nullable(),
+  location: z.string().optional().nullable(),
+  summary: z.string().optional().nullable(),
+  lesson_type: z.string().optional().nullable(),
+  seder_number: z.number().int().positive().optional().nullable(),
 });
 
 export const updateLessonSchema = z.object({

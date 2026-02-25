@@ -18,6 +18,14 @@ export async function createLesson(formData: FormData) {
     parent_lesson_id: formData.get('parent_lesson_id') as string || undefined,
     source_text: formData.get('source_text') as string || undefined,
     source_type: (formData.get('source_type') as string) || 'upload',
+    // Metadata fields
+    hebrew_date: formData.get('hebrew_date') as string || undefined,
+    parsha: formData.get('parsha') as string || undefined,
+    teacher: formData.get('teacher') as string || undefined,
+    location: formData.get('location') as string || undefined,
+    summary: formData.get('summary') as string || undefined,
+    lesson_type: formData.get('lesson_type') as string || undefined,
+    seder_number: formData.get('seder_number') ? Number(formData.get('seder_number')) : undefined,
   };
 
   const parsed = createLessonSchema.safeParse(raw);
