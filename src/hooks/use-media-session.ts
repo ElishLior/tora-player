@@ -12,7 +12,7 @@ import { audioEngine } from '@/lib/audio-engine';
  * - OS media overlays
  */
 export function useMediaSession() {
-  const { currentTrack, isPlaying, currentTime, duration, play, pause, skipForward, skipBackward, nextTrack, previousTrack } = useAudioStore();
+  const { currentTrack, isPlaying, currentTime, duration, playbackSpeed, play, pause, skipForward, skipBackward, nextTrack, previousTrack } = useAudioStore();
 
   // Set metadata when track changes
   useEffect(() => {
@@ -21,12 +21,15 @@ export function useMediaSession() {
     navigator.mediaSession.metadata = new MediaMetadata({
       title: currentTrack.hebrewTitle || currentTrack.title,
       artist: currentTrack.seriesName || 'נגן תורה',
-      album: currentTrack.seriesName || 'שיעורי תורה',
-      artwork: currentTrack.artworkUrl
-        ? [
-            { src: currentTrack.artworkUrl, sizes: '512x512', type: 'image/png' },
-          ]
-        : [],
+      album: 'שיעורי תורה',
+      artwork: [
+        ...(currentTrack.artworkUrl
+          ? [{ src: currentTrack.artworkUrl, sizes: '512x512', type: 'image/png' }]
+          : []),
+        // Fallback icon for lock screen when no artwork
+        { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+        { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+      ],
     });
   }, [currentTrack]);
 
@@ -40,15 +43,19 @@ export function useMediaSession() {
   useEffect(() => {
     if (!('mediaSession' in navigator) || !currentTrack) return;
     try {
-      navigator.mediaSession.setPositionState({
-        duration: duration || 0,
-        playbackRate: audioEngine.isPlaying() ? 1 : 0,
-        position: Math.min(currentTime, duration || 0),
-      });
+      const safeDuration = duration || 0;
+      const safePosition = Math.max(0, Math.min(currentTime, safeDuration));
+      if (safeDuration > 0) {
+        navigator.mediaSession.setPositionState({
+          duration: safeDuration,
+          playbackRate: playbackSpeed || 1,
+          position: safePosition,
+        });
+      }
     } catch {
       // Some browsers don't support this
     }
-  }, [currentTime, duration, currentTrack]);
+  }, [currentTime, duration, currentTrack, playbackSpeed]);
 
   // Set action handlers
   useEffect(() => {

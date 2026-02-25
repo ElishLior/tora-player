@@ -44,7 +44,6 @@ interface LessonPlayerClientProps {
 
 export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) {
   const locale = useLocale();
-  const isRtl = locale === 'he';
   const {
     currentTrack,
     isPlaying,
@@ -118,20 +117,19 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
           onSeek={seekTo}
         />
 
-        {/* Controls — dir="ltr" keeps layout predictable; we swap icons+functions for RTL */}
+        {/* Controls — dir="ltr" keeps standard media player layout (⏪ ▶ ⏩) */}
         <div dir="ltr" className="flex items-center justify-center gap-5">
           <SpeedControl
             speed={isCurrentLesson ? playbackSpeed : 1}
             onSpeedChange={setPlaybackSpeed}
           />
 
-          {/* Left button: backward in LTR, forward in RTL */}
           <button
-            onClick={() => isRtl ? skipForward(15) : skipBackward(15)}
+            onClick={() => skipBackward(15)}
             className="p-2 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30"
             disabled={!isCurrentLesson}
           >
-            {isRtl ? <Skip15Forward className="h-7 w-7" /> : <Skip15Back className="h-7 w-7" />}
+            <Skip15Back className="h-7 w-7" />
           </button>
 
           <button
@@ -145,13 +143,12 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
             )}
           </button>
 
-          {/* Right button: forward in LTR, backward in RTL */}
           <button
-            onClick={() => isRtl ? skipBackward(15) : skipForward(15)}
+            onClick={() => skipForward(15)}
             className="p-2 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30"
             disabled={!isCurrentLesson}
           >
-            {isRtl ? <Skip15Back className="h-7 w-7" /> : <Skip15Forward className="h-7 w-7" />}
+            <Skip15Forward className="h-7 w-7" />
           </button>
 
           {/* Cast / broadcast */}
