@@ -4,8 +4,9 @@ import { Play, Pause } from 'lucide-react';
 import { useRouter } from '@/i18n/routing';
 import { Link } from '@/i18n/routing';
 import { formatDuration } from '@/lib/utils';
-import { useAudioStore, type AudioTrack } from '@/stores/audio-store';
+import { useAudioStore } from '@/stores/audio-store';
 import { normalizeAudioUrl } from '@/lib/audio-url';
+import { DownloadButton } from '@/components/lessons/download-button';
 import type { LessonWithRelations } from '@/types/database';
 
 interface LessonCardProps {
@@ -107,6 +108,19 @@ export function LessonCard({ lesson, showProgress }: LessonCardProps) {
           <span className="text-[10px] text-muted-foreground bg-[hsl(var(--surface-elevated))] px-2 py-0.5 rounded-full flex-shrink-0">
             {lesson.part_number}
           </span>
+        )}
+
+        {/* Download button */}
+        {lesson.audio_url && (
+          <DownloadButton
+            lessonId={lesson.id}
+            audioUrl={normalizeAudioUrl(lesson.audio_url) || lesson.audio_url}
+            title={lesson.title}
+            hebrewTitle={lesson.hebrew_title || lesson.title}
+            duration={lesson.duration}
+            seriesName={lesson.series?.hebrew_name || lesson.series?.name || undefined}
+            date={lesson.date}
+          />
         )}
       </div>
 

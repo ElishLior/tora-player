@@ -3,6 +3,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useAudioStore, type AudioTrack } from '@/stores/audio-store';
 import { audioEngine } from '@/lib/audio-engine';
+import { getOfflineAudioUrl } from '@/lib/offline-storage';
 
 const PROGRESS_SAVE_INTERVAL = 10000; // Save progress every 10 seconds
 
@@ -34,25 +35,53 @@ export function useAudioPlayer() {
     });
   }, [store.currentTrack?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Load track when it changes
+  // Load track when it changes — check offline storage first
   useEffect(() => {
     if (!store.currentTrack?.audioUrl) return;
 
-    audioEngine.load(store.currentTrack.audioUrl, {
-      startPosition: store.currentTime > 0 ? store.currentTime : undefined,
-    });
+    let cancelled = false;
 
-    // Set proper attributes on the native <audio> element for iOS background playback
-    const audioEl = audioEngine.getAudioElement();
-    if (audioEl) {
-      audioEl.setAttribute('playsinline', '');
-      audioEl.setAttribute('webkit-playsinline', '');
+    async function loadTrack() {
+      const track = useAudioStore.getState().currentTrack;
+      if (!track?.audioUrl || cancelled) return;
+
+      // Try offline blob URL first, fall back to streaming URL
+      let url = track.audioUrl;
+      try {
+        const offlineUrl = await getOfflineAudioUrl(track.id);
+        if (offlineUrl && !cancelled) {
+          url = offlineUrl;
+        }
+      } catch {
+        // Offline storage unavailable — use network URL
+      }
+
+      if (cancelled) return;
+
+      audioEngine.load(url, {
+        startPosition: useAudioStore.getState().currentTime > 0
+          ? useAudioStore.getState().currentTime
+          : undefined,
+      });
+
+      // Set proper attributes on the native <audio> element for iOS background playback
+      const audioEl = audioEngine.getAudioElement();
+      if (audioEl) {
+        audioEl.setAttribute('playsinline', '');
+        audioEl.setAttribute('webkit-playsinline', '');
+      }
+
+      if (useAudioStore.getState().isPlaying) {
+        audioEngine.play();
+      }
     }
 
-    if (store.isPlaying) {
-      audioEngine.play();
-    }
-  }, [store.currentTrack?.id, store.currentTrack?.audioUrl]); // eslint-disable-line react-hooks/exhaustive-deps
+    loadTrack();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [store.currentTrack?.id, store.currentTrack?.audioUrl]);
 
   // Re-initialize audio when app comes back to foreground (browser may have killed audio context)
   useEffect(() => {
@@ -115,6 +144,38 @@ export function useAudioPlayer() {
   useEffect(() => {
     audioEngine.setRate(store.playbackSpeed);
   }, [store.playbackSpeed]);
+
+  // Preload next track in queue when current track starts playing
+  const preloadRef = useRef<HTMLAudioElement | null>(null);
+  useEffect(() => {
+    // Clean up any previous preloaded element
+    if (preloadRef.current) {
+      preloadRef.current.src = '';
+      preloadRef.current = null;
+    }
+
+    if (!store.isPlaying || !store.currentTrack) return;
+
+    const { queue, queueIndex } = store;
+    const nextIndex = queueIndex + 1;
+    if (nextIndex >= queue.length) return;
+
+    const nextTrack = queue[nextIndex];
+    if (!nextTrack?.audioUrl) return;
+
+    // Create a hidden audio element to preload the next track
+    const preloadAudio = new Audio();
+    preloadAudio.preload = 'auto';
+    preloadAudio.src = nextTrack.audioUrl;
+    preloadRef.current = preloadAudio;
+
+    return () => {
+      if (preloadRef.current) {
+        preloadRef.current.src = '';
+        preloadRef.current = null;
+      }
+    };
+  }, [store.isPlaying, store.currentTrack?.id, store.queueIndex]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Save progress periodically
   useEffect(() => {

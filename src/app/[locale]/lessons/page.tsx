@@ -2,12 +2,14 @@ export const dynamic = 'force-dynamic';
 
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { getRecentLessons } from '@/lib/supabase/queries';
-import { LessonCard } from '@/components/lessons/lesson-card';
 import { EmptyState } from '@/components/shared/empty-state';
+import { LessonCard } from '@/components/lessons/lesson-card';
+import { LessonsClient } from './lessons-client';
 import { Link } from '@/i18n/routing';
 import { BookOpen, Plus, Search } from 'lucide-react';
 import type { LessonWithRelations } from '@/types/database';
+
+const PAGE_SIZE = 20;
 
 type Props = {
   params: Promise<{ locale: string }>;
@@ -46,6 +48,9 @@ export default async function LessonsPage({ params, searchParams }: Props) {
   const supabase = await createServerSupabaseClient();
 
   let lessons: LessonWithRelations[] = [];
+  let hasMore = false;
+  let isSearchMode = false;
+
   if (supabase) {
     try {
       // If filtering by audio type, get matching lesson IDs first
@@ -59,6 +64,8 @@ export default async function LessonsPage({ params, searchParams }: Props) {
       }
 
       if (q) {
+        // Search mode: return all results without infinite scroll
+        isSearchMode = true;
         const escaped = q.replace(/[%_\\]/g, '\\$&');
         let query = supabase
           .from('lessons')
@@ -73,23 +80,35 @@ export default async function LessonsPage({ params, searchParams }: Props) {
         const { data } = await query;
         lessons = (data || []) as LessonWithRelations[];
       } else if (filterLessonIds) {
+        // Audio type filter with pagination
         const { data } = await supabase
           .from('lessons')
           .select('*, series(name, hebrew_name)')
           .eq('is_published', true)
           .in('id', filterLessonIds)
           .order('date', { ascending: false })
-          .limit(100);
+          .range(0, PAGE_SIZE);
+
         lessons = (data || []) as LessonWithRelations[];
+        hasMore = lessons.length > PAGE_SIZE;
+        if (hasMore) lessons = lessons.slice(0, PAGE_SIZE);
       } else {
-        lessons = await getRecentLessons(supabase, 100);
+        // Default: paginated listing
+        const { data } = await supabase
+          .from('lessons')
+          .select('*, series(name, hebrew_name)')
+          .eq('is_published', true)
+          .order('date', { ascending: false })
+          .range(0, PAGE_SIZE);
+
+        lessons = (data || []) as LessonWithRelations[];
+        hasMore = lessons.length > PAGE_SIZE;
+        if (hasMore) lessons = lessons.slice(0, PAGE_SIZE);
       }
     } catch {
       lessons = [];
     }
   }
-
-  const groups = groupByDate(lessons, locale);
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -144,20 +163,31 @@ export default async function LessonsPage({ params, searchParams }: Props) {
         })}
       </div>
 
-      {/* Lesson groups */}
-      {groups.length > 0 ? (
-        groups.map((group) => (
-          <section key={group.label}>
-            <h2 className="text-sm font-bold mb-2 text-muted-foreground uppercase tracking-wider">
-              {group.label}
-            </h2>
-            <div className="space-y-0.5">
-              {group.lessons.map((lesson) => (
-                <LessonCard key={lesson.id} lesson={lesson} showProgress />
-              ))}
-            </div>
-          </section>
-        ))
+      {/* Lesson content */}
+      {lessons.length > 0 ? (
+        isSearchMode ? (
+          // Search mode: render all results without infinite scroll
+          groupByDate(lessons, locale).map((group) => (
+            <section key={group.label}>
+              <h2 className="text-sm font-bold mb-2 text-muted-foreground uppercase tracking-wider">
+                {group.label}
+              </h2>
+              <div className="space-y-0.5">
+                {group.lessons.map((lesson) => (
+                  <LessonCard key={lesson.id} lesson={lesson} showProgress />
+                ))}
+              </div>
+            </section>
+          ))
+        ) : (
+          // Normal mode: infinite scroll client component
+          <LessonsClient
+            initialLessons={lessons}
+            initialHasMore={hasMore}
+            locale={locale}
+            audioTypeFilter={audioTypeFilter}
+          />
+        )
       ) : (
         <EmptyState
           icon={BookOpen}
