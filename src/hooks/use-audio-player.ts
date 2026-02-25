@@ -42,6 +42,13 @@ export function useAudioPlayer() {
       startPosition: store.currentTime > 0 ? store.currentTime : undefined,
     });
 
+    // Set proper attributes on the native <audio> element for iOS background playback
+    const audioEl = audioEngine.getAudioElement();
+    if (audioEl) {
+      audioEl.setAttribute('playsinline', '');
+      audioEl.setAttribute('webkit-playsinline', '');
+    }
+
     if (store.isPlaying) {
       audioEngine.play();
     }
