@@ -3,9 +3,13 @@
 import { revalidatePath } from 'next/cache';
 import { requireServerSupabaseClient } from '@/lib/supabase/server';
 import { createPlaylistSchema } from '@/lib/validators';
+import { isAdmin } from '@/actions/auth';
 import type { Playlist } from '@/types/database';
 
 export async function createPlaylist(formData: FormData) {
+  if (!(await isAdmin())) {
+    return { error: { _form: ['Unauthorized'] } };
+  }
   const supabase = await requireServerSupabaseClient();
 
   const raw = {
@@ -34,6 +38,9 @@ export async function createPlaylist(formData: FormData) {
 }
 
 export async function deletePlaylist(id: string) {
+  if (!(await isAdmin())) {
+    return { error: 'Unauthorized' };
+  }
   const supabase = await requireServerSupabaseClient();
 
   const { error } = await supabase
@@ -50,6 +57,9 @@ export async function deletePlaylist(id: string) {
 }
 
 export async function addToPlaylist(playlistId: string, lessonId: string) {
+  if (!(await isAdmin())) {
+    return { error: 'Unauthorized' };
+  }
   const supabase = await requireServerSupabaseClient();
 
   // Get the next position
@@ -79,6 +89,9 @@ export async function addToPlaylist(playlistId: string, lessonId: string) {
 }
 
 export async function removeFromPlaylist(playlistId: string, lessonId: string) {
+  if (!(await isAdmin())) {
+    return { error: 'Unauthorized' };
+  }
   const supabase = await requireServerSupabaseClient();
 
   const { error } = await supabase
@@ -96,6 +109,9 @@ export async function removeFromPlaylist(playlistId: string, lessonId: string) {
 }
 
 export async function reorderPlaylistItems(playlistId: string, itemIds: string[]) {
+  if (!(await isAdmin())) {
+    return { error: 'Unauthorized' };
+  }
   const supabase = await requireServerSupabaseClient();
 
   // Update positions based on the new order

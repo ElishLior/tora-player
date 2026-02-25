@@ -3,9 +3,13 @@
 import { revalidatePath } from 'next/cache';
 import { requireServerSupabaseClient } from '@/lib/supabase/server';
 import { createSeriesSchema } from '@/lib/validators';
+import { isAdmin } from '@/actions/auth';
 import type { Series } from '@/types/database';
 
 export async function createSeries(formData: FormData) {
+  if (!(await isAdmin())) {
+    return { error: { _form: ['Unauthorized'] } };
+  }
   const supabase = await requireServerSupabaseClient();
 
   const raw = {
@@ -34,6 +38,9 @@ export async function createSeries(formData: FormData) {
 }
 
 export async function updateSeries(id: string, formData: FormData) {
+  if (!(await isAdmin())) {
+    return { error: { _form: ['Unauthorized'] } };
+  }
   const supabase = await requireServerSupabaseClient();
 
   const raw: Record<string, unknown> = {};
@@ -60,6 +67,9 @@ export async function updateSeries(id: string, formData: FormData) {
 }
 
 export async function deleteSeries(id: string) {
+  if (!(await isAdmin())) {
+    return { error: 'Unauthorized' };
+  }
   const supabase = await requireServerSupabaseClient();
 
   const { error } = await supabase

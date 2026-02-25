@@ -3,9 +3,13 @@
 import { revalidatePath } from 'next/cache';
 import { requireServerSupabaseClient } from '@/lib/supabase/server';
 import { createLessonSchema, updateLessonSchema } from '@/lib/validators';
+import { isAdmin } from '@/actions/auth';
 import type { Lesson, LessonWithRelations, LessonAudio, LessonImage } from '@/types/database';
 
 export async function createLesson(formData: FormData) {
+  if (!(await isAdmin())) {
+    return { error: { _form: ['Unauthorized'] } };
+  }
   const supabase = await requireServerSupabaseClient();
 
   const raw = {
@@ -48,6 +52,9 @@ export async function createLesson(formData: FormData) {
 }
 
 export async function updateLesson(id: string, formData: FormData) {
+  if (!(await isAdmin())) {
+    return { error: { _form: ['Unauthorized'] } };
+  }
   const supabase = await requireServerSupabaseClient();
 
   const raw: Record<string, unknown> = {};
@@ -90,6 +97,9 @@ export async function updateLesson(id: string, formData: FormData) {
 }
 
 export async function deleteLesson(id: string) {
+  if (!(await isAdmin())) {
+    return { error: 'Unauthorized' };
+  }
   const supabase = await requireServerSupabaseClient();
 
   const { error } = await supabase
@@ -106,6 +116,9 @@ export async function deleteLesson(id: string) {
 }
 
 export async function publishLesson(id: string, publish: boolean) {
+  if (!(await isAdmin())) {
+    return { error: 'Unauthorized' };
+  }
   const supabase = await requireServerSupabaseClient();
 
   const { error } = await supabase
@@ -172,6 +185,9 @@ export async function getAudioFiles(lessonId: string) {
 }
 
 export async function renameAudioFile(fileId: string, newName: string) {
+  if (!(await isAdmin())) {
+    return { error: 'Unauthorized' };
+  }
   const supabase = await requireServerSupabaseClient();
 
   const { error } = await supabase
@@ -185,6 +201,9 @@ export async function renameAudioFile(fileId: string, newName: string) {
 }
 
 export async function updateAudioType(fileId: string, audioType: string | null) {
+  if (!(await isAdmin())) {
+    return { error: 'Unauthorized' };
+  }
   const supabase = await requireServerSupabaseClient();
 
   const { error } = await supabase
@@ -198,6 +217,9 @@ export async function updateAudioType(fileId: string, audioType: string | null) 
 }
 
 export async function reorderAudioFiles(lessonId: string, fileIds: string[]) {
+  if (!(await isAdmin())) {
+    return { error: 'Unauthorized' };
+  }
   const supabase = await requireServerSupabaseClient();
 
   // Update sort_order for each file based on its position in the array
@@ -218,6 +240,9 @@ export async function reorderAudioFiles(lessonId: string, fileIds: string[]) {
 }
 
 export async function deleteAudioFile(fileId: string) {
+  if (!(await isAdmin())) {
+    return { error: 'Unauthorized' };
+  }
   const supabase = await requireServerSupabaseClient();
 
   const { error } = await supabase
@@ -246,6 +271,9 @@ export async function getImages(lessonId: string) {
 }
 
 export async function deleteImage(imageId: string) {
+  if (!(await isAdmin())) {
+    return { error: 'Unauthorized' };
+  }
   const supabase = await requireServerSupabaseClient();
 
   // Get the image record to find the R2 file key
