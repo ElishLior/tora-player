@@ -125,7 +125,7 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
             className="p-2 text-muted-foreground hover:text-foreground transition-colors"
             aria-label={isRtl ? t('skipForward') : t('skipBackward')}
           >
-            {isRtl ? <Skip15Forward className="h-8 w-8" /> : <Skip15Back className="h-8 w-8" />}
+            {isRtl ? <Skip15Back className="h-8 w-8" /> : <Skip15Back className="h-8 w-8" />}
           </button>
 
           <button
@@ -146,7 +146,7 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
             className="p-2 text-muted-foreground hover:text-foreground transition-colors"
             aria-label={isRtl ? t('skipBackward') : t('skipForward')}
           >
-            {isRtl ? <Skip15Back className="h-8 w-8" /> : <Skip15Forward className="h-8 w-8" />}
+            {isRtl ? <Skip15Forward className="h-8 w-8" /> : <Skip15Forward className="h-8 w-8" />}
           </button>
 
           {/* Placeholder for symmetry */}
