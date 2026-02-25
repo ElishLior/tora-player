@@ -47,14 +47,15 @@ export function useAudioPlayer() {
     }
   }, [store.currentTrack?.id, store.currentTrack?.audioUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Sync play/pause
+  // Sync play/pause — only if a track is loaded
   useEffect(() => {
+    if (!store.currentTrack) return;
     if (store.isPlaying) {
       audioEngine.play();
     } else {
       audioEngine.pause();
     }
-  }, [store.isPlaying]);
+  }, [store.isPlaying, store.currentTrack?.id]);
 
   // Sync volume
   useEffect(() => {

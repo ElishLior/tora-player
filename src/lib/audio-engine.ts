@@ -10,6 +10,7 @@ import { normalizeAudioUrl } from '@/lib/audio-url';
 class AudioEngine {
   private howl: Howl | null = null;
   private currentUrl: string | null = null;
+  private soundId: number | null = null; // Track Howler sound ID to prevent duplicate streams
   private onTimeUpdate: ((time: number) => void) | null = null;
   private onEnd: (() => void) | null = null;
   private onLoad: ((duration: number) => void) | null = null;
@@ -85,19 +86,35 @@ class AudioEngine {
 
   play() {
     if (!this.howl) return;
-    this.howl.play();
+    // If already playing, don't create a duplicate stream
+    if (this.howl.playing(this.soundId ?? undefined)) return;
+    // Reuse existing sound ID to resume instead of creating a new stream
+    if (this.soundId !== null) {
+      this.howl.play(this.soundId);
+    } else {
+      this.soundId = this.howl.play();
+    }
     this.startTimeTracking();
   }
 
   pause() {
     if (!this.howl) return;
-    this.howl.pause();
+    // Pause the specific sound ID to avoid orphan streams
+    if (this.soundId !== null) {
+      this.howl.pause(this.soundId);
+    } else {
+      this.howl.pause();
+    }
     this.stopTimeTracking();
   }
 
   seek(time: number) {
     if (!this.howl) return;
-    this.howl.seek(time);
+    if (this.soundId !== null) {
+      this.howl.seek(time, this.soundId);
+    } else {
+      this.howl.seek(time);
+    }
   }
 
   setVolume(volume: number) {
@@ -107,12 +124,16 @@ class AudioEngine {
 
   setRate(rate: number) {
     if (!this.howl) return;
-    this.howl.rate(rate);
+    if (this.soundId !== null) {
+      this.howl.rate(rate, this.soundId);
+    } else {
+      this.howl.rate(rate);
+    }
   }
 
   getCurrentTime(): number {
     if (!this.howl) return 0;
-    const seek = this.howl.seek();
+    const seek = this.soundId !== null ? this.howl.seek(this.soundId) : this.howl.seek();
     return typeof seek === 'number' ? seek : 0;
   }
 
@@ -151,6 +172,7 @@ class AudioEngine {
       this.howl = null;
     }
     this.currentUrl = null;
+    this.soundId = null;
   }
 
   // Event listeners
