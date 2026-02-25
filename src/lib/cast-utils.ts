@@ -1,9 +1,15 @@
 /**
  * Cross-platform audio output utility.
  *
- * 1. Safari (iOS / macOS): Remote Playback API → native AirPlay picker
- * 2. Chrome (desktop / Android): Google Cast SDK → Chromecast picker
- * 3. Other browsers: helpful guidance alert
+ * Priority:
+ * 1. AirPlay via Remote Playback API (feature-detected, works on Safari/Apple)
+ * 2. Google Cast SDK (Chrome desktop + Android)
+ * 3. Fallback guidance (Bluetooth for Google speakers, etc.)
+ *
+ * NOTE: Google smart speakers (Home, Nest) do NOT support AirPlay.
+ * From iOS the only option for Google speakers is Bluetooth.
+ * Spotify uses their proprietary "Spotify Connect" which is NOT available
+ * for third-party web apps.
  */
 
 import { audioEngine } from '@/lib/audio-engine';
@@ -16,8 +22,28 @@ const w = () => (typeof window !== 'undefined' ? window as unknown as AnyWindow 
 let sdkLoading = false;
 
 function isHebrew(): boolean {
+  if (typeof document === 'undefined') return false;
   return document.documentElement.lang === 'he' ||
     document.documentElement.dir === 'rtl';
+}
+
+/**
+ * Feature detection: does this browser support AirPlay / Remote Playback?
+ * Uses capability checks — NOT User-Agent sniffing.
+ */
+function platformSupportsAirPlay(): boolean {
+  if (typeof window === 'undefined') return false;
+
+  // Safari exposes this constructor when AirPlay is available
+  if ('WebKitPlaybackTargetAvailabilityEvent' in window) return true;
+
+  // Check Remote Playback API on a temporary audio element
+  try {
+    const testAudio = document.createElement('audio');
+    if ('remote' in testAudio) return true;
+  } catch { /* ignore */ }
+
+  return false;
 }
 
 /** True if we're in a Chrome-based browser that can run the Cast SDK */
@@ -27,36 +53,53 @@ export function isCastCompatible(): boolean {
   return /Chrome\//.test(ua) && !/Edge\/|Edg\//.test(ua) && !/CriOS/.test(ua);
 }
 
-/** True if the browser supports Remote Playback (AirPlay on Safari) */
-function supportsRemotePlayback(): boolean {
-  const audio = audioEngine.getAudioElement();
-  if (!audio) return false;
-  return 'remote' in audio;
+/** Make a relative URL absolute so a Cast device can fetch it */
+function toAbsoluteUrl(url: string): string {
+  if (typeof window === 'undefined') return url;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  return `${window.location.origin}${url.startsWith('/') ? '' : '/'}${url}`;
 }
 
-// ─── Remote Playback (AirPlay) ───────────────────────────────────
+// ─── AirPlay ────────────────────────────────────────────────────
 
-async function promptAirPlay(): Promise<boolean> {
+type AirPlayResult = 'success' | 'no-audio' | 'no-devices' | 'cancelled' | 'unsupported';
+
+/**
+ * Attempt to show the native AirPlay picker.
+ * Tries Remote Playback API first, then WebKit-specific API.
+ */
+async function tryAirPlay(): Promise<AirPlayResult> {
   const audio = audioEngine.getAudioElement();
-  if (!audio || !('remote' in audio)) return false;
 
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const remote = (audio as any).remote;
-    await remote.prompt();
-    return true;
-  } catch (e) {
-    // User cancelled or no devices found
-    const error = e as Error;
-    if (error.name === 'NotFoundError') {
-      alert(isHebrew()
-        ? 'לא נמצאו מכשירי AirPlay ברשת.\nוודא שהמכשיר מחובר לאותה רשת WiFi.'
-        : 'No AirPlay devices found.\nMake sure the device is on the same WiFi network.'
-      );
+  if (!audio) return 'no-audio';
+
+  // 1. Standard Remote Playback API (Safari 13.1+)
+  if ('remote' in audio) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (audio as any).remote.prompt();
+      return 'success';
+    } catch (e) {
+      const err = e as Error;
+      if (err.name === 'NotFoundError') return 'no-devices';
+      if (err.name === 'InvalidStateError') return 'cancelled';
+      console.warn('[AirPlay] remote.prompt() error:', err.name, err.message);
+      // Fall through to try WebKit API
     }
-    // InvalidStateError = user cancelled, which is fine
-    return false;
   }
+
+  // 2. WebKit-specific API (older Safari)
+  if ('webkitShowPlaybackTargetPicker' in audio) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (audio as any).webkitShowPlaybackTargetPicker();
+      return 'success';
+    } catch (e) {
+      console.warn('[AirPlay] webkitShowPlaybackTargetPicker error:', e);
+    }
+  }
+
+  return 'unsupported';
 }
 
 // ─── Google Cast SDK ─────────────────────────────────────────────
@@ -109,18 +152,47 @@ function loadCastSdk(): Promise<boolean> {
  * Handle a cast/broadcast button click.
  *
  * Priority:
- * 1. Remote Playback API (AirPlay on Safari) — works on iPhone, iPad, Mac
- * 2. Google Cast SDK (Chromecast on Chrome) — works on Chrome desktop + Android
- * 3. Fallback: helpful guidance about Bluetooth / system audio routing
+ * 1. AirPlay (feature-detected, no UA sniffing)
+ * 2. Google Cast SDK (Chrome)
+ * 3. Fallback guidance with Bluetooth suggestion for Google speakers
  */
 export async function handleCastClick(): Promise<void> {
-  // 1. Try AirPlay via Remote Playback API (Safari on Apple devices)
-  if (supportsRemotePlayback()) {
-    await promptAirPlay();
-    return;
+  const he = isHebrew();
+
+  // ── 1. AirPlay — feature-detected (Safari, iOS, macOS) ────────
+  if (platformSupportsAirPlay()) {
+    const result = await tryAirPlay();
+
+    switch (result) {
+      case 'success':
+      case 'cancelled':
+        return;
+
+      case 'no-audio':
+        alert(he
+          ? 'התחל להשמיע שיעור תחילה, ואז לחץ על כפתור השידור.'
+          : 'Start playing a lesson first, then tap the cast button.'
+        );
+        return;
+
+      case 'no-devices':
+        alert(he
+          ? 'לא נמצאו מכשירי AirPlay ברשת.\n\n'
+            + 'AirPlay עובד עם: HomePod, Apple TV, רמקולים תומכי AirPlay.\n\n'
+            + 'לרמקול Google (Home/Nest): חבר דרך Bluetooth בהגדרות הטלפון.'
+          : 'No AirPlay devices found on your network.\n\n'
+            + 'AirPlay works with: HomePod, Apple TV, AirPlay speakers.\n\n'
+            + 'For Google speakers (Home/Nest): connect via Bluetooth in Settings.'
+        );
+        return;
+
+      case 'unsupported':
+        // AirPlay APIs didn't work — fall through to Cast / fallback
+        break;
+    }
   }
 
-  // 2. Try Google Cast (Chrome)
+  // ── 2. Chrome → Google Cast (Chromecast) ───────────────────────
   if (isCastCompatible()) {
     const available = await loadCastSdk();
     const win = w();
@@ -129,21 +201,43 @@ export async function handleCastClick(): Promise<void> {
       try {
         const ctx = win.cast.framework.CastContext.getInstance();
         await ctx.requestSession();
+
+        // After session established → load current audio on the Cast device
+        const session = ctx.getCurrentSession?.();
+        if (session && win.chrome?.cast) {
+          const currentUrl = audioEngine.getCurrentUrl();
+          if (currentUrl) {
+            try {
+              const absoluteUrl = toAbsoluteUrl(currentUrl);
+              const mediaInfo = new win.chrome.cast.media.MediaInfo(absoluteUrl, 'audio/mpeg');
+              const request = new win.chrome.cast.media.LoadRequest(mediaInfo);
+              await session.loadMedia(request);
+            } catch {
+              console.warn('[Cast] Connected but failed to load media on device');
+            }
+          }
+        }
       } catch {
         // User cancelled the picker
       }
     } else {
-      alert(isHebrew()
-        ? 'לא נמצאו מכשירי Cast ברשת.\nוודא שמכשיר ה-Chromecast מחובר לאותה רשת WiFi.'
-        : 'No Cast devices found on your network.\nMake sure your Chromecast is on the same WiFi network.'
+      alert(he
+        ? 'לא נמצאו מכשירי Chromecast ברשת.\nוודא שמכשיר ה-Chromecast מחובר לאותה רשת WiFi.'
+        : 'No Chromecast devices found.\nMake sure your Chromecast is on the same WiFi network.'
       );
     }
     return;
   }
 
-  // 3. Fallback: guidance
-  alert(isHebrew()
-    ? 'לרמקול Bluetooth: חבר דרך הגדרות הטלפון ← Bluetooth.\n\nל-Chromecast: פתח את האפליקציה בדפדפן Chrome.\n\nל-AirPlay: התחל להשמיע ואז השתמש במרכז הבקרה של המכשיר.'
-    : 'For Bluetooth speakers: connect via phone Settings → Bluetooth.\n\nFor Chromecast: open the app in Chrome browser.\n\nFor AirPlay: start playback, then use Control Center.'
+  // ── 3. Fallback — Bluetooth guidance for Google speakers ───────
+  alert(he
+    ? 'שידור לרמקול:\n\n'
+      + '• רמקול Google (Home/Nest): חבר דרך הגדרות ← Bluetooth\n\n'
+      + '• רמקול AirPlay (HomePod וכו\'): התחל להשמיע ואז בחר ב-AirPlay דרך מרכז הבקרה\n\n'
+      + '• Chromecast: פתח בדפדפן Chrome במחשב'
+    : 'Stream to speaker:\n\n'
+      + '• Google speakers (Home/Nest): connect via Settings → Bluetooth\n\n'
+      + '• AirPlay speakers (HomePod etc.): start playback then select AirPlay from Control Center\n\n'
+      + '• Chromecast: open in Chrome on desktop'
   );
 }

@@ -29,6 +29,14 @@ export interface Lesson {
   source_text: string | null;
   source_type: 'upload' | 'url_import' | 'whatsapp';
   is_published: boolean;
+  // New fields from migration 003
+  hebrew_date: string | null;
+  parsha: string | null;
+  teacher: string | null;
+  location: string | null;
+  summary: string | null;
+  lesson_type: string | null;
+  seder_number: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -46,6 +54,20 @@ export interface LessonAudio {
   created_at: string;
 }
 
+export interface LessonImage {
+  id: string;
+  lesson_id: string;
+  file_key: string;
+  image_url: string;
+  original_name: string | null;
+  file_size: number;
+  width: number | null;
+  height: number | null;
+  caption: string | null;
+  sort_order: number;
+  created_at: string;
+}
+
 export interface LessonWithRelations extends Lesson {
   series?: Series | null;
   parts?: Lesson[];
@@ -53,6 +75,7 @@ export interface LessonWithRelations extends Lesson {
   progress?: PlaybackProgress | null;
   bookmarks?: Bookmark[];
   audio_files?: LessonAudio[];
+  images?: LessonImage[];
 }
 
 export interface Snippet {

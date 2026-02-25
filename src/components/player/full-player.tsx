@@ -1,7 +1,7 @@
 'use client';
 
 import { Play, Pause, ChevronDown, Bookmark, Download, List, Cast } from 'lucide-react';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { SeekBar } from './seek-bar';
 import { SpeedControl } from './speed-control';
@@ -33,6 +33,8 @@ interface FullPlayerProps {
 
 export function FullPlayer({ onClose }: FullPlayerProps) {
   const t = useTranslations('player');
+  const locale = useLocale();
+  const isRtl = locale === 'he';
   const {
     currentTrack,
     isPlaying,
@@ -113,16 +115,17 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
           <SeekBar currentTime={currentTime} duration={duration} onSeek={seekTo} />
         </div>
 
-        {/* Main controls */}
-        <div className="flex items-center justify-center gap-6 w-full max-w-md">
+        {/* Main controls — dir="ltr" keeps layout predictable; we swap icons+functions for RTL */}
+        <div dir="ltr" className="flex items-center justify-center gap-6 w-full max-w-md">
           <SpeedControl speed={playbackSpeed} onSpeedChange={setPlaybackSpeed} />
 
+          {/* Left button: backward in LTR, forward in RTL */}
           <button
-            onClick={() => skipBackward(15)}
+            onClick={() => isRtl ? skipForward(15) : skipBackward(15)}
             className="p-2 text-muted-foreground hover:text-foreground transition-colors"
-            aria-label={t('skipBackward')}
+            aria-label={isRtl ? t('skipForward') : t('skipBackward')}
           >
-            <Skip15Back className="h-8 w-8 rtl:-scale-x-100" />
+            {isRtl ? <Skip15Forward className="h-8 w-8" /> : <Skip15Back className="h-8 w-8" />}
           </button>
 
           <button
@@ -137,12 +140,13 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
             )}
           </button>
 
+          {/* Right button: forward in LTR, backward in RTL */}
           <button
-            onClick={() => skipForward(15)}
+            onClick={() => isRtl ? skipBackward(15) : skipForward(15)}
             className="p-2 text-muted-foreground hover:text-foreground transition-colors"
-            aria-label={t('skipForward')}
+            aria-label={isRtl ? t('skipBackward') : t('skipForward')}
           >
-            <Skip15Forward className="h-8 w-8 rtl:-scale-x-100" />
+            {isRtl ? <Skip15Back className="h-8 w-8" /> : <Skip15Forward className="h-8 w-8" />}
           </button>
 
           {/* Placeholder for symmetry */}
@@ -160,7 +164,7 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
             <span className="text-[10px]">{t('download')}</span>
           </button>
           <button
-            onClick={() => handleCastClick()}
+            onClick={() => void handleCastClick()}
             className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
             aria-label="Cast"
           >

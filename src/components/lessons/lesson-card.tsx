@@ -79,11 +79,11 @@ export function LessonCard({ lesson, showProgress }: LessonCardProps) {
           </h3>
 
           <p className="text-xs text-muted-foreground truncate mt-0.5" dir="rtl">
-            {lesson.series && (
-              <span>{lesson.series.hebrew_name || lesson.series.name}</span>
+            {lesson.parsha && (
+              <span className="text-primary/80">{lesson.parsha}</span>
             )}
-            {lesson.series && lesson.date && ' · '}
-            {new Date(lesson.date).toLocaleDateString('he-IL')}
+            {lesson.parsha && ' · '}
+            {lesson.hebrew_date || new Date(lesson.date).toLocaleDateString('he-IL')}
             {lesson.duration > 0 && ` · ${formatDuration(lesson.duration)}`}
           </p>
         </div>

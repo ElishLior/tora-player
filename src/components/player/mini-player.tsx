@@ -60,7 +60,7 @@ export function MiniPlayer() {
 
           {/* Cast / broadcast */}
           <button
-            onClick={(e) => { e.stopPropagation(); handleCastClick(); }}
+            onClick={(e) => { e.stopPropagation(); void handleCastClick(); }}
             className="p-2 text-muted-foreground hover:text-foreground transition-colors"
             aria-label="Cast"
           >

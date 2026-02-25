@@ -16,6 +16,26 @@ class AudioEngine {
   private onError: ((error: string) => void) | null = null;
   private animationFrameId: number | null = null;
 
+  /**
+   * Detect audio format from URL for Howler.js format hint.
+   * Helps the browser choose the correct decoder.
+   */
+  private detectFormat(url: string): string[] {
+    // Try to get extension from the encoded file key in the URL
+    const decoded = decodeURIComponent(url);
+    const ext = decoded.split('.').pop()?.split('?')[0]?.toLowerCase();
+    switch (ext) {
+      case 'mp3':                return ['mp3'];
+      case 'm4a': case 'aac':   return ['m4a'];
+      case 'mp4':                return ['mp4'];
+      case 'ogg': case 'opus':  return ['ogg'];
+      case 'wav':                return ['wav'];
+      case 'flac':               return ['flac'];
+      case 'webm':               return ['webm'];
+      default:                   return ['mp3', 'm4a', 'ogg', 'wav', 'webm'];
+    }
+  }
+
   load(url: string, options?: { startPosition?: number }) {
     // Normalize the URL to use stream proxy instead of direct R2
     const normalizedUrl = normalizeAudioUrl(url) || url;
@@ -34,6 +54,7 @@ class AudioEngine {
 
     this.howl = new Howl({
       src: [normalizedUrl],
+      format: this.detectFormat(normalizedUrl),
       html5: true, // Required for streaming long audio files
       preload: true,
       onload: () => {
@@ -102,6 +123,11 @@ class AudioEngine {
 
   isPlaying(): boolean {
     return this.howl?.playing() || false;
+  }
+
+  /** Get the current audio URL being played */
+  getCurrentUrl(): string | null {
+    return this.currentUrl;
   }
 
   /**

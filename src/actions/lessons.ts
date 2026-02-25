@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { requireServerSupabaseClient } from '@/lib/supabase/server';
 import { createLessonSchema, updateLessonSchema } from '@/lib/validators';
-import type { Lesson, LessonWithRelations, LessonAudio } from '@/types/database';
+import type { Lesson, LessonWithRelations, LessonAudio, LessonImage } from '@/types/database';
 
 export async function createLesson(formData: FormData) {
   const supabase = await requireServerSupabaseClient();
@@ -115,7 +115,7 @@ export async function getLesson(id: string) {
 
   const { data, error } = await supabase
     .from('lessons')
-    .select('*, series(*), snippets(*), bookmarks(*), audio_files:lesson_audio(*)')
+    .select('*, series(*), snippets(*), bookmarks(*), audio_files:lesson_audio(*), images:lesson_images(*)')
     .eq('id', id)
     .single();
 

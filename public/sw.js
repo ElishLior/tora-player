@@ -1,5 +1,5 @@
 // Tora Player Service Worker
-const CACHE_VERSION = 'tora-player-v2';
+const CACHE_VERSION = 'tora-player-v3';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DYNAMIC_CACHE = `${CACHE_VERSION}-dynamic`;
 const API_CACHE = `${CACHE_VERSION}-api`;
@@ -64,6 +64,11 @@ function isPageRequest(request) {
 // Fetch event - routing strategies
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
+
+  // Skip caching entirely in development (localhost)
+  if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+    return; // Let the browser handle normally (no SW interception)
+  }
 
   // Handle share target POST requests (from WhatsApp/other apps)
   if (event.request.method === 'POST' && url.pathname.includes('/share-target')) {
