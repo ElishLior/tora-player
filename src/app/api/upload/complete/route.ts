@@ -1,18 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireServerSupabaseClient } from '@/lib/supabase/server';
-import { uploadToR2, downloadFromR2, listR2Objects, deleteR2Prefix, generateOriginalKey, getPublicAudioUrl } from '@/lib/r2';
+import {
+  uploadToR2,
+  downloadFromR2,
+  listR2Objects,
+  deleteR2Prefix,
+  deleteFromR2,
+  generateOriginalKey,
+  getPublicAudioUrl,
+  createMultipartUpload,
+  uploadPart,
+  completeMultipartUpload,
+  abortMultipartUpload,
+  type MultipartPart,
+} from '@/lib/r2';
 
 export const runtime = 'nodejs';
-export const maxDuration = 60;
+export const maxDuration = 300; // 5 min for large file assembly
+
+// Threshold: files under this size use simple Buffer.concat (fast path)
+// Files above this use S3 Multipart Upload (memory-safe path)
+const SIMPLE_THRESHOLD = 10 * 1024 * 1024; // 10 MB
+
+// R2/S3 minimum part size for multipart upload (except last part)
+const MIN_PART_SIZE = 5 * 1024 * 1024; // 5 MB
 
 /**
  * Assemble previously uploaded chunks from R2 and upload the complete file.
  * Then record the upload in the database.
  *
- * Flow: Download chunk objects from R2 → concatenate → upload final file → clean up → record in DB
- *
- * Chunks are stored in R2 (not /tmp) to ensure they persist across different
- * Vercel serverless function instances.
+ * Two paths:
+ * - Fast path (< 10MB): Download all chunks → Buffer.concat → single PutObject
+ * - Large file path (≥ 10MB): S3 Multipart Upload — stream chunks as parts
+ *   Max memory usage: ~7MB (one accumulated buffer) instead of entire file
  */
 export async function POST(request: NextRequest) {
   let chunkPrefix: string | null = null;
@@ -54,20 +74,76 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Download all chunks from R2 and concatenate
-    const chunks: Buffer[] = [];
-    for (const key of chunkKeys) {
-      const data = await downloadFromR2(key);
-      chunks.push(data);
-    }
-    const completeFile = Buffer.concat(chunks);
-
-    // Upload final file to R2
+    // Determine final file key
     const ext = fileName.split('.').pop() || 'mp3';
     const fileKey = `audio/${lessonId}/${sortOrder}_${Date.now()}.${ext}`;
     const ct = contentType || 'audio/mpeg';
 
-    await uploadToR2(fileKey, completeFile, ct);
+    // Estimate total size from chunk count (each chunk ~3.5MB)
+    const estimatedSize = fileSize || chunkKeys.length * 3.5 * 1024 * 1024;
+
+    let actualFileSize: number;
+
+    if (estimatedSize < SIMPLE_THRESHOLD) {
+      // ═══ FAST PATH: small files — Buffer.concat ═══
+      const chunks: Buffer[] = [];
+      for (const key of chunkKeys) {
+        const data = await downloadFromR2(key);
+        chunks.push(data);
+      }
+      const completeFile = Buffer.concat(chunks);
+      actualFileSize = completeFile.length;
+      await uploadToR2(fileKey, completeFile, ct);
+
+      // Clean up chunks
+      try { await deleteR2Prefix(chunkPrefix); } catch { /* non-critical */ }
+    } else {
+      // ═══ LARGE FILE PATH: S3 Multipart Upload ═══
+      // Stream chunks as parts — max ~7MB in memory at any time
+      const mpUploadId = await createMultipartUpload(fileKey, ct);
+      const parts: MultipartPart[] = [];
+
+      try {
+        let partNumber = 1;
+        let accumulated = Buffer.alloc(0);
+        actualFileSize = 0;
+
+        for (let i = 0; i < chunkKeys.length; i++) {
+          // Download one chunk (~3.5MB)
+          const chunkData = await downloadFromR2(chunkKeys[i]);
+          actualFileSize += chunkData.length;
+
+          // Accumulate
+          accumulated = Buffer.concat([accumulated, chunkData]);
+
+          // Delete the chunk from R2 immediately to free storage
+          try { await deleteFromR2(chunkKeys[i]); } catch { /* non-critical */ }
+
+          const isLastChunk = i === chunkKeys.length - 1;
+
+          // Send as part when: accumulated >= 5MB OR this is the last chunk
+          if (accumulated.length >= MIN_PART_SIZE || isLastChunk) {
+            const etag = await uploadPart(fileKey, mpUploadId, partNumber, accumulated);
+            parts.push({ ETag: etag, PartNumber: partNumber });
+            partNumber++;
+            accumulated = Buffer.alloc(0); // release memory
+          }
+        }
+
+        // Complete the multipart upload
+        await completeMultipartUpload(fileKey, mpUploadId, parts);
+      } catch (mpError) {
+        // Abort multipart upload on failure
+        console.error('Multipart upload failed, aborting:', mpError);
+        try { await abortMultipartUpload(fileKey, mpUploadId); } catch { /* ignore */ }
+        // Clean up remaining chunks
+        try { await deleteR2Prefix(chunkPrefix); } catch { /* ignore */ }
+        throw mpError;
+      }
+
+      // Clean up any remaining chunks (some may already be deleted)
+      try { await deleteR2Prefix(chunkPrefix); } catch { /* non-critical */ }
+    }
 
     const publicUrl = getPublicAudioUrl(fileKey);
     const originalKey = generateOriginalKey(lessonId, `${sortOrder}_${fileName}`);
@@ -90,7 +166,7 @@ export async function POST(request: NextRequest) {
         file_key: fileKey,
         audio_url: publicUrl,
         original_name: fileName,
-        file_size: fileSize || completeFile.length,
+        file_size: fileSize || actualFileSize,
         codec,
         sort_order: sortOrder,
       })
@@ -105,17 +181,10 @@ export async function POST(request: NextRequest) {
         .update({
           audio_url: publicUrl,
           audio_url_original: originalKey,
-          file_size: fileSize || completeFile.length,
+          file_size: fileSize || actualFileSize,
           codec,
         })
         .eq('id', lessonId);
-    }
-
-    // Clean up temporary chunk objects from R2
-    try {
-      await deleteR2Prefix(chunkPrefix);
-    } catch {
-      // Non-critical — chunks will be orphaned but harmless
     }
 
     return NextResponse.json({

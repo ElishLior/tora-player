@@ -191,6 +191,7 @@ export function UploadForm({ series: initialSeries, defaultSeriesId }: UploadFor
         const filesWithMeta: FileWithMeta[] = files.map((f) => ({
           file: f.file,
           metadata: f.metadata,
+          transcodeEnabled: f.transcodeEnabled,
         }));
         await uploadMultiple(filesWithMeta, lessonId);
       } else if (mode === 'url' && importUrl) {

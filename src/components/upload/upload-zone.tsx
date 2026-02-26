@@ -1,13 +1,20 @@
 'use client';
 
 import { useCallback, useState, useRef } from 'react';
-import { Upload, FileAudio, X, GripVertical } from 'lucide-react';
+import { Upload, FileAudio, X, GripVertical, Zap } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { isAudioFile, extractAudioMetadata, formatFileSize, type AudioMetadata } from '@/lib/audio-utils';
+import { shouldTranscode, estimateTranscodedSize, formatSizeHebrew } from '@/lib/audio-transcode';
 
 export interface SelectedFile {
   file: File;
   metadata: AudioMetadata;
+  /** If true, file will be transcoded to Opus before upload */
+  transcodeEnabled?: boolean;
+  /** Estimated size after transcoding */
+  estimatedTranscodedSize?: number;
+  /** Estimated savings percentage */
+  savingsPercent?: number;
 }
 
 interface UploadZoneProps {
@@ -45,8 +52,18 @@ export function UploadZone({ onFilesSelected, onFileSelected, disabled, multiple
 
       try {
         const metadata = await extractAudioMetadata(file);
-        validFiles.push({ file, metadata });
+        const willTranscode = shouldTranscode(file);
+        const estimate = willTranscode ? estimateTranscodedSize(file) : null;
+        validFiles.push({
+          file,
+          metadata,
+          transcodeEnabled: willTranscode,
+          estimatedTranscodedSize: estimate?.estimatedSize,
+          savingsPercent: estimate?.savingsPercent,
+        });
       } catch {
+        const willTranscode = shouldTranscode(file);
+        const estimate = willTranscode ? estimateTranscodedSize(file) : null;
         validFiles.push({
           file,
           metadata: {
@@ -54,6 +71,9 @@ export function UploadZone({ onFilesSelected, onFileSelected, disabled, multiple
             format: file.type || 'audio/mpeg',
             fileSize: file.size,
           },
+          transcodeEnabled: willTranscode,
+          estimatedTranscodedSize: estimate?.estimatedSize,
+          savingsPercent: estimate?.savingsPercent,
         });
       }
     }
@@ -184,6 +204,13 @@ export function UploadZone({ onFilesSelected, onFileSelected, disabled, multiple
                     {formatFileSize(sf.file.size)}
                     {sf.metadata.duration > 0 && ` · ${Math.floor(sf.metadata.duration / 60)}:${String(Math.round(sf.metadata.duration % 60)).padStart(2, '0')}`}
                   </p>
+                  {sf.transcodeEnabled && sf.estimatedTranscodedSize && (
+                    <p className="text-xs text-primary flex items-center gap-1 mt-0.5">
+                      <Zap className="h-3 w-3" />
+                      יומר ל-Opus · {formatSizeHebrew(sf.file.size)} → ~{formatSizeHebrew(sf.estimatedTranscodedSize)}
+                      {sf.savingsPercent != null && ` (חיסכון ~${sf.savingsPercent}%)`}
+                    </p>
+                  )}
                 </div>
 
                 {multiple && selectedFiles.length > 1 && (

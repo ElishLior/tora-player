@@ -7,6 +7,7 @@ import { useParams } from 'next/navigation';
 import {
   ArrowRight, Trash2, Loader2, Pencil, Check, X,
   ChevronUp, ChevronDown, ImagePlus, Sparkles, Calendar,
+  Upload, FileAudio,
 } from 'lucide-react';
 import { Link } from '@/i18n/routing';
 import {
@@ -21,6 +22,8 @@ import {
   deleteImage,
   updateAudioType,
 } from '@/actions/lessons';
+import { useUpload, type FileWithMeta } from '@/hooks/use-upload';
+import { UploadZone, type SelectedFile } from '@/components/upload/upload-zone';
 import type { LessonAudio, LessonImage } from '@/types/database';
 
 interface MetadataSuggestion {
@@ -73,6 +76,12 @@ export default function EditLessonPage() {
   const [editingFileId, setEditingFileId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
   const [savingFiles, setSavingFiles] = useState(false);
+
+  // Audio upload (new files)
+  const [showAudioUpload, setShowAudioUpload] = useState(false);
+  const [pendingAudioFiles, setPendingAudioFiles] = useState<SelectedFile[]>([]);
+  const [uploadingAudio, setUploadingAudio] = useState(false);
+  const { uploadMultiple, progress: audioUploadProgress, fileProgresses, reset: resetUpload } = useUpload();
 
   // Image management
   const [images, setImages] = useState<LessonImage[]>([]);
@@ -288,6 +297,47 @@ export default function EditLessonPage() {
     const result = await deleteImage(imageId);
     if (!result.error) {
       setImages((prev) => prev.filter((img) => img.id !== imageId));
+    }
+  };
+
+  // --- Audio upload ---
+
+  const handleAudioFilesSelected = (files: SelectedFile[]) => {
+    setPendingAudioFiles(files);
+  };
+
+  const handleUploadAudio = async () => {
+    if (pendingAudioFiles.length === 0) return;
+    setUploadingAudio(true);
+    setFormError(null);
+
+    try {
+      // Assign sort_order starting after existing files
+      const startOrder = audioFiles.length;
+      const filesToUpload: FileWithMeta[] = pendingAudioFiles.map((sf, i) => ({
+        file: sf.file,
+        metadata: { ...sf.metadata, sortOrder: startOrder + i },
+        transcodeEnabled: sf.transcodeEnabled,
+      }));
+
+      await uploadMultiple(filesToUpload, lessonId);
+
+      // Refresh audio files list from server
+      const refreshed = await getAudioFiles(lessonId);
+      if (refreshed.data) {
+        setAudioFiles(refreshed.data);
+      }
+
+      // Reset upload state
+      setPendingAudioFiles([]);
+      setShowAudioUpload(false);
+      resetUpload();
+      setSuccessMsg('קבצי שמע הועלו בהצלחה');
+      setTimeout(() => setSuccessMsg(null), 3000);
+    } catch {
+      setFormError('שגיאה בהעלאת קבצי שמע');
+    } finally {
+      setUploadingAudio(false);
     }
   };
 
@@ -562,10 +612,10 @@ export default function EditLessonPage() {
         {/* Save button */}
         <button
           type="submit"
-          disabled={saving || uploadingImages}
+          disabled={saving || uploadingImages || uploadingAudio}
           className="w-full rounded-full bg-primary py-3.5 text-sm font-bold text-primary-foreground transition-all hover:bg-primary/90 hover:scale-[1.02] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100"
         >
-          {saving ? tCommon('loading') : uploadingImages ? 'מעלה תמונות...' : tCommon('save')}
+          {saving ? tCommon('loading') : uploadingImages ? 'מעלה תמונות...' : uploadingAudio ? 'מעלה קבצי שמע...' : tCommon('save')}
         </button>
       </form>
 
@@ -650,18 +700,21 @@ export default function EditLessonPage() {
       </div>
 
       {/* Audio Files Section */}
-      {audioFiles.length > 0 && (
-        <div className="border-t border-[hsl(0,0%,18%)] pt-6">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">
-              קבצי שמע ({audioFiles.length})
-            </h2>
-            {savingFiles && (
+      <div className="border-t border-[hsl(0,0%,18%)] pt-6">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">
+            קבצי שמע ({audioFiles.length})
+          </h2>
+          <div className="flex items-center gap-2">
+            {(savingFiles || uploadingAudio) && (
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
             )}
           </div>
+        </div>
 
-          <div className="space-y-1">
+        {/* Existing audio files list */}
+        {audioFiles.length > 0 && (
+          <div className="space-y-1 mb-3">
             {audioFiles.map((file, index) => (
               <div
                 key={file.id}
@@ -782,8 +835,85 @@ export default function EditLessonPage() {
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
+
+        {/* Upload new audio files */}
+        {showAudioUpload ? (
+          <div className="space-y-3">
+            <UploadZone
+              onFilesSelected={handleAudioFilesSelected}
+              disabled={uploadingAudio}
+              multiple
+            />
+
+            {/* Upload progress */}
+            {uploadingAudio && fileProgresses.length > 0 && (
+              <div className="space-y-2">
+                {fileProgresses.map((fp, i) => (
+                  <div key={i} className="flex items-center gap-2 text-xs">
+                    <FileAudio className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                    <span className="truncate flex-1">{fp.fileName}</span>
+                    {fp.status === 'uploading' && (
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-16 h-1.5 rounded-full bg-primary/20 overflow-hidden">
+                          <div className="h-full rounded-full bg-primary transition-all duration-300" style={{ width: `${fp.progress}%` }} />
+                        </div>
+                        <span className="text-muted-foreground tabular-nums">{fp.progress}%</span>
+                      </div>
+                    )}
+                    {fp.status === 'complete' && (
+                      <Check className="h-3.5 w-3.5 text-green-400" />
+                    )}
+                    {fp.status === 'error' && (
+                      <span className="text-destructive">שגיאה</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Upload / Cancel buttons */}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleUploadAudio}
+                disabled={pendingAudioFiles.length === 0 || uploadingAudio}
+                className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              >
+                {uploadingAudio ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <span>מעלה... {audioUploadProgress}%</span>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-3.5 w-3.5" />
+                    <span>העלה {pendingAudioFiles.length > 0 ? `${pendingAudioFiles.length} קבצים` : ''}</span>
+                  </>
+                )}
+              </button>
+              {!uploadingAudio && (
+                <button
+                  type="button"
+                  onClick={() => { setShowAudioUpload(false); setPendingAudioFiles([]); resetUpload(); }}
+                  className="rounded-full bg-[hsl(var(--surface-elevated))] px-4 py-2 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  ביטול
+                </button>
+              )}
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowAudioUpload(true)}
+            className="flex items-center gap-2 rounded-lg bg-[hsl(var(--surface-elevated))] px-4 py-2.5 text-sm text-muted-foreground hover:text-foreground transition-colors w-full justify-center"
+          >
+            <Upload className="h-4 w-4" />
+            <span>{audioFiles.length > 0 ? 'הוסף עוד קבצי שמע' : 'הוסף קבצי שמע'}</span>
+          </button>
+        )}
+      </div>
 
       {/* Delete section */}
       <div className="border-t border-[hsl(0,0%,18%)] pt-6">

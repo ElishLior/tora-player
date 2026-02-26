@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import type { AudioMetadata } from '@/lib/audio-utils';
+import { transcodeToOpus, type TranscodeProgress } from '@/lib/audio-transcode';
 
 function guessContentType(fileName: string): string {
   const ext = fileName.split('.').pop()?.toLowerCase();
@@ -52,6 +53,8 @@ interface UseUploadReturn {
 export interface FileWithMeta {
   file: File;
   metadata: AudioMetadata;
+  /** If true, file will be transcoded to Opus before upload */
+  transcodeEnabled?: boolean;
 }
 
 export function useUpload(): UseUploadReturn {
@@ -73,16 +76,38 @@ export function useUpload(): UseUploadReturn {
     _metadata: AudioMetadata,
     sortOrder: number = 0,
     onProgress?: (pct: number) => void,
+    transcodeEnabled: boolean = false,
   ): Promise<string | null> => {
-    const contentType = file.type || guessContentType(file.name);
+    let fileToUpload = file;
+
+    // ─── Transcode to Opus if enabled ───
+    if (transcodeEnabled) {
+      onProgress?.(0);
+      try {
+        fileToUpload = await transcodeToOpus(file, {}, (tp: TranscodeProgress) => {
+          // Transcoding = 0-40% of total progress
+          onProgress?.(Math.round(tp.percent * 0.4));
+        });
+      } catch (err) {
+        console.warn('Transcoding failed, uploading original:', err);
+        // Fall back to original file
+        fileToUpload = file;
+      }
+    }
+
+    const contentType = fileToUpload.type || guessContentType(fileToUpload.name);
     const uploadId = uuid();
-    const totalParts = Math.ceil(file.size / CHUNK_SIZE);
+    const totalParts = Math.ceil(fileToUpload.size / CHUNK_SIZE);
+
+    // Progress offset: if transcoding happened, upload progress starts at 40%
+    const progressOffset = transcodeEnabled ? 40 : 0;
+    const progressRange = transcodeEnabled ? 54 : 90; // remaining % for upload (leaving 6-10% for assembly)
 
     // Step 1: Upload file in chunks
     for (let partNumber = 0; partNumber < totalParts; partNumber++) {
       const start = partNumber * CHUNK_SIZE;
-      const end = Math.min(start + CHUNK_SIZE, file.size);
-      const chunk = file.slice(start, end);
+      const end = Math.min(start + CHUNK_SIZE, fileToUpload.size);
+      const chunk = fileToUpload.slice(start, end);
 
       const formData = new FormData();
       formData.append('uploadId', uploadId);
@@ -97,8 +122,8 @@ export function useUpload(): UseUploadReturn {
           if (e.lengthComputable) {
             // Overall progress = completed chunks + current chunk progress
             const chunkProgress = e.loaded / e.total;
-            const overallPct = Math.round(((partNumber + chunkProgress) / totalParts) * 90); // 90% for uploads, 10% for assembly
-            onProgress?.(overallPct);
+            const uploadPct = ((partNumber + chunkProgress) / totalParts) * progressRange;
+            onProgress?.(Math.round(progressOffset + uploadPct));
           }
         });
 
@@ -125,7 +150,7 @@ export function useUpload(): UseUploadReturn {
     }
 
     // Step 2: Assemble chunks and upload to R2
-    onProgress?.(92);
+    onProgress?.(progressOffset + progressRange + 2);
 
     const completeRes = await fetch('/api/upload/complete', {
       method: 'POST',
@@ -134,9 +159,9 @@ export function useUpload(): UseUploadReturn {
         uploadId,
         totalParts,
         lessonId,
-        fileName: file.name,
+        fileName: fileToUpload.name,
         contentType,
-        fileSize: file.size,
+        fileSize: fileToUpload.size,
         sortOrder,
       }),
     });
@@ -197,11 +222,11 @@ export function useUpload(): UseUploadReturn {
     const urls: string[] = [];
 
     for (let i = 0; i < files.length; i++) {
-      const { file, metadata } = files[i];
+      const { file, metadata, transcodeEnabled } = files[i];
 
       setFileProgresses((prev) =>
         prev.map((p, idx) =>
-          idx === i ? { ...p, status: 'uploading' } : p
+          idx === i ? { ...p, status: transcodeEnabled ? 'processing' as UploadStatus : 'uploading' } : p
         )
       );
 
@@ -214,7 +239,7 @@ export function useUpload(): UseUploadReturn {
           );
           const overall = Math.round(((i * 100 + pct) / files.length));
           setProgress(overall);
-        });
+        }, transcodeEnabled);
 
         setFileProgresses((prev) =>
           prev.map((p, idx) =>

@@ -1,4 +1,16 @@
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, DeleteObjectsCommand, ListObjectsV2Command, PutBucketCorsCommand } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectCommand,
+  DeleteObjectsCommand,
+  ListObjectsV2Command,
+  PutBucketCorsCommand,
+  CreateMultipartUploadCommand,
+  UploadPartCommand,
+  CompleteMultipartUploadCommand,
+  AbortMultipartUploadCommand,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 const r2Client = new S3Client({
@@ -110,4 +122,78 @@ export function generateAudioKey(lessonId: string, format: string = 'mp3'): stri
 export function generateOriginalKey(lessonId: string, originalName: string): string {
   const ext = originalName.split('.').pop() || 'bin';
   return `originals/${lessonId}/original.${ext}`;
+}
+
+// ─── S3 Multipart Upload API ───────────────────────────────────────
+
+export interface MultipartPart {
+  ETag: string;
+  PartNumber: number;
+}
+
+/**
+ * Create a multipart upload session. Returns an uploadId to use with uploadPart/complete/abort.
+ */
+export async function createMultipartUpload(key: string, contentType: string): Promise<string> {
+  const command = new CreateMultipartUploadCommand({
+    Bucket: BUCKET,
+    Key: key,
+    ContentType: contentType,
+  });
+  const response = await r2Client.send(command);
+  if (!response.UploadId) throw new Error('Failed to create multipart upload — no UploadId returned');
+  return response.UploadId;
+}
+
+/**
+ * Upload a single part of a multipart upload. Returns an ETag.
+ * R2 requires minimum 5MB per part (except the last one).
+ */
+export async function uploadPart(
+  key: string,
+  uploadId: string,
+  partNumber: number,
+  body: Buffer | Uint8Array,
+): Promise<string> {
+  const command = new UploadPartCommand({
+    Bucket: BUCKET,
+    Key: key,
+    UploadId: uploadId,
+    PartNumber: partNumber,
+    Body: body,
+  });
+  const response = await r2Client.send(command);
+  if (!response.ETag) throw new Error(`uploadPart returned no ETag for part ${partNumber}`);
+  return response.ETag;
+}
+
+/**
+ * Complete a multipart upload by providing the list of parts.
+ */
+export async function completeMultipartUpload(
+  key: string,
+  uploadId: string,
+  parts: MultipartPart[],
+): Promise<void> {
+  const command = new CompleteMultipartUploadCommand({
+    Bucket: BUCKET,
+    Key: key,
+    UploadId: uploadId,
+    MultipartUpload: {
+      Parts: parts.map((p) => ({ ETag: p.ETag, PartNumber: p.PartNumber })),
+    },
+  });
+  await r2Client.send(command);
+}
+
+/**
+ * Abort a multipart upload (cleanup on error).
+ */
+export async function abortMultipartUpload(key: string, uploadId: string): Promise<void> {
+  const command = new AbortMultipartUploadCommand({
+    Bucket: BUCKET,
+    Key: key,
+    UploadId: uploadId,
+  });
+  await r2Client.send(command);
 }
