@@ -7,6 +7,7 @@ import { LessonCard } from '@/components/lessons/lesson-card';
 import { EmptyState } from '@/components/shared/empty-state';
 import { Link } from '@/i18n/routing';
 import { BookOpen, ListMusic, Bookmark, Scissors, Plus, ChevronLeft } from 'lucide-react';
+import { isAdmin } from '@/actions/auth';
 
 type Props = {
   params: Promise<{ locale: string }>;
@@ -19,6 +20,7 @@ export default async function HomePage({ params }: Props) {
   const tCommon = await getTranslations('common');
 
   const supabase = await createServerSupabaseClient();
+  const admin = await isAdmin();
 
   let recentLessons: Awaited<ReturnType<typeof getRecentLessons>> = [];
   let continueListening: Awaited<ReturnType<typeof getRecentProgress>> = [];
@@ -119,13 +121,15 @@ export default async function HomePage({ params }: Props) {
               {isRTL ? 'הצג הכל' : 'Show all'}
               <ChevronLeft className="h-3.5 w-3.5" />
             </Link>
-            <Link
-              href="/lessons/upload"
-              className="flex items-center gap-1 rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90 hover:scale-105 transition-all"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              {isRTL ? 'הוסף' : 'Add'}
-            </Link>
+            {admin && (
+              <Link
+                href="/lessons/upload"
+                className="flex items-center gap-1 rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90 hover:scale-105 transition-all"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                {isRTL ? 'הוסף' : 'Add'}
+              </Link>
+            )}
           </div>
         </div>
         {recentLessons.length > 0 ? (
@@ -138,14 +142,16 @@ export default async function HomePage({ params }: Props) {
           <EmptyState
             icon={BookOpen}
             title={isRTL ? 'אין שיעורים עדיין' : 'No lessons yet'}
-            description={isRTL ? 'הוסף שיעור ראשון כדי להתחיל' : 'Add your first lesson to get started'}
+            description={isRTL ? (admin ? 'הוסף שיעור ראשון כדי להתחיל' : 'שיעורים יתווספו בקרוב') : (admin ? 'Add your first lesson to get started' : 'Lessons will be added soon')}
             action={
-              <Link
-                href="/lessons/upload"
-                className="rounded-full bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground hover:bg-primary/90 hover:scale-105 transition-all"
-              >
-                {isRTL ? 'הוספת שיעור' : 'Add Lesson'}
-              </Link>
+              admin ? (
+                <Link
+                  href="/lessons/upload"
+                  className="rounded-full bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground hover:bg-primary/90 hover:scale-105 transition-all"
+                >
+                  {isRTL ? 'הוספת שיעור' : 'Add Lesson'}
+                </Link>
+              ) : undefined
             }
           />
         )}
