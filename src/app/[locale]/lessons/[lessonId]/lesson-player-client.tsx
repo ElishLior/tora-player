@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Play, Pause, Cast, Volume2, X, ChevronRight, ChevronLeft, ChevronDown, StickyNote, Plus, Trash2, Pencil, Clock, Check, Scissors as ScissorsIcon } from 'lucide-react';
+import { Play, Pause, Cast, Volume2, X, ChevronRight, ChevronLeft, ChevronDown, StickyNote, Plus, Trash2, Pencil, Clock, Check, Scissors as ScissorsIcon, CloudDownload, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
 import { useLocale } from 'next-intl';
 import { useSearchParams } from 'next/navigation';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
@@ -11,6 +11,7 @@ import { handleCastClick } from '@/lib/cast-utils';
 import type { LessonWithRelations, LessonAudio, LessonImage } from '@/types/database';
 import { normalizeAudioUrl } from '@/lib/audio-url';
 import { getNotes, addNote, updateNote, deleteNote, type LocalNote } from '@/lib/local-notes';
+import { downloadLesson, isLessonDownloaded } from '@/lib/offline-storage';
 
 function Skip15Back({ className }: { className?: string }) {
   return (
@@ -153,6 +154,34 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
     });
   }
 
+  // ---- Offline download state (inlined — webpack workaround) ----
+  const [dlState, setDlState] = useState<'idle' | 'downloading' | 'downloaded' | 'error'>('idle');
+  const [dlProgress, setDlProgress] = useState(0);
+  const [isDownloaded, setIsDownloaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    isLessonDownloaded(lesson.id).then((v) => { if (!cancelled) setIsDownloaded(v); });
+    return () => { cancelled = true; };
+  }, [lesson.id]);
+
+  const effectiveDlState = isDownloaded && dlState === 'idle' ? 'downloaded' : dlState;
+
+  const handleDownload = useCallback(async () => {
+    if (effectiveDlState === 'downloaded' || effectiveDlState === 'downloading') return;
+    const audioUrl = normalizeAudioUrl(lesson.audio_url) || lesson.audio_url;
+    if (!audioUrl) return;
+    setDlState('downloading');
+    setDlProgress(0);
+    const success = await downloadLesson(
+      lesson.id, audioUrl,
+      { lessonId: lesson.id, title: lesson.title, hebrewTitle: lesson.hebrew_title || lesson.title, audioUrl, duration: lesson.duration, fileSize: 0, seriesName: lesson.series?.hebrew_name || lesson.series?.name || undefined, date: lesson.date },
+      (pct) => setDlProgress(pct),
+    );
+    if (success) { setDlState('downloaded'); setIsDownloaded(true); }
+    else { setDlState('error'); setTimeout(() => setDlState('idle'), 3000); }
+  }, [effectiveDlState, lesson]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ---- Notes state ----
   const [notes, setNotes] = useState<LocalNote[]>([]);
   const [notesOpen, setNotesOpen] = useState(false);
@@ -271,6 +300,52 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
           </button>
         </div>
       </div>
+
+      {/* ── Offline download button (inlined) ── */}
+      {lesson.audio_url && (
+        <button
+          onClick={handleDownload}
+          disabled={effectiveDlState === 'downloaded' || effectiveDlState === 'downloading'}
+          className={`w-full flex items-center justify-center gap-2.5 rounded-xl px-4 py-3 transition-all border ${
+            effectiveDlState === 'downloaded'
+              ? 'bg-green-500/10 border-green-500/30 text-green-400'
+              : effectiveDlState === 'downloading'
+              ? 'bg-primary/10 border-primary/30 text-primary'
+              : effectiveDlState === 'error'
+              ? 'bg-red-500/10 border-red-500/30 text-red-400'
+              : 'bg-[hsl(var(--surface-elevated))] border-[hsl(var(--border))]/50 text-muted-foreground hover:text-foreground hover:border-primary/40'
+          }`}
+          dir="rtl"
+        >
+          {effectiveDlState === 'idle' && (
+            <>
+              <CloudDownload className="h-5 w-5" />
+              <span className="text-sm font-medium">{locale === 'he' ? 'הורדה לצפייה אופליין' : 'Download for offline'}</span>
+            </>
+          )}
+          {effectiveDlState === 'downloading' && (
+            <>
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span className="text-sm font-medium">{locale === 'he' ? `מוריד... ${dlProgress}%` : `Downloading... ${dlProgress}%`}</span>
+              <div className="flex-1 max-w-[120px] h-1.5 rounded-full bg-primary/20 overflow-hidden">
+                <div className="h-full rounded-full bg-primary transition-all duration-300" style={{ width: `${dlProgress}%` }} />
+              </div>
+            </>
+          )}
+          {effectiveDlState === 'downloaded' && (
+            <>
+              <CheckCircle className="h-5 w-5" />
+              <span className="text-sm font-medium">{locale === 'he' ? 'הורד לצפייה אופליין' : 'Downloaded for offline'}</span>
+            </>
+          )}
+          {effectiveDlState === 'error' && (
+            <>
+              <AlertCircle className="h-5 w-5" />
+              <span className="text-sm font-medium">{locale === 'he' ? 'שגיאה בהורדה, נסה שוב' : 'Download failed, try again'}</span>
+            </>
+          )}
+        </button>
+      )}
 
       {/* Audio files list (inlined to avoid webpack dev chunk issue) */}
       {sortedAudioFiles.length > 1 && (

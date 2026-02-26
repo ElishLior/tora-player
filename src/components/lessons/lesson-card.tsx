@@ -6,7 +6,7 @@ import { Link } from '@/i18n/routing';
 import { formatDuration } from '@/lib/utils';
 import { useAudioStore } from '@/stores/audio-store';
 import { normalizeAudioUrl } from '@/lib/audio-url';
-import { DownloadButton } from '@/components/lessons/download-button';
+import { useIsDownloaded } from '@/hooks/use-offline';
 import type { LessonWithRelations } from '@/types/database';
 
 interface LessonCardProps {
@@ -22,6 +22,7 @@ export function LessonCard({ lesson, showProgress }: LessonCardProps) {
   const setTrack = useAudioStore((s) => s.setTrack);
 
   const isCurrentlyPlaying = currentTrack?.id === lesson.id;
+  const isOffline = useIsDownloaded(lesson.id);
 
   const progressPercent = lesson.progress && lesson.duration > 0
     ? Math.round((lesson.progress.position / lesson.duration) * 100)
@@ -110,17 +111,9 @@ export function LessonCard({ lesson, showProgress }: LessonCardProps) {
           </span>
         )}
 
-        {/* Download button */}
-        {lesson.audio_url && (
-          <DownloadButton
-            lessonId={lesson.id}
-            audioUrl={normalizeAudioUrl(lesson.audio_url) || lesson.audio_url}
-            title={lesson.title}
-            hebrewTitle={lesson.hebrew_title || lesson.title}
-            duration={lesson.duration}
-            seriesName={lesson.series?.hebrew_name || lesson.series?.name || undefined}
-            date={lesson.date}
-          />
+        {/* Offline badge */}
+        {isOffline && (
+          <span className="flex-shrink-0 h-2 w-2 rounded-full bg-green-500" title="הורד" />
         )}
       </div>
 
