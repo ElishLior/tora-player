@@ -301,52 +301,6 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
         </div>
       </div>
 
-      {/* ── Offline download button (inlined) ── */}
-      {lesson.audio_url && (
-        <button
-          onClick={handleDownload}
-          disabled={effectiveDlState === 'downloaded' || effectiveDlState === 'downloading'}
-          className={`w-full flex items-center justify-center gap-2.5 rounded-xl px-4 py-3 transition-all border ${
-            effectiveDlState === 'downloaded'
-              ? 'bg-green-500/10 border-green-500/30 text-green-400'
-              : effectiveDlState === 'downloading'
-              ? 'bg-primary/10 border-primary/30 text-primary'
-              : effectiveDlState === 'error'
-              ? 'bg-red-500/10 border-red-500/30 text-red-400'
-              : 'bg-[hsl(var(--surface-elevated))] border-[hsl(var(--border))]/50 text-muted-foreground hover:text-foreground hover:border-primary/40'
-          }`}
-          dir="rtl"
-        >
-          {effectiveDlState === 'idle' && (
-            <>
-              <CloudDownload className="h-5 w-5" />
-              <span className="text-sm font-medium">{locale === 'he' ? 'הורדה לצפייה אופליין' : 'Download for offline'}</span>
-            </>
-          )}
-          {effectiveDlState === 'downloading' && (
-            <>
-              <Loader2 className="h-5 w-5 animate-spin" />
-              <span className="text-sm font-medium">{locale === 'he' ? `מוריד... ${dlProgress}%` : `Downloading... ${dlProgress}%`}</span>
-              <div className="flex-1 max-w-[120px] h-1.5 rounded-full bg-primary/20 overflow-hidden">
-                <div className="h-full rounded-full bg-primary transition-all duration-300" style={{ width: `${dlProgress}%` }} />
-              </div>
-            </>
-          )}
-          {effectiveDlState === 'downloaded' && (
-            <>
-              <CheckCircle className="h-5 w-5" />
-              <span className="text-sm font-medium">{locale === 'he' ? 'הורד לצפייה אופליין' : 'Downloaded for offline'}</span>
-            </>
-          )}
-          {effectiveDlState === 'error' && (
-            <>
-              <AlertCircle className="h-5 w-5" />
-              <span className="text-sm font-medium">{locale === 'he' ? 'שגיאה בהורדה, נסה שוב' : 'Download failed, try again'}</span>
-            </>
-          )}
-        </button>
-      )}
-
       {/* Audio files list (inlined to avoid webpack dev chunk issue) */}
       {sortedAudioFiles.length > 1 && (
         <div className="rounded-xl bg-[hsl(var(--surface-elevated))] p-4">
@@ -415,6 +369,52 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
       {/* Image gallery */}
       {images && images.length > 0 && (
         <ImageGallerySection images={images} locale={locale} />
+      )}
+
+      {/* ── Offline download button (inlined) ── */}
+      {lesson.audio_url && (
+        <button
+          onClick={handleDownload}
+          disabled={effectiveDlState === 'downloaded' || effectiveDlState === 'downloading'}
+          className={`w-full flex items-center justify-center gap-2.5 rounded-xl px-4 py-3 transition-all border ${
+            effectiveDlState === 'downloaded'
+              ? 'bg-green-500/10 border-green-500/30 text-green-400'
+              : effectiveDlState === 'downloading'
+              ? 'bg-primary/10 border-primary/30 text-primary'
+              : effectiveDlState === 'error'
+              ? 'bg-red-500/10 border-red-500/30 text-red-400'
+              : 'bg-[hsl(var(--surface-elevated))] border-[hsl(var(--border))]/50 text-muted-foreground hover:text-foreground hover:border-primary/40'
+          }`}
+          dir="rtl"
+        >
+          {effectiveDlState === 'idle' && (
+            <>
+              <CloudDownload className="h-5 w-5" />
+              <span className="text-sm font-medium">{locale === 'he' ? 'הורדה להאזנה אופליין' : 'Download for offline'}</span>
+            </>
+          )}
+          {effectiveDlState === 'downloading' && (
+            <>
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span className="text-sm font-medium">{locale === 'he' ? `מוריד... ${dlProgress}%` : `Downloading... ${dlProgress}%`}</span>
+              <div className="flex-1 max-w-[120px] h-1.5 rounded-full bg-primary/20 overflow-hidden">
+                <div className="h-full rounded-full bg-primary transition-all duration-300" style={{ width: `${dlProgress}%` }} />
+              </div>
+            </>
+          )}
+          {effectiveDlState === 'downloaded' && (
+            <>
+              <CheckCircle className="h-5 w-5" />
+              <span className="text-sm font-medium">{locale === 'he' ? 'הורד להאזנה אופליין' : 'Downloaded for offline'}</span>
+            </>
+          )}
+          {effectiveDlState === 'error' && (
+            <>
+              <AlertCircle className="h-5 w-5" />
+              <span className="text-sm font-medium">{locale === 'he' ? 'שגיאה בהורדה, נסה שוב' : 'Download failed, try again'}</span>
+            </>
+          )}
+        </button>
       )}
 
       {/* ==================== Notes Section (inlined — local-first) ==================== */}
