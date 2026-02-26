@@ -7,6 +7,7 @@ import { LessonCard } from '@/components/lessons/lesson-card';
 import { LessonsClient } from './lessons-client';
 import { Link } from '@/i18n/routing';
 import { BookOpen, Plus, Search } from 'lucide-react';
+import { isAdmin } from '@/actions/auth';
 import type { LessonWithRelations } from '@/types/database';
 
 const PAGE_SIZE = 20;
@@ -46,6 +47,7 @@ export default async function LessonsPage({ params, searchParams }: Props) {
   const t = await getTranslations('lessons');
 
   const supabase = await createServerSupabaseClient();
+  const admin = await isAdmin();
 
   let lessons: LessonWithRelations[] = [];
   let hasMore = false;
@@ -115,13 +117,15 @@ export default async function LessonsPage({ params, searchParams }: Props) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">{t('title')}</h1>
-        <Link
-          href="/lessons/upload"
-          className="flex items-center gap-1 rounded-full bg-primary px-3.5 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90 hover:scale-105 transition-all"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          {t('addLesson')}
-        </Link>
+        {admin && (
+          <Link
+            href="/lessons/upload"
+            className="flex items-center gap-1 rounded-full bg-primary px-3.5 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90 hover:scale-105 transition-all"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            {t('addLesson')}
+          </Link>
+        )}
       </div>
 
       {/* Search */}
