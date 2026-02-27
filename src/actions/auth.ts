@@ -7,7 +7,7 @@ const COOKIE_NAME = 'tora-admin-token';
 const VISIBLE_COOKIE_NAME = 'tora-admin-visible';
 
 function getAdminPassword(): string {
-  return process.env.ADMIN_PASSWORD || 'admin123';
+  return (process.env.ADMIN_PASSWORD || 'admin123').trim();
 }
 
 function hashPassword(password: string): string {
