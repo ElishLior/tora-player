@@ -51,7 +51,7 @@ export default async function middleware(request: NextRequest) {
 
     // Token exists -- verify it matches the expected hash
     // We use Web Crypto API since middleware runs in Edge runtime
-    const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
+    const adminPassword = (process.env.ADMIN_PASSWORD || 'admin123').trim();
     const encoder = new TextEncoder();
     const data = encoder.encode(adminPassword);
     const hashBuffer = await crypto.subtle.digest('SHA-256', data);

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Lock, LogIn, AlertCircle } from 'lucide-react';
+import { Lock, LogIn, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { loginAdmin } from '@/actions/auth';
 
 export default function AdminLoginPage() {
@@ -12,6 +12,7 @@ export default function AdminLoginPage() {
   const isRTL = locale === 'he';
 
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -67,17 +68,27 @@ export default function AdminLoginPage() {
               <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-muted-foreground">
                 {isRTL ? 'סיסמה' : 'Password'}
               </label>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder={isRTL ? 'הזן סיסמה...' : 'Enter password...'}
-                className="w-full rounded-lg border border-border/50 bg-background px-4 py-2.5 text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors"
-                autoFocus
-                required
-                dir="ltr"
-              />
+              <div className="relative">
+                <input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={isRTL ? 'הזן סיסמה...' : 'Enter password...'}
+                  className="w-full rounded-lg border border-border/50 bg-background px-4 py-2.5 pr-11 text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors"
+                  autoFocus
+                  required
+                  dir="ltr"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="h-4.5 w-4.5" /> : <Eye className="h-4.5 w-4.5" />}
+                </button>
+              </div>
             </div>
 
             <button
