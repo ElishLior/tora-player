@@ -24,8 +24,8 @@ export default function AdminLoginPage() {
       const result = await loginAdmin(password);
 
       if (result.success) {
-        router.push(`/${locale}/admin`);
-        router.refresh();
+        // Use full page navigation to ensure cookie is sent with the next request
+        window.location.href = `/${locale}/admin`;
       } else {
         setError(result.error || (isRTL ? 'סיסמה שגויה' : 'Wrong password'));
       }
@@ -76,7 +76,7 @@ export default function AdminLoginPage() {
                 className="w-full rounded-lg border border-border/50 bg-background px-4 py-2.5 text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors"
                 autoFocus
                 required
-                dir={isRTL ? 'rtl' : 'ltr'}
+                dir="ltr"
               />
             </div>
 
