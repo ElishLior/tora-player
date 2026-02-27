@@ -2,12 +2,13 @@ export const dynamic = 'force-dynamic';
 
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { getRecentLessons, getRecentProgress, getAllSeries } from '@/lib/supabase/queries';
+import { getRecentLessons, getAllSeries } from '@/lib/supabase/queries';
 import { LessonCard } from '@/components/lessons/lesson-card';
 import { EmptyState } from '@/components/shared/empty-state';
 import { Link } from '@/i18n/routing';
 import { BookOpen, ListMusic, Bookmark, Scissors, Plus, ChevronLeft } from 'lucide-react';
 import { isAdmin } from '@/actions/auth';
+import { ContinueListeningSection } from '@/components/home/continue-listening-section';
 
 type Props = {
   params: Promise<{ locale: string }>;
@@ -23,13 +24,11 @@ export default async function HomePage({ params }: Props) {
   const admin = await isAdmin();
 
   let recentLessons: Awaited<ReturnType<typeof getRecentLessons>> = [];
-  let continueListening: Awaited<ReturnType<typeof getRecentProgress>> = [];
   let series: Awaited<ReturnType<typeof getAllSeries>> = [];
   if (supabase) {
     try {
-      [recentLessons, continueListening, series] = await Promise.all([
+      [recentLessons, series] = await Promise.all([
         getRecentLessons(supabase, 10),
-        getRecentProgress(supabase, 5),
         getAllSeries(supabase),
       ]);
     } catch {
@@ -91,23 +90,8 @@ export default async function HomePage({ params }: Props) {
         </div>
       </section>
 
-      {/* Continue Listening */}
-      {continueListening.length > 0 && (
-        <section>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-bold">{t('continueListening')}</h2>
-          </div>
-          <div className="space-y-0.5">
-            {continueListening.map((item) => (
-              <LessonCard
-                key={item.lesson_id}
-                lesson={item.lesson}
-                showProgress
-              />
-            ))}
-          </div>
-        </section>
-      )}
+      {/* Continue Listening — client-side, reads from localStorage per device */}
+      <ContinueListeningSection title={t('continueListening')} />
 
       {/* Recent Lessons */}
       <section>

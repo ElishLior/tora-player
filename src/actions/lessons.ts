@@ -307,6 +307,18 @@ export async function deleteImage(imageId: string) {
   return { success: true };
 }
 
+export async function getLessonsByIds(ids: string[]) {
+  if (!ids.length) return [];
+  const supabase = await requireServerSupabaseClient();
+  const { data, error } = await supabase
+    .from('lessons')
+    .select('*, series(*)')
+    .in('id', ids)
+    .eq('is_published', true);
+  if (error || !data) return [];
+  return data as LessonWithRelations[];
+}
+
 export async function searchLessons(query: string) {
   const supabase = await requireServerSupabaseClient();
 

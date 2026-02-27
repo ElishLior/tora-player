@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { Play, Pause, Cast, Volume2, X, ChevronRight, ChevronLeft, ChevronDown, StickyNote, Plus, Trash2, Pencil, Clock, Check, Scissors as ScissorsIcon, CloudDownload, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { Play, Pause, Cast, Volume2, X, ChevronRight, ChevronLeft, ChevronDown, StickyNote, Plus, Trash2, Pencil, Clock, Check, Scissors as ScissorsIcon, CloudDownload, CheckCircle, Loader2, AlertCircle, Bookmark } from 'lucide-react';
 import { useLocale } from 'next-intl';
 import { useSearchParams } from 'next/navigation';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
@@ -12,6 +12,15 @@ import type { LessonWithRelations, LessonAudio, LessonImage } from '@/types/data
 import { normalizeAudioUrl } from '@/lib/audio-url';
 import { getNotes, addNote, updateNote, deleteNote, type LocalNote } from '@/lib/local-notes';
 import { downloadLesson, isLessonDownloaded } from '@/lib/offline-storage';
+import { useBookmarksStore } from '@/stores/bookmarks-store';
+
+// ---- Inlined bookmark dialog (webpack workaround: no separate 'use client' imports) ----
+const BOOKMARK_TAGS = [
+  { value: 'important', label: 'חשוב', labelEn: 'Important', color: 'bg-red-500/20 text-red-400 border-red-500/30' },
+  { value: 'review', label: 'לחזור', labelEn: 'Review', color: 'bg-amber-500/20 text-amber-400 border-amber-500/30' },
+  { value: 'quote', label: 'ציטוט', labelEn: 'Quote', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
+  { value: 'question', label: 'שאלה', labelEn: 'Question', color: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
+];
 
 function Skip15Back({ className }: { className?: string }) {
   return (
@@ -38,6 +47,88 @@ function formatDur(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
   return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+// Inlined — cannot import separate 'use client' files into this component
+function BookmarkDialogInline({ isRTL, position, lessonId, onClose }: {
+  isRTL: boolean;
+  position: number;
+  lessonId: string;
+  onClose: () => void;
+}) {
+  const [note, setNote] = useState('');
+  const [selectedTag, setSelectedTag] = useState('important');
+  const addBookmark = useBookmarksStore((s) => s.addBookmark);
+
+  const handleSave = () => {
+    addBookmark(lessonId, position, note, selectedTag);
+    setNote('');
+    setSelectedTag('important');
+    onClose();
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        className="w-full sm:max-w-md bg-[hsl(0,0%,12%)] rounded-t-2xl sm:rounded-2xl p-5 space-y-4"
+        dir={isRTL ? 'rtl' : 'ltr'}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Bookmark className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-bold">{isRTL ? 'הוסף סימניה' : 'Add Bookmark'}</h3>
+          </div>
+          <button onClick={onClose} className="rounded-full p-1.5 text-muted-foreground hover:text-foreground transition-colors">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-muted-foreground">{isRTL ? 'זמן:' : 'Time:'}</span>
+          <span className="font-mono text-primary font-bold text-base">{formatDur(Math.round(position)) || '0:00'}</span>
+        </div>
+        <div className="space-y-2">
+          <label className="text-sm text-muted-foreground font-medium">{isRTL ? 'סוג' : 'Tag'}</label>
+          <div className="flex flex-wrap gap-2">
+            {BOOKMARK_TAGS.map((tag) => (
+              <button
+                key={tag.value}
+                onClick={() => setSelectedTag(tag.value)}
+                className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-all ${
+                  selectedTag === tag.value
+                    ? `${tag.color} border-current ring-1 ring-current/30 scale-105`
+                    : 'bg-[hsl(var(--surface-elevated))] text-muted-foreground border-transparent hover:border-[hsl(0,0%,30%)]'
+                }`}
+              >
+                {isRTL ? tag.label : tag.labelEn}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="space-y-2">
+          <label className="text-sm text-muted-foreground font-medium">{isRTL ? 'הערה (אופציונלי)' : 'Note (optional)'}</label>
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder={isRTL ? 'כתוב הערה...' : 'Write a note...'}
+            className="w-full rounded-xl bg-[hsl(var(--surface-elevated))] border border-[hsl(0,0%,22%)] px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 resize-none"
+            rows={3}
+            dir={isRTL ? 'rtl' : 'ltr'}
+          />
+        </div>
+        <div className="flex gap-3 pt-1">
+          <button onClick={onClose} className="flex-1 rounded-xl bg-[hsl(var(--surface-elevated))] px-4 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+            {isRTL ? 'ביטול' : 'Cancel'}
+          </button>
+          <button onClick={handleSave} className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground hover:bg-primary/90 transition-colors">
+            {isRTL ? 'שמור' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 interface LessonPlayerClientProps {
@@ -182,6 +273,16 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
     else { setDlState('error'); setTimeout(() => setDlState('idle'), 3000); }
   }, [effectiveDlState, lesson]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ---- Bookmark state ----
+  const [showBookmarkDialog, setShowBookmarkDialog] = useState(false);
+  // Use stable selector (returns same reference between updates), then filter with useMemo
+  const allBookmarks = useBookmarksStore((s) => s.bookmarks);
+  const removeBookmark = useBookmarksStore((s) => s.removeBookmark);
+  const lessonBookmarks = useMemo(
+    () => allBookmarks.filter((b) => b.lessonId === lesson.id).sort((a, b) => a.position - b.position),
+    [allBookmarks, lesson.id]
+  );
+
   // ---- Notes state ----
   const [notes, setNotes] = useState<LocalNote[]>([]);
   const [notesOpen, setNotesOpen] = useState(false);
@@ -249,6 +350,31 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
       )}
 
       <div className="rounded-xl bg-[hsl(var(--surface-elevated))] p-5 space-y-4">
+        {/* Bookmarks row */}
+        <div className="flex items-center gap-2 flex-wrap min-h-[28px]" dir={locale === 'he' ? 'rtl' : 'ltr'}>
+          <button
+            onClick={() => setShowBookmarkDialog(true)}
+            disabled={!isCurrentLesson}
+            className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-amber-400 border border-dashed border-border/50 hover:border-amber-400/60 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            title={locale === 'he' ? 'הוסף סימניה' : 'Add bookmark'}
+          >
+            <Bookmark className="h-3.5 w-3.5" />
+            <Plus className="h-3 w-3" />
+          </button>
+          {lessonBookmarks.map((bm) => (
+            <button
+              key={bm.id}
+              onClick={() => { if (isCurrentLesson) seekTo(bm.position); }}
+              onContextMenu={(e) => { e.preventDefault(); removeBookmark(bm.id); }}
+              className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 transition-colors"
+              title={bm.note || (locale === 'he' ? 'לחץ לדלג, לחץ ימני למחיקה' : 'Click to seek, right-click to delete')}
+            >
+              <Bookmark className="h-3 w-3 fill-current" />
+              {formatDur(bm.position)}
+            </button>
+          ))}
+        </div>
+
         {/* Seek bar */}
         <SeekBar
           currentTime={displayTime}
@@ -572,6 +698,16 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
           </div>
         )}
       </div>
+
+      {/* Bookmark dialog — inlined to avoid separate 'use client' import */}
+      {showBookmarkDialog && (
+        <BookmarkDialogInline
+          isRTL={locale === 'he'}
+          position={isCurrentLesson ? currentTime : 0}
+          lessonId={lesson.id}
+          onClose={() => setShowBookmarkDialog(false)}
+        />
+      )}
     </div>
   );
 }
