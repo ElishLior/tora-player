@@ -16,6 +16,7 @@ class AudioEngine {
   private onLoad: ((duration: number) => void) | null = null;
   private onError: ((error: string) => void) | null = null;
   private animationFrameId: number | null = null;
+  private _userPaused = false; // Track if user explicitly paused to prevent auto-resume
 
   /**
    * Detect audio format from URL for Howler.js format hint.
@@ -74,10 +75,13 @@ class AudioEngine {
       },
       onplayerror: (_id: number, error: unknown) => {
         this.onError?.(`Playback error: ${error}`);
-        // Try to recover
+        // Try to recover — but only if user hasn't explicitly paused
         if (this.howl) {
           this.howl.once('unlock', () => {
-            this.howl?.play();
+            // Guard: don't auto-resume if user explicitly paused
+            if (this.howl && !this._userPaused) {
+              this.howl.play();
+            }
           });
         }
       },
@@ -86,6 +90,7 @@ class AudioEngine {
 
   play() {
     if (!this.howl) return;
+    this._userPaused = false;
     // If already playing, don't create a duplicate stream
     if (this.howl.playing(this.soundId ?? undefined)) return;
     // Reuse existing sound ID to resume instead of creating a new stream
@@ -99,6 +104,7 @@ class AudioEngine {
 
   pause() {
     if (!this.howl) return;
+    this._userPaused = true;
     // Pause the specific sound ID to avoid orphan streams
     if (this.soundId !== null) {
       this.howl.pause(this.soundId);

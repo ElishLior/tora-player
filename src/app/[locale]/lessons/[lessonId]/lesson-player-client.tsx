@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Play, Pause, Cast, Volume2, X, ChevronRight, ChevronLeft, ChevronDown, StickyNote, Plus, Trash2, Pencil, Clock, Check, Scissors as ScissorsIcon, CloudDownload, CheckCircle, Loader2, AlertCircle, Bookmark } from 'lucide-react';
+import { Play, Pause, Cast, Volume2, X, ChevronRight, ChevronLeft, ChevronDown, StickyNote, Plus, Trash2, Pencil, Clock, Check, Scissors, Share2, Car, Download, CheckCircle, Loader2, Bookmark } from 'lucide-react';
 import { useLocale } from 'next-intl';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { SeekBar } from '@/components/player/seek-bar';
 import { SpeedControl } from '@/components/player/speed-control';
@@ -131,6 +131,151 @@ function BookmarkDialogInline({ isRTL, position, lessonId, onClose }: {
   );
 }
 
+// ---- Inlined share clip dialog (webpack workaround) ----
+function ShareClipDialogInline({
+  isOpen,
+  onClose,
+  lessonId,
+  currentTime: ct,
+  duration: dur,
+  lessonTitle,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  lessonId: string;
+  currentTime: number;
+  duration: number;
+  lessonTitle: string;
+}) {
+  const defaultStart = Math.max(0, Math.floor(ct) - 30);
+  const defaultEnd = Math.min(Math.floor(dur), Math.floor(ct) + 30);
+
+  const [startMin, setStartMin] = useState(0);
+  const [startSec, setStartSec] = useState(0);
+  const [endMin, setEndMin] = useState(0);
+  const [endSec, setEndSec] = useState(0);
+  const [copied, setCopied] = useState(false);
+  const [shared, setShared] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      const sm = Math.floor(defaultStart / 60);
+      const ss = defaultStart % 60;
+      const em = Math.floor(defaultEnd / 60);
+      const es = defaultEnd % 60;
+      setStartMin(sm);
+      setStartSec(ss);
+      setEndMin(em);
+      setEndSec(es);
+      setCopied(false);
+      setShared(false);
+    }
+  }, [isOpen, defaultStart, defaultEnd]);
+
+  const startTotal = Math.max(0, startMin * 60 + startSec);
+  const endTotal = Math.max(0, endMin * 60 + endSec);
+  const clipDuration = Math.max(0, endTotal - startTotal);
+  const isValid = endTotal > startTotal && startTotal >= 0 && endTotal <= Math.ceil(dur);
+
+  const generateUrl = useCallback(() => {
+    return `https://tora-player.vercel.app/he/lessons/${encodeURIComponent(lessonId)}?start=${startTotal}&end=${endTotal}`;
+  }, [lessonId, startTotal, endTotal]);
+
+  const shareText = useCallback(() => {
+    return `${lessonTitle}\n✂ קטע: ${formatDur(startTotal)} - ${formatDur(endTotal)}\n${generateUrl()}`;
+  }, [lessonTitle, startTotal, endTotal, generateUrl]);
+
+  const handleShare = async () => {
+    const text = shareText();
+    const url = generateUrl();
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({ title: `${lessonTitle} - קטע`, text, url });
+        setShared(true);
+        setTimeout(() => onClose(), 1200);
+      } catch {
+        await copyClip(text);
+      }
+    } else {
+      await copyClip(text);
+    }
+  };
+
+  const copyClip = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+      <div
+        className="relative w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl bg-[hsl(0,0%,12%)] border border-[hsl(0,0%,20%)] shadow-2xl"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between p-4 border-b border-[hsl(0,0%,18%)]">
+          <div className="flex items-center gap-2" dir="rtl">
+            <Scissors className="h-5 w-5 text-primary" />
+            <h2 className="text-base font-bold text-white">שתף קטע</h2>
+          </div>
+          <button onClick={onClose} className="rounded-full p-1.5 text-white/50 hover:text-white hover:bg-white/10 transition-colors">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="p-5 space-y-5" dir="rtl">
+          <p className="text-sm text-white/60 truncate">{lessonTitle}</p>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-white/50 uppercase tracking-wider">התחלה</label>
+              <div className="flex items-center gap-1.5" dir="ltr">
+                <input type="number" min={0} max={99} value={startMin} onChange={(e) => setStartMin(Math.max(0, parseInt(e.target.value) || 0))} className="w-14 rounded-lg bg-[hsl(0,0%,8%)] border border-[hsl(0,0%,22%)] px-2 py-2.5 text-center text-white text-sm font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                <span className="text-white/40 font-bold text-lg">:</span>
+                <input type="number" min={0} max={59} value={startSec} onChange={(e) => setStartSec(Math.min(59, Math.max(0, parseInt(e.target.value) || 0)))} className="w-14 rounded-lg bg-[hsl(0,0%,8%)] border border-[hsl(0,0%,22%)] px-2 py-2.5 text-center text-white text-sm font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/50" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-white/50 uppercase tracking-wider">סיום</label>
+              <div className="flex items-center gap-1.5" dir="ltr">
+                <input type="number" min={0} max={99} value={endMin} onChange={(e) => setEndMin(Math.max(0, parseInt(e.target.value) || 0))} className="w-14 rounded-lg bg-[hsl(0,0%,8%)] border border-[hsl(0,0%,22%)] px-2 py-2.5 text-center text-white text-sm font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                <span className="text-white/40 font-bold text-lg">:</span>
+                <input type="number" min={0} max={59} value={endSec} onChange={(e) => setEndSec(Math.min(59, Math.max(0, parseInt(e.target.value) || 0)))} className="w-14 rounded-lg bg-[hsl(0,0%,8%)] border border-[hsl(0,0%,22%)] px-2 py-2.5 text-center text-white text-sm font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/50" />
+              </div>
+            </div>
+          </div>
+          <div className="rounded-lg bg-[hsl(0,0%,8%)] px-4 py-3 flex items-center justify-between">
+            <span className="text-xs text-white/50">משך הקטע</span>
+            <span className={`text-sm font-mono font-bold tabular-nums ${isValid ? 'text-primary' : 'text-red-400'}`}>
+              {isValid ? formatDur(clipDuration) : 'לא תקין'}
+            </span>
+          </div>
+          {!isValid && <p className="text-xs text-red-400 text-center">זמן הסיום חייב להיות אחרי זמן ההתחלה</p>}
+          <div className="flex gap-3 pt-1">
+            <button onClick={onClose} className="flex-1 py-3 rounded-xl text-sm font-medium text-white/70 bg-white/5 hover:bg-white/10 transition-colors">ביטול</button>
+            <button onClick={handleShare} disabled={!isValid} className="flex-1 py-3 rounded-xl text-sm font-bold text-primary-foreground bg-primary hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2">
+              {copied ? <><Check className="h-4 w-4" />הועתק!</> : shared ? <><Check className="h-4 w-4" />שותף!</> : <><Share2 className="h-4 w-4" />שתף קטע</>}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface LessonPlayerClientProps {
   lesson: LessonWithRelations;
   images?: LessonImage[];
@@ -138,6 +283,7 @@ interface LessonPlayerClientProps {
 
 export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) {
   const locale = useLocale();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const {
     currentTrack,
@@ -271,10 +417,11 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
     );
     if (success) { setDlState('downloaded'); setIsDownloaded(true); }
     else { setDlState('error'); setTimeout(() => setDlState('idle'), 3000); }
-  }, [effectiveDlState, lesson]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [effectiveDlState, lesson]);
 
   // ---- Bookmark state ----
   const [showBookmarkDialog, setShowBookmarkDialog] = useState(false);
+  const [showShareClipDialog, setShowShareClipDialog] = useState(false);
   // Use stable selector (returns same reference between updates), then filter with useMemo
   const allBookmarks = useBookmarksStore((s) => s.bookmarks);
   const removeBookmark = useBookmarksStore((s) => s.removeBookmark);
@@ -282,6 +429,15 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
     () => allBookmarks.filter((b) => b.lessonId === lesson.id).sort((a, b) => a.position - b.position),
     [allBookmarks, lesson.id]
   );
+  const bookmarkCount = lessonBookmarks.length;
+
+  // Tag color map for bookmark markers on seek bar
+  const tagColorMap: Record<string, string> = {
+    important: 'bg-red-400',
+    review: 'bg-amber-400',
+    quote: 'bg-blue-400',
+    question: 'bg-purple-400',
+  };
 
   // ---- Notes state ----
   const [notes, setNotes] = useState<LocalNote[]>([]);
@@ -342,7 +498,7 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
       {/* Clip mode badge */}
       {isClipMode && clipStart !== null && clipEnd !== null && (
         <div className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary/10 border border-primary/20" dir="rtl">
-          <ScissorsIcon className="h-4 w-4 text-primary flex-shrink-0" />
+          <Scissors className="h-4 w-4 text-primary flex-shrink-0" />
           <span className="text-sm font-medium text-primary">
             מצב קטע: {formatDur(clipStart)} - {formatDur(clipEnd)}
           </span>
@@ -350,40 +506,53 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
       )}
 
       <div className="rounded-xl bg-[hsl(var(--surface-elevated))] p-5 space-y-4">
-        {/* Bookmarks row */}
-        <div className="flex items-center gap-2 flex-wrap min-h-[28px]" dir={locale === 'he' ? 'rtl' : 'ltr'}>
-          <button
-            onClick={() => setShowBookmarkDialog(true)}
-            disabled={!isCurrentLesson}
-            className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-amber-400 border border-dashed border-border/50 hover:border-amber-400/60 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-            title={locale === 'he' ? 'הוסף סימניה' : 'Add bookmark'}
-          >
-            <Bookmark className="h-3.5 w-3.5" />
-            <Plus className="h-3 w-3" />
-          </button>
-          {lessonBookmarks.map((bm) => (
-            <button
-              key={bm.id}
-              onClick={() => { if (isCurrentLesson) seekTo(bm.position); }}
-              onContextMenu={(e) => { e.preventDefault(); removeBookmark(bm.id); }}
-              className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 transition-colors"
-              title={bm.note || (locale === 'he' ? 'לחץ לדלג, לחץ ימני למחיקה' : 'Click to seek, right-click to delete')}
-            >
-              <Bookmark className="h-3 w-3 fill-current" />
-              {formatDur(bm.position)}
-            </button>
-          ))}
+        {/* Bookmark chips row */}
+        {lessonBookmarks.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap" dir={locale === 'he' ? 'rtl' : 'ltr'}>
+            {lessonBookmarks.map((bm) => (
+              <button
+                key={bm.id}
+                onClick={() => { if (isCurrentLesson) seekTo(bm.position); }}
+                onContextMenu={(e) => { e.preventDefault(); removeBookmark(bm.id); }}
+                className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 transition-colors"
+                title={bm.note || (locale === 'he' ? 'לחץ לדלג, לחץ ימני למחיקה' : 'Click to seek, right-click to delete')}
+              >
+                <Bookmark className="h-3 w-3 fill-current" />
+                {formatDur(bm.position)}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Seek bar with bookmark markers */}
+        <div className="relative">
+          <SeekBar
+            currentTime={displayTime}
+            duration={displayDuration}
+            onSeek={seekTo}
+          />
+          {/* Bookmark markers overlay on seek bar */}
+          {displayDuration > 0 && lessonBookmarks.length > 0 && (
+            <div className="absolute top-0 inset-x-0 h-5 pointer-events-auto" style={{ zIndex: 1 }}>
+              {lessonBookmarks.map((bm) => {
+                const pct = (bm.position / displayDuration) * 100;
+                const colorClass = tagColorMap[bm.tag] || 'bg-primary';
+                return (
+                  <button
+                    key={bm.id}
+                    onClick={() => seekTo(bm.position)}
+                    className={`absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full ${colorClass} border border-black/30 shadow-sm hover:scale-150 transition-transform cursor-pointer`}
+                    style={{ left: `calc(${pct}% - 5px)` }}
+                    title={bm.note || ''}
+                  />
+                );
+              })}
+            </div>
+          )}
         </div>
 
-        {/* Seek bar */}
-        <SeekBar
-          currentTime={displayTime}
-          duration={displayDuration}
-          onSeek={seekTo}
-        />
-
         {/* Controls — dir="ltr" keeps standard media player layout (⏪ ▶ ⏩) */}
-        <div dir="ltr" className="flex items-center justify-center gap-5">
+        <div dir="ltr" className="flex items-center justify-center gap-6">
           <SpeedControl
             speed={isCurrentLesson ? playbackSpeed : 1}
             onSpeedChange={setPlaybackSpeed}
@@ -416,13 +585,85 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
             <Skip15Forward className="h-7 w-7" />
           </button>
 
-          {/* Cast / broadcast */}
+          {/* Spacer for symmetry */}
+          <div className="w-10" />
+        </div>
+
+        {/* Secondary actions row */}
+        <div className="flex items-center justify-center gap-5 pt-1 flex-wrap" dir="rtl">
+          {/* Bookmark */}
+          <button
+            onClick={() => setShowBookmarkDialog(true)}
+            disabled={!isCurrentLesson}
+            className={`flex flex-col items-center gap-1.5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
+              bookmarkCount > 0 ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <div className="relative">
+              <Bookmark className={`h-5 w-5 ${bookmarkCount > 0 ? 'fill-current' : ''}`} />
+              {bookmarkCount > 0 && (
+                <span className="absolute -top-1.5 -end-2 bg-primary text-primary-foreground text-[9px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
+                  {bookmarkCount}
+                </span>
+              )}
+            </div>
+            <span className="text-[10px]">{locale === 'he' ? 'סימניה' : 'Bookmark'}</span>
+          </button>
+
+          {/* Share clip */}
+          <button
+            onClick={() => setShowShareClipDialog(true)}
+            disabled={!isCurrentLesson}
+            className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            <Scissors className="h-5 w-5" />
+            <span className="text-[10px]">{locale === 'he' ? 'שתף קטע' : 'Share Clip'}</span>
+          </button>
+
+          {/* Driving mode */}
+          <button
+            onClick={() => router.push(`/${locale}/driving`)}
+            className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Car className="h-5 w-5" />
+            <span className="text-[10px]">{locale === 'he' ? 'מצב נהיגה' : 'Driving'}</span>
+          </button>
+
+          {/* Download */}
+          <button
+            onClick={handleDownload}
+            disabled={effectiveDlState === 'downloaded' || effectiveDlState === 'downloading' || !lesson.audio_url}
+            className={`flex flex-col items-center gap-1.5 transition-colors disabled:cursor-not-allowed ${
+              effectiveDlState === 'downloaded'
+                ? 'text-green-400'
+                : effectiveDlState === 'downloading'
+                ? 'text-primary'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {effectiveDlState === 'downloading' ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : effectiveDlState === 'downloaded' ? (
+              <CheckCircle className="h-5 w-5" />
+            ) : (
+              <Download className="h-5 w-5" />
+            )}
+            <span className="text-[10px]">
+              {effectiveDlState === 'downloading'
+                ? `${dlProgress}%`
+                : effectiveDlState === 'downloaded'
+                ? (locale === 'he' ? 'הורד' : 'Saved')
+                : (locale === 'he' ? 'הורדה' : 'Download')}
+            </span>
+          </button>
+
+          {/* Cast */}
           <button
             onClick={(e) => { e.stopPropagation(); void handleCastClick(); }}
-            className="p-2 text-muted-foreground hover:text-foreground transition-colors"
-            aria-label="Cast"
+            className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
           >
             <Cast className="h-5 w-5" />
+            <span className="text-[10px]">{locale === 'he' ? 'שדר' : 'Cast'}</span>
           </button>
         </div>
       </div>
@@ -495,52 +736,6 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
       {/* Image gallery */}
       {images && images.length > 0 && (
         <ImageGallerySection images={images} locale={locale} />
-      )}
-
-      {/* ── Offline download button (inlined) ── */}
-      {lesson.audio_url && (
-        <button
-          onClick={handleDownload}
-          disabled={effectiveDlState === 'downloaded' || effectiveDlState === 'downloading'}
-          className={`w-full flex items-center justify-center gap-2.5 rounded-xl px-4 py-3 transition-all border ${
-            effectiveDlState === 'downloaded'
-              ? 'bg-green-500/10 border-green-500/30 text-green-400'
-              : effectiveDlState === 'downloading'
-              ? 'bg-primary/10 border-primary/30 text-primary'
-              : effectiveDlState === 'error'
-              ? 'bg-red-500/10 border-red-500/30 text-red-400'
-              : 'bg-[hsl(var(--surface-elevated))] border-[hsl(var(--border))]/50 text-muted-foreground hover:text-foreground hover:border-primary/40'
-          }`}
-          dir="rtl"
-        >
-          {effectiveDlState === 'idle' && (
-            <>
-              <CloudDownload className="h-5 w-5" />
-              <span className="text-sm font-medium">{locale === 'he' ? 'הורדה להאזנה אופליין' : 'Download for offline'}</span>
-            </>
-          )}
-          {effectiveDlState === 'downloading' && (
-            <>
-              <Loader2 className="h-5 w-5 animate-spin" />
-              <span className="text-sm font-medium">{locale === 'he' ? `מוריד... ${dlProgress}%` : `Downloading... ${dlProgress}%`}</span>
-              <div className="flex-1 max-w-[120px] h-1.5 rounded-full bg-primary/20 overflow-hidden">
-                <div className="h-full rounded-full bg-primary transition-all duration-300" style={{ width: `${dlProgress}%` }} />
-              </div>
-            </>
-          )}
-          {effectiveDlState === 'downloaded' && (
-            <>
-              <CheckCircle className="h-5 w-5" />
-              <span className="text-sm font-medium">{locale === 'he' ? 'הורד להאזנה אופליין' : 'Downloaded for offline'}</span>
-            </>
-          )}
-          {effectiveDlState === 'error' && (
-            <>
-              <AlertCircle className="h-5 w-5" />
-              <span className="text-sm font-medium">{locale === 'he' ? 'שגיאה בהורדה, נסה שוב' : 'Download failed, try again'}</span>
-            </>
-          )}
-        </button>
       )}
 
       {/* ==================== Notes Section (inlined — local-first) ==================== */}
@@ -708,6 +903,16 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
           onClose={() => setShowBookmarkDialog(false)}
         />
       )}
+
+      {/* Share clip dialog — inlined to avoid separate 'use client' import */}
+      <ShareClipDialogInline
+        isOpen={showShareClipDialog}
+        onClose={() => setShowShareClipDialog(false)}
+        lessonId={lesson.id}
+        currentTime={isCurrentLesson ? currentTime : 0}
+        duration={isCurrentLesson ? duration : lesson.duration}
+        lessonTitle={lesson.hebrew_title || lesson.title}
+      />
     </div>
   );
 }
