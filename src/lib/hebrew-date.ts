@@ -48,11 +48,18 @@ export function generateLessonMetadata(dateStr: string) {
     // No parsha for this date (e.g., holiday)
   }
 
-  // Build title in exact same format as imported lessons:
-  // "שיעור ל׳ תשרי תשפ״ו - יום רביעי | פרשת נח"
-  let title = `שיעור ${hebrewDate} - יום ${hebrewDay}`;
-  if (parsha) {
-    title += ` | פרשת ${parsha}`;
+  // Build title with new convention:
+  // Friday (dayOfWeek === 5): "ליל שישי - ל׳ תשרי תשפ״ו | פרשת נח"
+  // Other days:                "יום רביעי - ל׳ תשרי תשפ״ו"
+  const isFriday = dayOfWeek === 5;
+  let title: string;
+  if (isFriday) {
+    title = `ליל שישי - ${hebrewDate}`;
+    if (parsha) {
+      title += ` | פרשת ${parsha}`;
+    }
+  } else {
+    title = `יום ${hebrewDay} - ${hebrewDate}`;
   }
 
   return {
