@@ -3,7 +3,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useAudioStore, type AudioTrack } from '@/stores/audio-store';
 import { audioEngine } from '@/lib/audio-engine';
-import { getOfflineAudioUrl } from '@/lib/offline-storage';
+import { getOfflineAudioUrl, revokeOfflineAudioUrl } from '@/lib/offline-storage';
 
 const PROGRESS_SAVE_INTERVAL = 10000; // Save progress every 10 seconds
 
@@ -11,6 +11,7 @@ export function useAudioPlayer() {
   const store = useAudioStore();
   const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastSavedTimeRef = useRef(0);
+  const prevTrackIdRef = useRef<string | null>(null);
 
   // Sync engine with store state
   useEffect(() => {
@@ -38,6 +39,12 @@ export function useAudioPlayer() {
   // Load track when it changes — check offline storage first
   useEffect(() => {
     if (!store.currentTrack?.audioUrl) return;
+
+    // Revoke old blob URL when switching tracks to free memory
+    if (prevTrackIdRef.current && prevTrackIdRef.current !== store.currentTrack.id) {
+      revokeOfflineAudioUrl(prevTrackIdRef.current);
+    }
+    prevTrackIdRef.current = store.currentTrack.id;
 
     let cancelled = false;
 
@@ -92,17 +99,21 @@ export function useAudioPlayer() {
 
       // If engine lost its state, re-load and resume
       if (!audioEngine.isLoaded()) {
-        audioEngine.load(state.currentTrack.audioUrl, {
-          startPosition: state.currentTime > 0 ? state.currentTime : undefined,
+        // Try offline first, then fall back to streaming
+        getOfflineAudioUrl(state.currentTrack.id).then((offlineUrl) => {
+          const url = offlineUrl || state.currentTrack!.audioUrl;
+          audioEngine.load(url, {
+            startPosition: state.currentTime > 0 ? state.currentTime : undefined,
+          });
+          const audioEl = audioEngine.getAudioElement();
+          if (audioEl) {
+            audioEl.setAttribute('playsinline', '');
+            audioEl.setAttribute('webkit-playsinline', '');
+          }
+          if (state.isPlaying) {
+            setTimeout(() => audioEngine.play(), 300);
+          }
         });
-        const audioEl = audioEngine.getAudioElement();
-        if (audioEl) {
-          audioEl.setAttribute('playsinline', '');
-          audioEl.setAttribute('webkit-playsinline', '');
-        }
-        if (state.isPlaying) {
-          setTimeout(() => audioEngine.play(), 300);
-        }
       }
     }
 
@@ -117,16 +128,21 @@ export function useAudioPlayer() {
       // If engine is not loaded (e.g., after page refresh, browser killed audio),
       // re-load the track first, then play
       if (!audioEngine.isLoaded() && store.currentTrack.audioUrl) {
-        audioEngine.load(store.currentTrack.audioUrl, {
-          startPosition: store.currentTime > 0 ? store.currentTime : undefined,
+        const trackId = store.currentTrack.id;
+        const trackUrl = store.currentTrack.audioUrl;
+        const startPos = store.currentTime > 0 ? store.currentTime : undefined;
+        // Try offline first
+        getOfflineAudioUrl(trackId).then((offlineUrl) => {
+          const url = offlineUrl || trackUrl;
+          audioEngine.load(url, { startPosition: startPos });
+          const audioEl = audioEngine.getAudioElement();
+          if (audioEl) {
+            audioEl.setAttribute('playsinline', '');
+            audioEl.setAttribute('webkit-playsinline', '');
+          }
+          // Wait for Howler to finish loading before playing
+          setTimeout(() => audioEngine.play(), 300);
         });
-        const audioEl = audioEngine.getAudioElement();
-        if (audioEl) {
-          audioEl.setAttribute('playsinline', '');
-          audioEl.setAttribute('webkit-playsinline', '');
-        }
-        // Wait for Howler to finish loading before playing
-        setTimeout(() => audioEngine.play(), 300);
       } else {
         audioEngine.play();
       }

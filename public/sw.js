@@ -1,12 +1,15 @@
 // Tora Player Service Worker
-const CACHE_VERSION = 'tora-player-v3';
+const CACHE_VERSION = 'tora-player-v4';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DYNAMIC_CACHE = `${CACHE_VERSION}-dynamic`;
 const API_CACHE = `${CACHE_VERSION}-api`;
 
-// App shell resources to precache
+// App shell resources to precache — these pages work offline after first visit
 const APP_SHELL = [
   '/manifest.json',
+  '/he',
+  '/he/offline',
+  '/he/lessons',
 ];
 
 // Static asset extensions
@@ -19,9 +22,14 @@ const STATIC_EXTENSIONS = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(STATIC_CACHE).then((cache) => {
-      return cache.addAll(APP_SHELL).catch((err) => {
-        console.warn('[SW] Failed to precache some resources:', err);
-      });
+      // Cache each resource individually so one failure doesn't block others
+      return Promise.allSettled(
+        APP_SHELL.map((url) =>
+          cache.add(url).catch((err) => {
+            console.warn(`[SW] Failed to precache ${url}:`, err);
+          })
+        )
+      );
     })
   );
   // Activate immediately
@@ -82,29 +90,65 @@ self.addEventListener('fetch', (event) => {
   // Skip chrome-extension and other non-http(s) requests
   if (!url.protocol.startsWith('http')) return;
 
-  // Strategy 1: Network-first for API calls
+  // Strategy 1: Network-first for API calls (always need fresh data)
   if (isApiRequest(url)) {
     event.respondWith(networkFirst(event.request, API_CACHE));
     return;
   }
 
-  // Strategy 2: Cache-first for static assets
+  // Strategy 2: Cache-first for static assets (fingerprinted, safe to cache)
   if (isStaticAsset(url)) {
     event.respondWith(cacheFirst(event.request, STATIC_CACHE));
     return;
   }
 
-  // Strategy 3: Network-first for page navigations (always get fresh content)
+  // Strategy 3: Stale-while-revalidate for page navigations
+  // Shows cached page immediately (fast offline) while updating cache in background
   if (isPageRequest(event.request)) {
-    event.respondWith(networkFirst(event.request, DYNAMIC_CACHE));
+    event.respondWith(staleWhileRevalidate(event.request, DYNAMIC_CACHE));
     return;
   }
 
-  // Default: network-first
-  event.respondWith(networkFirst(event.request, DYNAMIC_CACHE));
+  // Default: stale-while-revalidate
+  event.respondWith(staleWhileRevalidate(event.request, DYNAMIC_CACHE));
 });
 
-// Network-first strategy
+// Stale-while-revalidate strategy
+// Returns cached version immediately if available, fetches update in background
+async function staleWhileRevalidate(request, cacheName) {
+  const cache = await caches.open(cacheName);
+  const cached = await cache.match(request);
+
+  const fetchPromise = fetch(request)
+    .then((response) => {
+      if (response.ok) {
+        cache.put(request, response.clone());
+      }
+      return response;
+    })
+    .catch(() => {
+      // Network failed — if we have no cache, show offline page for navigations
+      if (!cached && request.mode === 'navigate') {
+        return caches.match('/he/offline').then((offlinePage) => {
+          return offlinePage || new Response('אופליין — לא נמצא עמוד', {
+            status: 503,
+            statusText: 'Service Unavailable',
+            headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+          });
+        });
+      }
+      // For non-navigation requests without cache, return 503
+      if (!cached) {
+        return new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
+      }
+      return cached;
+    });
+
+  // Return cached version immediately if available, otherwise wait for network
+  return cached || fetchPromise;
+}
+
+// Network-first strategy (used for API calls)
 async function networkFirst(request, cacheName) {
   try {
     const response = await fetch(request);
@@ -118,14 +162,14 @@ async function networkFirst(request, cacheName) {
     if (cached) return cached;
     // Return offline fallback for page requests
     if (request.mode === 'navigate') {
-      const offlinePage = await caches.match('/offline');
+      const offlinePage = await caches.match('/he/offline');
       if (offlinePage) return offlinePage;
     }
     return new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
   }
 }
 
-// Cache-first strategy
+// Cache-first strategy (used for static assets)
 async function cacheFirst(request, cacheName) {
   const cached = await caches.match(request);
   if (cached) return cached;
@@ -178,28 +222,4 @@ async function handleShareTarget(request) {
     console.error('[SW] Share target error:', err);
     return Response.redirect('/he/lessons/upload', 303);
   }
-}
-
-// Stale-while-revalidate strategy
-async function staleWhileRevalidate(request, cacheName) {
-  const cache = await caches.open(cacheName);
-  const cached = await cache.match(request);
-
-  const fetchPromise = fetch(request)
-    .then((response) => {
-      if (response.ok) {
-        cache.put(request, response.clone());
-      }
-      return response;
-    })
-    .catch(() => {
-      // If fetch fails and we have no cache, try offline page
-      if (!cached) {
-        return caches.match('/offline') || new Response('Offline', { status: 503 });
-      }
-      return cached;
-    });
-
-  // Return cached version immediately if available, otherwise wait for network
-  return cached || fetchPromise;
 }

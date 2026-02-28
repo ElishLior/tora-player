@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Search, Play, Pause, Music, Shield } from 'lucide-react';
+import { Search, Play, Pause, Music, Shield, WifiOff } from 'lucide-react';
 import Link from 'next/link';
 import { useAudioStore } from '@/stores/audio-store';
 
@@ -13,11 +13,23 @@ export function Header({ locale }: HeaderProps) {
   const isRTL = locale === 'he';
   const { currentTrack, isPlaying, togglePlay, toggleMiniPlayer } = useAudioStore();
   const [isAdminVisible, setIsAdminVisible] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
 
   useEffect(() => {
     // Check the non-httpOnly cookie for admin visibility
     const hasAdminCookie = document.cookie.split(';').some(c => c.trim().startsWith('tora-admin-visible='));
     setIsAdminVisible(hasAdminCookie);
+
+    // Track online/offline status
+    setIsOffline(!navigator.onLine);
+    const goOffline = () => setIsOffline(true);
+    const goOnline = () => setIsOffline(false);
+    window.addEventListener('offline', goOffline);
+    window.addEventListener('online', goOnline);
+    return () => {
+      window.removeEventListener('offline', goOffline);
+      window.removeEventListener('online', goOnline);
+    };
   }, []);
 
   return (
@@ -35,6 +47,14 @@ export function Header({ locale }: HeaderProps) {
         </Link>
 
         <div className="flex items-center gap-0.5">
+          {/* Offline indicator */}
+          {isOffline && (
+            <div className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-orange-500/15 text-orange-400 border border-orange-500/20">
+              <WifiOff className="h-3 w-3" />
+              <span>{isRTL ? 'אופליין' : 'Offline'}</span>
+            </div>
+          )}
+
           {/* Now Playing indicator — shows when a track is loaded */}
           {currentTrack && (
             <button
@@ -46,9 +66,12 @@ export function Header({ locale }: HeaderProps) {
               <span className="truncate" dir="rtl">
                 {currentTrack.hebrewTitle || currentTrack.title}
               </span>
-              <button
+              <span
+                role="button"
+                tabIndex={0}
                 onClick={(e) => { e.stopPropagation(); togglePlay(); }}
-                className="flex-shrink-0 p-0.5"
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); togglePlay(); } }}
+                className="flex-shrink-0 p-0.5 cursor-pointer"
                 aria-label={isPlaying ? 'Pause' : 'Play'}
               >
                 {isPlaying ? (
@@ -56,7 +79,7 @@ export function Header({ locale }: HeaderProps) {
                 ) : (
                   <Play className="h-3 w-3 fill-current" />
                 )}
-              </button>
+              </span>
             </button>
           )}
 
