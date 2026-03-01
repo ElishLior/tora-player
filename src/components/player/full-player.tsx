@@ -162,11 +162,11 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
           <div dir="ltr" className="flex items-center justify-center gap-6 w-full max-w-md">
             <SpeedControl speed={playbackSpeed} onSpeedChange={setPlaybackSpeed} />
 
-            {/* Skip backward (always left of play -- dir="ltr" keeps standard media layout) */}
+            {/* In RTL: left = forward in time, right = backward. Icons stay, handlers swap. */}
             <button
-              onClick={() => skipBackward(15)}
+              onClick={() => skipForward(15)}
               className="p-2 text-muted-foreground hover:text-foreground transition-colors"
-              aria-label={t('skipBackward')}
+              aria-label={t('skipForward')}
             >
               <Skip15Back className="h-8 w-8" />
             </button>
@@ -183,11 +183,11 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
               )}
             </button>
 
-            {/* Skip forward (always right of play -- dir="ltr" keeps standard media layout) */}
+            {/* In RTL: right side = backward in time */}
             <button
-              onClick={() => skipForward(15)}
+              onClick={() => skipBackward(15)}
               className="p-2 text-muted-foreground hover:text-foreground transition-colors"
-              aria-label={t('skipForward')}
+              aria-label={t('skipBackward')}
             >
               <Skip15Forward className="h-8 w-8" />
             </button>
