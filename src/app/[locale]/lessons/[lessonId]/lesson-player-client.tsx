@@ -558,8 +558,9 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
             onSpeedChange={setPlaybackSpeed}
           />
 
+          {/* In RTL: left = forward in time, right = backward. Icons stay, handlers swap. */}
           <button
-            onClick={() => skipBackward(15)}
+            onClick={() => skipForward(15)}
             className="p-2 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30"
             disabled={!isCurrentLesson}
           >
@@ -577,8 +578,9 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
             )}
           </button>
 
+          {/* In RTL: right side = backward in time */}
           <button
-            onClick={() => skipForward(15)}
+            onClick={() => skipBackward(15)}
             className="p-2 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30"
             disabled={!isCurrentLesson}
           >
