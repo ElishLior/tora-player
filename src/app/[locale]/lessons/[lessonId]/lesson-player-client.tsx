@@ -337,6 +337,7 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
       duration: lesson.duration,
       seriesName: lesson.series?.hebrew_name || lesson.series?.name || undefined,
       date: lesson.date,
+      description: lesson.description || lesson.summary || undefined,
     });
   }, [clipStart, isCurrentLesson]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -361,6 +362,7 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
         duration: lesson.duration,
         seriesName: lesson.series?.hebrew_name || lesson.series?.name || undefined,
         date: lesson.date,
+        description: lesson.description || lesson.summary || undefined,
       });
     }
   };
@@ -388,6 +390,7 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
       duration: audio.duration || lesson.duration,
       seriesName: lesson.series?.hebrew_name || lesson.series?.name || undefined,
       date: lesson.date,
+      description: lesson.description || lesson.summary || undefined,
     });
   }
 

@@ -56,6 +56,7 @@ export function LessonCard({ lesson, showProgress }: LessonCardProps) {
       duration: lesson.duration,
       seriesName: lesson.series?.hebrew_name || lesson.series?.name || undefined,
       date: lesson.date,
+      description: lesson.description || lesson.summary || undefined,
     });
     router.push(`/lessons/${lesson.id}`);
   };

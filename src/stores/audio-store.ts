@@ -11,6 +11,7 @@ export interface AudioTrack {
   seriesName?: string;
   date: string;
   artworkUrl?: string;
+  description?: string;
 }
 
 interface AudioPlayerState {
