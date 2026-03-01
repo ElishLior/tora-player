@@ -131,6 +131,11 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
               {currentTrack.date && currentTrack.seriesName && ' · '}
               {currentTrack.date}
             </p>
+            {currentTrack.description && (
+              <p className="text-xs text-muted-foreground/80 leading-relaxed pt-1 line-clamp-2" dir="rtl">
+                {currentTrack.description}
+              </p>
+            )}
           </div>
 
           {/* Seek bar with bookmark markers */}

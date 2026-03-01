@@ -12,6 +12,7 @@ interface AudioFileListProps {
   lessonDate: string;
   lessonDuration: number;
   seriesName?: string;
+  description?: string;
   audioFiles: LessonAudio[];
   locale: string;
 }
@@ -30,6 +31,7 @@ export function AudioFileList({
   lessonDate,
   lessonDuration,
   seriesName,
+  description,
   audioFiles,
   locale,
 }: AudioFileListProps) {
@@ -59,6 +61,7 @@ export function AudioFileList({
       duration: audio.duration || lessonDuration,
       seriesName,
       date: lessonDate,
+      description,
     });
   }
 

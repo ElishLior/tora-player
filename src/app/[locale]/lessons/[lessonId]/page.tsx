@@ -122,14 +122,14 @@ export default async function LessonDetailPage({ params }: Props) {
         )}
       </div>
 
-      {/* Summary */}
-      {lesson.summary && (
+      {/* Description / Summary */}
+      {(lesson.description || lesson.summary) && (
         <div className="rounded-xl bg-[hsl(var(--surface-elevated))] p-4" dir="rtl">
           <h2 className="text-sm font-bold mb-2 text-muted-foreground">
-            {locale === 'he' ? 'תקציר' : 'Summary'}
+            {locale === 'he' ? 'תיאור השיעור' : 'Description'}
           </h2>
           <p className="text-sm leading-relaxed whitespace-pre-wrap">
-            {lesson.summary}
+            {lesson.description || lesson.summary}
           </p>
         </div>
       )}
