@@ -1,7 +1,7 @@
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
-import { Shield, Upload, BarChart3, LogOut, BookOpen, ListMusic, Library, FolderTree } from 'lucide-react';
+import { Shield, Upload, BarChart3, LogOut, BookOpen, ListMusic, Library, FolderTree, Scissors } from 'lucide-react';
 import Link from 'next/link';
 import { logoutAdmin } from '@/actions/auth';
 
@@ -47,6 +47,12 @@ export default function AdminDashboardPage() {
       icon: FolderTree,
       label: isRTL ? 'קטגוריות' : 'Categories',
       description: isRTL ? 'ניהול קטגוריות ותתי-קטגוריות' : 'Manage categories and subcategories',
+    },
+    {
+      href: `/${locale}/admin/snippets`,
+      icon: Scissors,
+      label: isRTL ? 'סימוני קטעים' : 'Snippet Markings',
+      description: isRTL ? 'צפייה ואישור סימוני קטעים מהמשתמשים' : 'View and approve snippet markings from users',
     },
     {
       href: `/${locale}/playlists`,

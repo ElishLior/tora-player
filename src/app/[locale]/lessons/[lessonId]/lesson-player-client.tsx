@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Play, Pause, Cast, Volume2, X, ChevronRight, ChevronLeft, ChevronDown, StickyNote, Plus, Trash2, Pencil, Clock, Check, Scissors, Share2, Car, Download, CheckCircle, Loader2, Bookmark } from 'lucide-react';
+import { Play, Pause, Cast, Volume2, X, ChevronRight, ChevronLeft, ChevronDown, StickyNote, Plus, Trash2, Pencil, Clock, Check, Scissors, Car, Download, CheckCircle, Loader2, Bookmark } from 'lucide-react';
 import { useLocale } from 'next-intl';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
@@ -13,6 +13,7 @@ import { normalizeAudioUrl } from '@/lib/audio-url';
 import { getNotes, addNote, updateNote, deleteNote, type LocalNote } from '@/lib/local-notes';
 import { downloadLesson, isLessonDownloaded } from '@/lib/offline-storage';
 import { useBookmarksStore } from '@/stores/bookmarks-store';
+import { submitSnippet } from '@/actions/snippets';
 
 // ---- Inlined bookmark dialog (webpack workaround: no separate 'use client' imports) ----
 const BOOKMARK_TAGS = [
@@ -131,21 +132,21 @@ function BookmarkDialogInline({ isRTL, position, lessonId, onClose }: {
   );
 }
 
-// ---- Inlined share clip dialog (webpack workaround) ----
-function ShareClipDialogInline({
+// ---- Inlined mark snippet dialog (webpack workaround) ----
+function MarkSnippetDialogInline({
   isOpen,
   onClose,
   lessonId,
+  currentAudioFileId,
   currentTime: ct,
   duration: dur,
-  lessonTitle,
 }: {
   isOpen: boolean;
   onClose: () => void;
   lessonId: string;
+  currentAudioFileId: string | null;
   currentTime: number;
   duration: number;
-  lessonTitle: string;
 }) {
   const defaultStart = Math.max(0, Math.floor(ct) - 30);
   const defaultEnd = Math.min(Math.floor(dur), Math.floor(ct) + 30);
@@ -154,8 +155,10 @@ function ShareClipDialogInline({
   const [startSec, setStartSec] = useState(0);
   const [endMin, setEndMin] = useState(0);
   const [endSec, setEndSec] = useState(0);
-  const [copied, setCopied] = useState(false);
-  const [shared, setShared] = useState(false);
+  const [snippetTitle, setSnippetTitle] = useState('');
+  const [snippetDescription, setSnippetDescription] = useState('');
+  const [snippetSubmitting, setSnippetSubmitting] = useState(false);
+  const [snippetSuccess, setSnippetSuccess] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -167,8 +170,10 @@ function ShareClipDialogInline({
       setStartSec(ss);
       setEndMin(em);
       setEndSec(es);
-      setCopied(false);
-      setShared(false);
+      setSnippetTitle('');
+      setSnippetDescription('');
+      setSnippetSubmitting(false);
+      setSnippetSuccess(false);
     }
   }, [isOpen, defaultStart, defaultEnd]);
 
@@ -177,48 +182,59 @@ function ShareClipDialogInline({
   const clipDuration = Math.max(0, endTotal - startTotal);
   const isValid = endTotal > startTotal && startTotal >= 0 && endTotal <= Math.ceil(dur);
 
-  const generateUrl = useCallback(() => {
-    return `https://tora-player.vercel.app/he/lessons/${encodeURIComponent(lessonId)}?start=${startTotal}&end=${endTotal}`;
-  }, [lessonId, startTotal, endTotal]);
-
-  const shareText = useCallback(() => {
-    return `${lessonTitle}\n✂ קטע: ${formatDur(startTotal)} - ${formatDur(endTotal)}\n${generateUrl()}`;
-  }, [lessonTitle, startTotal, endTotal, generateUrl]);
-
-  const handleShare = async () => {
-    const text = shareText();
-    const url = generateUrl();
-    if (typeof navigator !== 'undefined' && navigator.share) {
-      try {
-        await navigator.share({ title: `${lessonTitle} - קטע`, text, url });
-        setShared(true);
-        setTimeout(() => onClose(), 1200);
-      } catch {
-        await copyClip(text);
-      }
-    } else {
-      await copyClip(text);
-    }
-  };
-
-  const copyClip = async (text: string) => {
+  async function handleSnippetSubmit() {
+    if (!snippetTitle.trim()) return;
+    setSnippetSubmitting(true);
     try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
-    } catch {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      document.body.removeChild(ta);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
+      const result = await submitSnippet({
+        lesson_id: lessonId,
+        audio_file_id: currentAudioFileId || null,
+        title: snippetTitle.trim(),
+        description: snippetDescription.trim() || null,
+        start_time: startTotal,
+        end_time: endTotal,
+      });
+      if ('error' in result && result.error) {
+        console.error('Submit snippet error:', result.error);
+      } else {
+        setSnippetSuccess(true);
+        setTimeout(() => {
+          onClose();
+          setSnippetSuccess(false);
+          setSnippetTitle('');
+          setSnippetDescription('');
+        }, 2500);
+      }
+    } catch (err) {
+      console.error('Submit snippet error:', err);
+    } finally {
+      setSnippetSubmitting(false);
     }
-  };
+  }
 
   if (!isOpen) return null;
+
+  // Success state
+  if (snippetSuccess) {
+    return (
+      <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center" onClick={onClose}>
+        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+        <div
+          className="relative w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl bg-[hsl(0,0%,12%)] border border-[hsl(0,0%,20%)] shadow-2xl"
+          style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="p-8 flex flex-col items-center gap-4 text-center" dir="rtl">
+            <div className="w-14 h-14 rounded-full bg-green-500/20 flex items-center justify-center">
+              <CheckCircle className="h-8 w-8 text-green-400" />
+            </div>
+            <h3 className="text-lg font-bold text-white">הקטע נשלח בהצלחה!</h3>
+            <p className="text-sm text-white/60">האדמין יבדוק ויאשר אותו.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center" onClick={onClose}>
@@ -231,43 +247,79 @@ function ShareClipDialogInline({
         <div className="flex items-center justify-between p-4 border-b border-[hsl(0,0%,18%)]">
           <div className="flex items-center gap-2" dir="rtl">
             <Scissors className="h-5 w-5 text-primary" />
-            <h2 className="text-base font-bold text-white">שתף קטע</h2>
+            <h2 className="text-base font-bold text-white">סימון קטע</h2>
           </div>
           <button onClick={onClose} className="rounded-full p-1.5 text-white/50 hover:text-white hover:bg-white/10 transition-colors">
             <X className="h-5 w-5" />
           </button>
         </div>
-        <div className="p-5 space-y-5" dir="rtl">
-          <p className="text-sm text-white/60 truncate">{lessonTitle}</p>
+        <div className="p-5 space-y-4" dir="rtl">
+          <p className="text-xs text-white/50 leading-relaxed">הקטע שתסמן ישלח לאדמין לבדיקה. לאחר אישור ועריכה, הקטע יוכל לעלות למערכת כקטע נפרד.</p>
+
+          {/* Time inputs */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="text-xs font-medium text-white/50 uppercase tracking-wider">התחלה</label>
               <div className="flex items-center gap-1.5" dir="ltr">
-                <input type="number" min={0} max={99} value={startMin} onChange={(e) => setStartMin(Math.max(0, parseInt(e.target.value) || 0))} className="w-14 rounded-lg bg-[hsl(0,0%,8%)] border border-[hsl(0,0%,22%)] px-2 py-2.5 text-center text-white text-sm font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                <input type="number" min={0} max={99} value={startMin} onChange={(e) => setStartMin(Math.max(0, parseInt(e.target.value) || 0))} className="w-14 rounded-lg bg-[hsl(var(--surface-elevated))] border border-border/50 px-2 py-2.5 text-center text-white text-sm font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/50" />
                 <span className="text-white/40 font-bold text-lg">:</span>
-                <input type="number" min={0} max={59} value={startSec} onChange={(e) => setStartSec(Math.min(59, Math.max(0, parseInt(e.target.value) || 0)))} className="w-14 rounded-lg bg-[hsl(0,0%,8%)] border border-[hsl(0,0%,22%)] px-2 py-2.5 text-center text-white text-sm font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                <input type="number" min={0} max={59} value={startSec} onChange={(e) => setStartSec(Math.min(59, Math.max(0, parseInt(e.target.value) || 0)))} className="w-14 rounded-lg bg-[hsl(var(--surface-elevated))] border border-border/50 px-2 py-2.5 text-center text-white text-sm font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/50" />
               </div>
             </div>
             <div className="space-y-2">
               <label className="text-xs font-medium text-white/50 uppercase tracking-wider">סיום</label>
               <div className="flex items-center gap-1.5" dir="ltr">
-                <input type="number" min={0} max={99} value={endMin} onChange={(e) => setEndMin(Math.max(0, parseInt(e.target.value) || 0))} className="w-14 rounded-lg bg-[hsl(0,0%,8%)] border border-[hsl(0,0%,22%)] px-2 py-2.5 text-center text-white text-sm font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                <input type="number" min={0} max={99} value={endMin} onChange={(e) => setEndMin(Math.max(0, parseInt(e.target.value) || 0))} className="w-14 rounded-lg bg-[hsl(var(--surface-elevated))] border border-border/50 px-2 py-2.5 text-center text-white text-sm font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/50" />
                 <span className="text-white/40 font-bold text-lg">:</span>
-                <input type="number" min={0} max={59} value={endSec} onChange={(e) => setEndSec(Math.min(59, Math.max(0, parseInt(e.target.value) || 0)))} className="w-14 rounded-lg bg-[hsl(0,0%,8%)] border border-[hsl(0,0%,22%)] px-2 py-2.5 text-center text-white text-sm font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                <input type="number" min={0} max={59} value={endSec} onChange={(e) => setEndSec(Math.min(59, Math.max(0, parseInt(e.target.value) || 0)))} className="w-14 rounded-lg bg-[hsl(var(--surface-elevated))] border border-border/50 px-2 py-2.5 text-center text-white text-sm font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/50" />
               </div>
             </div>
           </div>
-          <div className="rounded-lg bg-[hsl(0,0%,8%)] px-4 py-3 flex items-center justify-between">
+
+          {/* Duration display */}
+          <div className="rounded-lg bg-[hsl(var(--surface-elevated))] px-4 py-3 flex items-center justify-between">
             <span className="text-xs text-white/50">משך הקטע</span>
             <span className={`text-sm font-mono font-bold tabular-nums ${isValid ? 'text-primary' : 'text-red-400'}`}>
               {isValid ? formatDur(clipDuration) : 'לא תקין'}
             </span>
           </div>
           {!isValid && <p className="text-xs text-red-400 text-center">זמן הסיום חייב להיות אחרי זמן ההתחלה</p>}
+
+          {/* Title input */}
+          <div className="space-y-2">
+            <label className="text-sm text-muted-foreground font-medium">כותרת הקטע <span className="text-red-400">*</span></label>
+            <input
+              type="text"
+              value={snippetTitle}
+              onChange={(e) => setSnippetTitle(e.target.value)}
+              placeholder="לדוגמה: קטע יפה על..."
+              className="w-full bg-[hsl(var(--surface-elevated))] border border-border/50 rounded-lg px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40"
+              dir="rtl"
+            />
+          </div>
+
+          {/* Description textarea */}
+          <div className="space-y-2">
+            <label className="text-sm text-muted-foreground font-medium">תיאור (אופציונלי)</label>
+            <textarea
+              value={snippetDescription}
+              onChange={(e) => setSnippetDescription(e.target.value)}
+              placeholder="תאר את הקטע בקצרה..."
+              className="w-full bg-[hsl(var(--surface-elevated))] border border-border/50 rounded-lg px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 resize-none"
+              rows={2}
+              dir="rtl"
+            />
+          </div>
+
+          {/* Buttons */}
           <div className="flex gap-3 pt-1">
             <button onClick={onClose} className="flex-1 py-3 rounded-xl text-sm font-medium text-white/70 bg-white/5 hover:bg-white/10 transition-colors">ביטול</button>
-            <button onClick={handleShare} disabled={!isValid} className="flex-1 py-3 rounded-xl text-sm font-bold text-primary-foreground bg-primary hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2">
-              {copied ? <><Check className="h-4 w-4" />הועתק!</> : shared ? <><Check className="h-4 w-4" />שותף!</> : <><Share2 className="h-4 w-4" />שתף קטע</>}
+            <button
+              onClick={handleSnippetSubmit}
+              disabled={!isValid || !snippetTitle.trim() || snippetSubmitting}
+              className="flex-1 py-3 rounded-xl text-sm font-bold text-primary-foreground bg-primary hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+            >
+              {snippetSubmitting ? <><Loader2 className="h-4 w-4 animate-spin" />שולח...</> : <>שלח לאדמין</>}
             </button>
           </div>
         </div>
@@ -376,6 +428,13 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
     const normalizedFileUrl = normalizeAudioUrl(audio.audio_url);
     return currentTrack.audioUrl === normalizedFileUrl || currentTrack.audioUrl === audio.audio_url;
   }
+
+  // Track the currently playing audio file ID for snippet submissions
+  const currentAudioFileId = useMemo(() => {
+    if (!currentTrack || !isCurrentLesson) return null;
+    const activeFile = audioFiles.find((af) => isFileActive(af));
+    return activeFile?.id ?? null;
+  }, [currentTrack, isCurrentLesson, audioFiles]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleFileClick(audio: LessonAudio) {
     if (isFileActive(audio)) {
@@ -615,14 +674,14 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
             <span className="text-[10px]">{locale === 'he' ? 'סימניה' : 'Bookmark'}</span>
           </button>
 
-          {/* Share clip */}
+          {/* Mark snippet */}
           <button
             onClick={() => setShowShareClipDialog(true)}
             disabled={!isCurrentLesson}
             className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           >
             <Scissors className="h-5 w-5" />
-            <span className="text-[10px]">{locale === 'he' ? 'שתף קטע' : 'Share Clip'}</span>
+            <span className="text-[10px]">{locale === 'he' ? 'סימון קטע' : 'Mark Snippet'}</span>
           </button>
 
           {/* Driving mode */}
@@ -909,14 +968,14 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
         />
       )}
 
-      {/* Share clip dialog — inlined to avoid separate 'use client' import */}
-      <ShareClipDialogInline
+      {/* Mark snippet dialog — inlined to avoid separate 'use client' import */}
+      <MarkSnippetDialogInline
         isOpen={showShareClipDialog}
         onClose={() => setShowShareClipDialog(false)}
         lessonId={lesson.id}
+        currentAudioFileId={currentAudioFileId}
         currentTime={isCurrentLesson ? currentTime : 0}
         duration={isCurrentLesson ? duration : lesson.duration}
-        lessonTitle={lesson.hebrew_title || lesson.title}
       />
     </div>
   );

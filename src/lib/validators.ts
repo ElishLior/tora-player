@@ -92,3 +92,24 @@ export const updateCategorySchema = z.object({
   parent_id: z.string().uuid().optional().nullable(),
   sort_order: z.number().int().min(0).optional(),
 });
+
+// ==================== SNIPPET SUBMISSIONS ====================
+
+export const submitSnippetSchema = z.object({
+  lesson_id: z.string().uuid(),
+  audio_file_id: z.string().uuid().optional().nullable(),
+  title: z.string().min(1, 'Title is required'),
+  description: z.string().optional().nullable(),
+  start_time: z.number().int().min(0),
+  end_time: z.number().int().min(1),
+});
+
+export const updateSnippetSubmissionSchema = z.object({
+  title: z.string().min(1).optional(),
+  description: z.string().optional().nullable(),
+  start_time: z.number().int().min(0).optional(),
+  end_time: z.number().int().min(1).optional(),
+  status: z.enum(['pending', 'approved', 'rejected']).optional(),
+  admin_notes: z.string().optional().nullable(),
+  result_lesson_id: z.string().uuid().optional().nullable(),
+});

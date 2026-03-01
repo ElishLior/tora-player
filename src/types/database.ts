@@ -195,3 +195,25 @@ export interface CreateSeriesInput {
   hebrew_name?: string;
   description?: string;
 }
+
+// ==================== SNIPPET SUBMISSIONS ====================
+
+export interface SnippetSubmission {
+  id: string;
+  lesson_id: string;
+  audio_file_id: string | null;
+  title: string;
+  description: string | null;
+  start_time: number;
+  end_time: number;
+  status: 'pending' | 'approved' | 'rejected';
+  admin_notes: string | null;
+  result_lesson_id: string | null;
+  created_at: string;
+  reviewed_at: string | null;
+}
+
+export interface SnippetSubmissionWithLesson extends SnippetSubmission {
+  lesson?: { id: string; title: string; hebrew_title: string | null };
+  audio_file?: { id: string; original_name: string; file_key: string; duration: number | null };
+}
