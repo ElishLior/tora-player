@@ -10,8 +10,9 @@ import { UploadProgress } from '@/components/upload/upload-progress';
 import { useUpload, type FileWithMeta } from '@/hooks/use-upload';
 import { createLesson } from '@/actions/lessons';
 import { createSeries } from '@/actions/series';
+import { getCategories } from '@/actions/categories';
 import type { ParsedWhatsAppMessage } from '@/lib/whatsapp-parser';
-import type { Series } from '@/types/database';
+import type { Series, CategoryWithChildren } from '@/types/database';
 import { Link } from '@/i18n/routing';
 
 interface LessonMetadata {
@@ -53,6 +54,10 @@ export function UploadForm({ series: initialSeries, defaultSeriesId }: UploadFor
   const [metadata, setMetadata] = useState<LessonMetadata | null>(null);
   const [metadataLoading, setMetadataLoading] = useState(false);
   const [autoTitleApplied, setAutoTitleApplied] = useState(false);
+
+  // Category state
+  const [categoryId, setCategoryId] = useState<string>('');
+  const [categories, setCategories] = useState<CategoryWithChildren[]>([]);
 
   // Series state
   const [seriesList, setSeriesList] = useState<Series[]>(initialSeries);
@@ -101,6 +106,15 @@ export function UploadForm({ series: initialSeries, defaultSeriesId }: UploadFor
 
     return () => { cancelled = true; };
   }, [date]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch categories on mount
+  useEffect(() => {
+    async function loadCategories() {
+      const result = await getCategories();
+      if (result.data) setCategories(result.data);
+    }
+    loadCategories();
+  }, []);
 
   const handleFilesSelected = useCallback((selectedFiles: SelectedFile[]) => {
     setFiles(selectedFiles);
@@ -162,6 +176,9 @@ export function UploadForm({ series: initialSeries, defaultSeriesId }: UploadFor
       formData.set('source_type', mode === 'upload' ? 'upload' : 'url_import');
       if (selectedSeriesId) {
         formData.set('series_id', selectedSeriesId);
+      }
+      if (categoryId) {
+        formData.set('category_id', categoryId);
       }
       if (parsedMessage?.partNumber) {
         formData.set('part_number', String(parsedMessage.partNumber));
@@ -443,6 +460,36 @@ export function UploadForm({ series: initialSeries, defaultSeriesId }: UploadFor
                 </button>
               </div>
             )}
+          </div>
+
+          {/* Category picker */}
+          <div>
+            <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">
+              קטגוריה
+            </label>
+            <select
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+              className="w-full rounded-lg bg-[hsl(var(--surface-elevated))] px-4 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 border-0"
+              dir="rtl"
+            >
+              <option value="">ללא קטגוריה</option>
+              {categories.map((parent) => (
+                parent.children.length > 0 ? (
+                  <optgroup key={parent.id} label={parent.hebrew_name}>
+                    {parent.children.map((child) => (
+                      <option key={child.id} value={child.id}>
+                        {child.hebrew_name}
+                      </option>
+                    ))}
+                  </optgroup>
+                ) : (
+                  <option key={parent.id} value={parent.id}>
+                    {parent.hebrew_name}
+                  </option>
+                )
+              ))}
+            </select>
           </div>
 
           <div>

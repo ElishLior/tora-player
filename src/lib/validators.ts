@@ -18,6 +18,7 @@ export const createLessonSchema = z.object({
   summary: z.string().optional().nullable(),
   lesson_type: z.string().optional().nullable(),
   seder_number: z.number().int().positive().optional().nullable(),
+  category_id: z.string().uuid().optional().nullable(),
 });
 
 export const updateLessonSchema = z.object({
@@ -70,4 +71,24 @@ export const searchSchema = z.object({
   date_to: z.string().optional(),
   limit: z.number().int().min(1).max(100).default(20),
   offset: z.number().int().min(0).default(0),
+});
+
+// ==================== CATEGORIES ====================
+
+export const createCategorySchema = z.object({
+  hebrew_name: z.string().min(1, 'Hebrew name is required'),
+  name: z.string().optional(),
+  description: z.string().optional().nullable(),
+  icon: z.string().optional().nullable(),
+  parent_id: z.string().uuid().optional().nullable(),
+  sort_order: z.number().int().min(0).optional(),
+});
+
+export const updateCategorySchema = z.object({
+  hebrew_name: z.string().min(1).optional(),
+  name: z.string().optional().nullable(),
+  description: z.string().optional().nullable(),
+  icon: z.string().optional().nullable(),
+  parent_id: z.string().uuid().optional().nullable(),
+  sort_order: z.number().int().min(0).optional(),
 });

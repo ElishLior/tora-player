@@ -30,6 +30,7 @@ export async function createLesson(formData: FormData) {
     summary: formData.get('summary') as string || undefined,
     lesson_type: formData.get('lesson_type') as string || undefined,
     seder_number: formData.get('seder_number') ? Number(formData.get('seder_number')) : undefined,
+    category_id: formData.get('category_id') as string || undefined,
   };
 
   const parsed = createLessonSchema.safeParse(raw);

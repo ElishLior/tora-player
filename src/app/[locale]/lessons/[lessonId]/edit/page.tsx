@@ -24,7 +24,8 @@ import {
 } from '@/actions/lessons';
 import { useUpload, type FileWithMeta } from '@/hooks/use-upload';
 import { UploadZone, type SelectedFile } from '@/components/upload/upload-zone';
-import type { LessonAudio, LessonImage } from '@/types/database';
+import type { LessonAudio, LessonImage, CategoryWithChildren } from '@/types/database';
+import { getCategories } from '@/actions/categories';
 
 interface MetadataSuggestion {
   title: string;
@@ -57,6 +58,10 @@ export default function EditLessonPage() {
   const [description, setDescription] = useState('');
   const [date, setDate] = useState('');
   const [isPublished, setIsPublished] = useState(false);
+
+  // Category
+  const [categoryId, setCategoryId] = useState<string>('');
+  const [categories, setCategories] = useState<CategoryWithChildren[]>([]);
 
   // Metadata fields
   const [hebrewDate, setHebrewDate] = useState('');
@@ -92,10 +97,11 @@ export default function EditLessonPage() {
   // Load data
   useEffect(() => {
     async function load() {
-      const [lessonResult, audioResult, imagesResult] = await Promise.all([
+      const [lessonResult, audioResult, imagesResult, categoriesResult] = await Promise.all([
         getLesson(lessonId),
         getAudioFiles(lessonId),
         getImages(lessonId),
+        getCategories(),
       ]);
       if (lessonResult.data) {
         const lesson = lessonResult.data;
@@ -104,6 +110,7 @@ export default function EditLessonPage() {
         setDescription(lesson.description || '');
         setDate(lesson.date || '');
         setIsPublished(lesson.is_published);
+        setCategoryId(lesson.category_id || '');
         // Metadata
         setHebrewDate(lesson.hebrew_date || '');
         setParsha(lesson.parsha || '');
@@ -118,6 +125,9 @@ export default function EditLessonPage() {
       }
       if (imagesResult.data) {
         setImages(imagesResult.data);
+      }
+      if (categoriesResult.data) {
+        setCategories(categoriesResult.data);
       }
       setLoading(false);
     }
@@ -176,6 +186,7 @@ export default function EditLessonPage() {
       formData.set('location', location);
       formData.set('summary', summary);
       formData.set('lesson_type', lessonType);
+      formData.set('category_id', categoryId || '');
       if (sederNumber) formData.set('seder_number', sederNumber);
 
       const result = await updateLesson(lessonId, formData);
@@ -599,6 +610,36 @@ export default function EditLessonPage() {
               }`}
             />
           </button>
+        </div>
+
+        {/* Category picker */}
+        <div>
+          <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">
+            קטגוריה
+          </label>
+          <select
+            value={categoryId}
+            onChange={(e) => setCategoryId(e.target.value)}
+            className="w-full rounded-lg bg-[hsl(var(--surface-elevated))] px-4 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 border-0"
+            dir="rtl"
+          >
+            <option value="">ללא קטגוריה</option>
+            {categories.map((parent) => (
+              parent.children.length > 0 ? (
+                <optgroup key={parent.id} label={parent.hebrew_name}>
+                  {parent.children.map((child) => (
+                    <option key={child.id} value={child.id}>
+                      {child.hebrew_name}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : (
+                <option key={parent.id} value={parent.id}>
+                  {parent.hebrew_name}
+                </option>
+              )
+            ))}
+          </select>
         </div>
 
         {/* Success / Error */}
