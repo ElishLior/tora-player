@@ -78,9 +78,9 @@ export function useAudioPlayer() {
         audioEl.setAttribute('webkit-playsinline', '');
       }
 
-      if (useAudioStore.getState().isPlaying) {
-        audioEngine.play();
-      }
+      // NOTE: Do NOT call audioEngine.play() here. The play/pause sync effect
+      // is the SOLE authority for calling play(). Calling it here too caused
+      // a dual-effect race condition (two useEffects both calling play()).
     }
 
     loadTrack();
@@ -102,6 +102,17 @@ export function useAudioPlayer() {
         // Try offline first, then fall back to streaming
         getOfflineAudioUrl(state.currentTrack.id).then((offlineUrl) => {
           const url = offlineUrl || state.currentTrack!.audioUrl;
+          // Use onLoad callback to play when ready, instead of setTimeout
+          if (useAudioStore.getState().isPlaying) {
+            const prevOnLoad = audioEngine['onLoad'];
+            audioEngine.setOnLoad((duration) => {
+              audioEngine.setOnLoad(prevOnLoad || (() => {}));
+              prevOnLoad?.(duration);
+              if (useAudioStore.getState().isPlaying) {
+                audioEngine.play();
+              }
+            });
+          }
           audioEngine.load(url, {
             startPosition: state.currentTime > 0 ? state.currentTime : undefined,
           });
@@ -109,9 +120,6 @@ export function useAudioPlayer() {
           if (audioEl) {
             audioEl.setAttribute('playsinline', '');
             audioEl.setAttribute('webkit-playsinline', '');
-          }
-          if (state.isPlaying) {
-            setTimeout(() => audioEngine.play(), 300);
           }
         });
       }
@@ -122,26 +130,41 @@ export function useAudioPlayer() {
   }, []); // Empty deps — uses getState() for fresh state
 
   // Sync play/pause — re-load engine if needed, then play/pause
+  // This is the SOLE authority for calling audioEngine.play()/pause()
   useEffect(() => {
     if (!store.currentTrack) return;
     if (store.isPlaying) {
+      // Guard: if engine is already playing, don't call play() again
+      if (audioEngine.isPlaying()) return;
+
       // If engine is not loaded (e.g., after page refresh, browser killed audio),
-      // re-load the track first, then play
+      // re-load the track first, then play via onLoad callback
       if (!audioEngine.isLoaded() && store.currentTrack.audioUrl) {
         const trackId = store.currentTrack.id;
         const trackUrl = store.currentTrack.audioUrl;
         const startPos = store.currentTime > 0 ? store.currentTime : undefined;
         // Try offline first
         getOfflineAudioUrl(trackId).then((offlineUrl) => {
+          // Check state is still isPlaying before proceeding (user may have paused during async)
+          if (!useAudioStore.getState().isPlaying) return;
           const url = offlineUrl || trackUrl;
+          // Set onLoad to trigger play when the track is actually ready
+          const prevOnLoad = audioEngine['onLoad'];
+          audioEngine.setOnLoad((duration) => {
+            // Restore the original onLoad handler
+            audioEngine.setOnLoad(prevOnLoad || (() => {}));
+            prevOnLoad?.(duration);
+            // Only play if store still says isPlaying (user may have paused during load)
+            if (useAudioStore.getState().isPlaying) {
+              audioEngine.play();
+            }
+          });
           audioEngine.load(url, { startPosition: startPos });
           const audioEl = audioEngine.getAudioElement();
           if (audioEl) {
             audioEl.setAttribute('playsinline', '');
             audioEl.setAttribute('webkit-playsinline', '');
           }
-          // Wait for Howler to finish loading before playing
-          setTimeout(() => audioEngine.play(), 300);
         });
       } else {
         audioEngine.play();

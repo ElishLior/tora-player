@@ -143,7 +143,8 @@ export const useAudioStore = create<AudioPlayerState>()(
         currentTime: state.currentTime,
         queue: state.queue,
         queueIndex: state.queueIndex,
-        isPlaying: state.isPlaying,
+        // NOTE: isPlaying intentionally excluded — persisting it caused
+        // phantom auto-resume on page refresh / rehydration
       }),
     }
   )

@@ -76,10 +76,14 @@ class AudioEngine {
       onplayerror: (_id: number, error: unknown) => {
         this.onError?.(`Playback error: ${error}`);
         // Try to recover — but only if user hasn't explicitly paused
+        // and the same Howl instance is still active (not stale)
         if (this.howl) {
+          const howlAtError = this.howl;
+          const urlAtError = this.currentUrl;
           this.howl.once('unlock', () => {
-            // Guard: don't auto-resume if user explicitly paused
-            if (this.howl && !this._userPaused) {
+            // Guard: don't auto-resume if user explicitly paused,
+            // or if the Howl/URL has changed since the error (stale unlock)
+            if (this.howl === howlAtError && this.currentUrl === urlAtError && !this._userPaused) {
               this.howl.play();
             }
           });
@@ -90,7 +94,6 @@ class AudioEngine {
 
   play() {
     if (!this.howl) return;
-    this._userPaused = false;
     // If already playing, don't create a duplicate stream
     if (this.howl.playing(this.soundId ?? undefined)) return;
     // Reuse existing sound ID to resume instead of creating a new stream
@@ -99,6 +102,9 @@ class AudioEngine {
     } else {
       this.soundId = this.howl.play();
     }
+    // Only clear _userPaused AFTER we actually start playing,
+    // not at the top — prevents race where a pending play() clears a recent pause()
+    this._userPaused = false;
     this.startTimeTracking();
   }
 
@@ -108,9 +114,9 @@ class AudioEngine {
     // Pause the specific sound ID to avoid orphan streams
     if (this.soundId !== null) {
       this.howl.pause(this.soundId);
-    } else {
-      this.howl.pause();
     }
+    // Safety net: also pause without soundId to ensure ALL sounds on this Howl stop
+    this.howl.pause();
     this.stopTimeTracking();
   }
 
@@ -174,6 +180,14 @@ class AudioEngine {
       return sounds[0]._node as HTMLAudioElement;
     }
     return null;
+  }
+
+  /** Stop all sounds on the current Howl instance without unloading */
+  stopAll() {
+    if (!this.howl) return;
+    this._userPaused = true;
+    this.howl.stop();
+    this.stopTimeTracking();
   }
 
   unload() {

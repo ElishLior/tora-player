@@ -104,9 +104,9 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
         </div>
 
         {/* Content */}
-        <div className="flex-1 flex flex-col items-center justify-center px-8 gap-6">
+        <div className="flex-1 flex flex-col items-center px-8 gap-5 overflow-y-auto pt-4 pb-6">
           {/* Large artwork */}
-          <div className="w-72 h-72 sm:w-80 sm:h-80 rounded-xl shadow-2xl flex items-center justify-center overflow-hidden"
+          <div className="w-64 h-64 sm:w-72 sm:h-72 rounded-xl shadow-2xl flex-shrink-0 flex items-center justify-center overflow-hidden"
             style={{
               background: 'linear-gradient(135deg, hsl(141 30% 18%) 0%, hsl(141 20% 8%) 100%)',
             }}
@@ -120,7 +120,7 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
           </div>
 
           {/* Track info */}
-          <div className="w-full max-w-md space-y-1">
+          <div className="w-full max-w-md space-y-1 flex-shrink-0">
             <h2 className="text-xl font-bold text-foreground truncate" dir="rtl">
               {currentTrack.hebrewTitle || currentTrack.title}
             </h2>
@@ -139,7 +139,7 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
           </div>
 
           {/* Seek bar with bookmark markers */}
-          <div className="w-full max-w-md relative">
+          <div className="w-full max-w-md relative flex-shrink-0">
             <SeekBar currentTime={currentTime} duration={duration} onSeek={seekTo} />
             {/* Bookmark markers on seek bar */}
             {duration > 0 && lessonBookmarks.length > 0 && (
@@ -163,15 +163,15 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
             )}
           </div>
 
-          {/* Main controls -- dir="ltr" keeps layout predictable; we swap icons+functions for RTL */}
-          <div dir="ltr" className="flex items-center justify-center gap-6 w-full max-w-md">
+          {/* Main controls -- dir="ltr" keeps standard media layout (⏪ ▶ ⏩) */}
+          <div dir="ltr" className="flex items-center justify-center gap-6 w-full max-w-md flex-shrink-0">
             <SpeedControl speed={playbackSpeed} onSpeedChange={setPlaybackSpeed} />
 
-            {/* In RTL: left = forward in time, right = backward. Icons stay, handlers swap. */}
+            {/* Skip backward: left-arrow icon = go back in time */}
             <button
-              onClick={() => skipForward(15)}
+              onClick={() => skipBackward(15)}
               className="p-2 text-muted-foreground hover:text-foreground transition-colors"
-              aria-label={t('skipForward')}
+              aria-label={t('skipBackward')}
             >
               <Skip15Back className="h-8 w-8" />
             </button>
@@ -188,11 +188,11 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
               )}
             </button>
 
-            {/* In RTL: right side = backward in time */}
+            {/* Skip forward: right-arrow icon = go forward in time */}
             <button
-              onClick={() => skipBackward(15)}
+              onClick={() => skipForward(15)}
               className="p-2 text-muted-foreground hover:text-foreground transition-colors"
-              aria-label={t('skipBackward')}
+              aria-label={t('skipForward')}
             >
               <Skip15Forward className="h-8 w-8" />
             </button>
@@ -202,7 +202,7 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
           </div>
 
           {/* Secondary actions */}
-          <div className="flex items-center justify-center gap-6 pt-2 flex-wrap">
+          <div className="flex items-center justify-center gap-6 pt-2 flex-wrap flex-shrink-0">
             <button
               onClick={() => setShowBookmarkDialog(true)}
               className={`flex flex-col items-center gap-1.5 transition-colors ${
