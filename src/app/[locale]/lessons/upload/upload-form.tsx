@@ -107,14 +107,23 @@ export function UploadForm({ series: initialSeries, defaultSeriesId }: UploadFor
     return () => { cancelled = true; };
   }, [date]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch categories on mount
+  // Fetch categories on mount & set default
   useEffect(() => {
     async function loadCategories() {
       const result = await getCategories();
-      if (result.data) setCategories(result.data);
+      if (result.data) {
+        setCategories(result.data);
+        // Default to "מתחילת עץ חיים" subcategory
+        if (!categoryId) {
+          for (const parent of result.data) {
+            const match = parent.children.find(c => c.hebrew_name === 'מתחילת עץ חיים');
+            if (match) { setCategoryId(match.id); break; }
+          }
+        }
+      }
     }
     loadCategories();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleFilesSelected = useCallback((selectedFiles: SelectedFile[]) => {
     setFiles(selectedFiles);
