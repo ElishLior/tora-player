@@ -1,5 +1,22 @@
 // Database types matching Supabase schema
 
+export interface Category {
+  id: string;
+  name: string;
+  hebrew_name: string;
+  description: string | null;
+  icon: string | null;
+  sort_order: number;
+  parent_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CategoryWithChildren extends Category {
+  children: Category[];
+  lesson_count?: number;
+}
+
 export interface Series {
   id: string;
   name: string;
@@ -37,6 +54,8 @@ export interface Lesson {
   summary: string | null;
   lesson_type: string | null;
   seder_number: number | null;
+  // New field from migration 005
+  category_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -71,6 +90,7 @@ export interface LessonImage {
 
 export interface LessonWithRelations extends Lesson {
   series?: Series | null;
+  category?: Category | null;
   parts?: Lesson[];
   snippets?: Snippet[];
   progress?: PlaybackProgress | null;

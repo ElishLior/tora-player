@@ -2,19 +2,20 @@ export const dynamic = 'force-dynamic';
 
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { getAllCategories } from '@/lib/supabase/queries';
 import { EmptyState } from '@/components/shared/empty-state';
 import { LessonCard } from '@/components/lessons/lesson-card';
 import { LessonsClient } from './lessons-client';
 import { Link } from '@/i18n/routing';
 import { BookOpen, Plus, Search } from 'lucide-react';
 import { isAdmin } from '@/actions/auth';
-import type { LessonWithRelations } from '@/types/database';
+import type { LessonWithRelations, Category } from '@/types/database';
 
 const PAGE_SIZE = 20;
 
 type Props = {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ q?: string; type?: string }>;
+  searchParams: Promise<{ q?: string; type?: string; cat?: string }>;
 };
 
 function groupByDate(lessons: LessonWithRelations[], locale: string) {
@@ -42,7 +43,7 @@ function groupByDate(lessons: LessonWithRelations[], locale: string) {
 
 export default async function LessonsPage({ params, searchParams }: Props) {
   const { locale } = await params;
-  const { q, type: audioTypeFilter } = await searchParams;
+  const { q, type: audioTypeFilter, cat: categoryFilter } = await searchParams;
   setRequestLocale(locale);
   const t = await getTranslations('lessons');
 
@@ -52,9 +53,13 @@ export default async function LessonsPage({ params, searchParams }: Props) {
   let lessons: LessonWithRelations[] = [];
   let hasMore = false;
   let isSearchMode = false;
+  let allCategories: Category[] = [];
 
   if (supabase) {
     try {
+      // Fetch leaf categories (sub-categories) for filter tabs
+      allCategories = await getAllCategories(supabase);
+
       // If filtering by audio type, get matching lesson IDs first
       let filterLessonIds: string[] | null = null;
       if (audioTypeFilter) {
@@ -65,43 +70,41 @@ export default async function LessonsPage({ params, searchParams }: Props) {
         filterLessonIds = [...new Set((audioMatches || []).map((a: { lesson_id: string }) => a.lesson_id))];
       }
 
+      // Category filter: get matching category IDs (include children)
+      let categoryIds: string[] | null = null;
+      if (categoryFilter) {
+        const children = allCategories.filter(c => c.parent_id === categoryFilter);
+        categoryIds = [categoryFilter, ...children.map(c => c.id)];
+      }
+
       if (q) {
-        // Search mode: return all results without infinite scroll
+        // Search mode
         isSearchMode = true;
         const escaped = q.replace(/[%_\\]/g, '\\$&');
         let query = supabase
           .from('lessons')
-          .select('*, series(name, hebrew_name)')
+          .select('*, series(name, hebrew_name), category:categories(id, hebrew_name)')
           .eq('is_published', true)
           .or(`title.ilike.%${escaped}%,hebrew_title.ilike.%${escaped}%,description.ilike.%${escaped}%`)
           .order('date', { ascending: false })
           .limit(50);
-        if (filterLessonIds) {
-          query = query.in('id', filterLessonIds);
-        }
+        if (filterLessonIds) query = query.in('id', filterLessonIds);
+        if (categoryIds) query = query.in('category_id', categoryIds);
         const { data } = await query;
         lessons = (data || []) as LessonWithRelations[];
-      } else if (filterLessonIds) {
-        // Audio type filter with pagination
-        const { data } = await supabase
-          .from('lessons')
-          .select('*, series(name, hebrew_name)')
-          .eq('is_published', true)
-          .in('id', filterLessonIds)
-          .order('date', { ascending: false })
-          .range(0, PAGE_SIZE);
-
-        lessons = (data || []) as LessonWithRelations[];
-        hasMore = lessons.length > PAGE_SIZE;
-        if (hasMore) lessons = lessons.slice(0, PAGE_SIZE);
       } else {
-        // Default: paginated listing
-        const { data } = await supabase
+        // Normal/filtered mode with pagination
+        let query = supabase
           .from('lessons')
-          .select('*, series(name, hebrew_name)')
+          .select('*, series(name, hebrew_name), category:categories(id, hebrew_name)')
           .eq('is_published', true)
-          .order('date', { ascending: false })
-          .range(0, PAGE_SIZE);
+          .order('date', { ascending: false });
+
+        if (filterLessonIds) query = query.in('id', filterLessonIds);
+        if (categoryIds) query = query.in('category_id', categoryIds);
+
+        query = query.range(0, PAGE_SIZE);
+        const { data } = await query;
 
         lessons = (data || []) as LessonWithRelations[];
         hasMore = lessons.length > PAGE_SIZE;
@@ -111,6 +114,12 @@ export default async function LessonsPage({ params, searchParams }: Props) {
       lessons = [];
     }
   }
+
+  // Build leaf categories for filter tabs (sub-categories under "שיעורים")
+  const lessonsParent = allCategories.find(c => c.name === 'Lessons' && !c.parent_id);
+  const leafCategories = lessonsParent
+    ? allCategories.filter(c => c.parent_id === lessonsParent.id)
+    : [];
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -139,21 +148,22 @@ export default async function LessonsPage({ params, searchParams }: Props) {
         />
       </form>
 
-      {/* Audio type filter tabs */}
-      <div className="flex gap-2" dir="rtl">
+      {/* Filter tabs: audio type + category */}
+      <div className="flex gap-2 flex-wrap" dir="rtl">
+        {/* Audio type tabs */}
         {[
           { value: '', label: 'הכל' },
           { value: 'סידור', label: 'סידור' },
           { value: 'עץ חיים', label: 'עץ חיים' },
         ].map((tab) => {
-          const isActive = (audioTypeFilter || '') === tab.value;
-          const params = new URLSearchParams();
-          if (q) params.set('q', q);
-          if (tab.value) params.set('type', tab.value);
-          const href = params.toString() ? `?${params.toString()}` : '?';
+          const isActive = !categoryFilter && (audioTypeFilter || '') === tab.value;
+          const p = new URLSearchParams();
+          if (q) p.set('q', q);
+          if (tab.value) p.set('type', tab.value);
+          const href = p.toString() ? `?${p.toString()}` : '?';
           return (
             <a
-              key={tab.value}
+              key={`type-${tab.value}`}
               href={href}
               className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors ${
                 isActive
@@ -165,12 +175,32 @@ export default async function LessonsPage({ params, searchParams }: Props) {
             </a>
           );
         })}
+
+        {/* Category filter tabs */}
+        {leafCategories.map((cat) => {
+          const isActive = categoryFilter === cat.id;
+          const p = new URLSearchParams();
+          if (q) p.set('q', q);
+          p.set('cat', cat.id);
+          return (
+            <a
+              key={`cat-${cat.id}`}
+              href={`?${p.toString()}`}
+              className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors ${
+                isActive
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-[hsl(var(--surface-elevated))] text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {cat.hebrew_name}
+            </a>
+          );
+        })}
       </div>
 
       {/* Lesson content */}
       {lessons.length > 0 ? (
         isSearchMode ? (
-          // Search mode: render all results without infinite scroll
           groupByDate(lessons, locale).map((group) => (
             <section key={group.label}>
               <h2 className="text-sm font-bold mb-2 text-muted-foreground uppercase tracking-wider">
@@ -184,12 +214,12 @@ export default async function LessonsPage({ params, searchParams }: Props) {
             </section>
           ))
         ) : (
-          // Normal mode: infinite scroll client component
           <LessonsClient
             initialLessons={lessons}
             initialHasMore={hasMore}
             locale={locale}
             audioTypeFilter={audioTypeFilter}
+            categoryFilter={categoryFilter}
           />
         )
       ) : (

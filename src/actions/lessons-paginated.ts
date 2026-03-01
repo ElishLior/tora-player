@@ -6,7 +6,8 @@ import type { LessonWithRelations } from '@/types/database';
 export async function getLessonsPaginated(
   offset: number,
   limit: number,
-  audioType?: string
+  audioType?: string,
+  categoryId?: string
 ): Promise<{ lessons: LessonWithRelations[]; hasMore: boolean }> {
   const supabase = await createServerSupabaseClient();
   if (!supabase) {
@@ -32,12 +33,22 @@ export async function getLessonsPaginated(
 
     let query = supabase
       .from('lessons')
-      .select('*, series(name, hebrew_name)')
+      .select('*, series(name, hebrew_name), category:categories(id, hebrew_name)')
       .eq('is_published', true)
       .order('date', { ascending: false });
 
     if (filterLessonIds) {
       query = query.in('id', filterLessonIds);
+    }
+
+    if (categoryId) {
+      // Get child category IDs too (for parent categories)
+      const { data: children } = await supabase
+        .from('categories')
+        .select('id')
+        .eq('parent_id', categoryId);
+      const catIds = [categoryId, ...(children || []).map((c: { id: string }) => c.id)];
+      query = query.in('category_id', catIds);
     }
 
     // Fetch one extra to determine if there are more

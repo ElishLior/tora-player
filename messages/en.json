@@ -88,6 +88,14 @@
     "noPlaylists": "No playlists yet",
     "lessonsCount": "{count, plural, =0 {No lessons} =1 {1 lesson} other {# lessons}}"
   },
+  "categories": {
+    "title": "Categories",
+    "browse": "Browse Categories",
+    "noCategories": "No categories yet",
+    "noLessonsInCategory": "No lessons in this category yet",
+    "lessonsCount": "{count} lessons",
+    "emptyCategory": "Empty"
+  },
   "series": {
     "title": "Short Clips",
     "noSeries": "No short clips yet"

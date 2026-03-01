@@ -2,13 +2,38 @@ export const dynamic = 'force-dynamic';
 
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { getRecentLessons, getAllSeries } from '@/lib/supabase/queries';
+import { getRecentLessons, getCategoriesTree, getCategoryLessonCounts } from '@/lib/supabase/queries';
 import { LessonCard } from '@/components/lessons/lesson-card';
 import { EmptyState } from '@/components/shared/empty-state';
 import { Link } from '@/i18n/routing';
-import { BookOpen, ListMusic, Bookmark, Scissors, Plus, ChevronLeft } from 'lucide-react';
+import { BookOpen, Wrench, Sparkles, Music, Scissors, FolderOpen, Plus, ChevronLeft } from 'lucide-react';
 import { isAdmin } from '@/actions/auth';
 import { ContinueListeningSection } from '@/components/home/continue-listening-section';
+import type { CategoryWithChildren } from '@/types/database';
+
+const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+  BookOpen,
+  Wrench,
+  Sparkles,
+  Music,
+  Scissors,
+};
+
+const COLOR_MAP: Record<string, string> = {
+  BookOpen: 'from-primary/40 to-primary/20',
+  Wrench: 'from-blue-500/40 to-blue-500/20',
+  Sparkles: 'from-purple-500/40 to-purple-500/20',
+  Music: 'from-amber-500/40 to-amber-500/20',
+  Scissors: 'from-rose-500/40 to-rose-500/20',
+};
+
+const TEXT_COLOR_MAP: Record<string, string> = {
+  BookOpen: 'text-primary',
+  Wrench: 'text-blue-400',
+  Sparkles: 'text-purple-400',
+  Music: 'text-amber-400',
+  Scissors: 'text-rose-400',
+};
 
 type Props = {
   params: Promise<{ locale: string }>;
@@ -18,18 +43,20 @@ export default async function HomePage({ params }: Props) {
   const { locale } = await params;
   setRequestLocale(locale);
   const t = await getTranslations('home');
-  const tCommon = await getTranslations('common');
 
   const supabase = await createServerSupabaseClient();
   const admin = await isAdmin();
 
   let recentLessons: Awaited<ReturnType<typeof getRecentLessons>> = [];
-  let series: Awaited<ReturnType<typeof getAllSeries>> = [];
+  let categories: CategoryWithChildren[] = [];
+  let counts: Record<string, number> = {};
+
   if (supabase) {
     try {
-      [recentLessons, series] = await Promise.all([
+      [recentLessons, categories, counts] = await Promise.all([
         getRecentLessons(supabase, 10),
-        getAllSeries(supabase),
+        getCategoriesTree(supabase),
+        getCategoryLessonCounts(supabase),
       ]);
     } catch {
       // defaults already set
@@ -38,6 +65,12 @@ export default async function HomePage({ params }: Props) {
 
   const isRTL = locale === 'he';
 
+  function getTotalCount(cat: CategoryWithChildren): number {
+    const own = counts[cat.id] || 0;
+    const childTotal = cat.children.reduce((sum, c) => sum + (counts[c.id] || 0), 0);
+    return own + childTotal;
+  }
+
   return (
     <div className="space-y-8 animate-fade-in">
       {/* Greeting - Spotify style */}
@@ -45,48 +78,43 @@ export default async function HomePage({ params }: Props) {
         <h1 className="text-2xl font-bold text-foreground">{t('welcome')}</h1>
       </section>
 
-      {/* Quick Access — compact grid cards */}
+      {/* Categories grid */}
       <section>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-bold">{isRTL ? 'קטגוריות' : 'Categories'}</h2>
+          <Link
+            href="/categories"
+            className="flex items-center gap-0.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {isRTL ? 'הצג הכל' : 'Show all'}
+            <ChevronLeft className="h-3.5 w-3.5" />
+          </Link>
+        </div>
         <div className="grid grid-cols-2 gap-2.5">
-          <Link
-            href="/lessons"
-            className="flex items-center gap-3 rounded-md bg-[hsl(var(--surface-elevated))] p-3 hover:bg-[hsl(var(--surface-highlight))] transition-colors"
-          >
-            <div className="h-8 w-8 rounded bg-gradient-to-br from-primary/40 to-primary/20 flex items-center justify-center">
-              <BookOpen className="h-4 w-4 text-primary" />
-            </div>
-            <span className="text-sm font-semibold">{tCommon('lessons')}</span>
-          </Link>
-          <Link
-            href="/playlists"
-            className="flex items-center gap-3 rounded-md bg-[hsl(var(--surface-elevated))] p-3 hover:bg-[hsl(var(--surface-highlight))] transition-colors"
-          >
-            <div className="h-8 w-8 rounded bg-gradient-to-br from-blue-500/40 to-blue-500/20 flex items-center justify-center">
-              <ListMusic className="h-4 w-4 text-blue-400" />
-            </div>
-            <span className="text-sm font-semibold">{tCommon('playlists')}</span>
-          </Link>
-          <Link
-            href="/bookmarks"
-            className="flex items-center gap-3 rounded-md bg-[hsl(var(--surface-elevated))] p-3 hover:bg-[hsl(var(--surface-highlight))] transition-colors"
-          >
-            <div className="h-8 w-8 rounded bg-gradient-to-br from-amber-500/40 to-amber-500/20 flex items-center justify-center">
-              <Bookmark className="h-4 w-4 text-amber-400" />
-            </div>
-            <span className="text-sm font-semibold">{tCommon('bookmarks')}</span>
-          </Link>
-          <Link
-            href="/series"
-            className="flex items-center gap-3 rounded-md bg-[hsl(var(--surface-elevated))] p-3 hover:bg-[hsl(var(--surface-highlight))] transition-colors"
-          >
-            <div className="h-8 w-8 rounded bg-gradient-to-br from-purple-500/40 to-purple-500/20 flex items-center justify-center">
-              <Scissors className="h-4 w-4 text-purple-400" />
-            </div>
-            <span className="text-sm font-semibold">
-              {tCommon('series')}
-              {series.length > 0 && <span className="text-muted-foreground ms-1">({series.length})</span>}
-            </span>
-          </Link>
+          {categories.map((cat) => {
+            const IconComponent = ICON_MAP[cat.icon || ''] || FolderOpen;
+            const gradient = COLOR_MAP[cat.icon || ''] || 'from-gray-500/40 to-gray-500/20';
+            const textColor = TEXT_COLOR_MAP[cat.icon || ''] || 'text-muted-foreground';
+            const total = getTotalCount(cat);
+
+            return (
+              <Link
+                key={cat.id}
+                href={`/categories/${cat.id}`}
+                className="flex items-center gap-3 rounded-md bg-[hsl(var(--surface-elevated))] p-3 hover:bg-[hsl(var(--surface-highlight))] transition-colors"
+              >
+                <div className={`h-8 w-8 rounded bg-gradient-to-br ${gradient} flex items-center justify-center`}>
+                  <IconComponent className={`h-4 w-4 ${textColor}`} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="text-sm font-semibold block truncate">{cat.hebrew_name}</span>
+                  {total > 0 && (
+                    <span className="text-[10px] text-muted-foreground">{total}</span>
+                  )}
+                </div>
+              </Link>
+            );
+          })}
         </div>
       </section>
 

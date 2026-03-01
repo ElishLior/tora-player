@@ -88,6 +88,14 @@
     "noPlaylists": "אין רשימות השמעה עדיין",
     "lessonsCount": "{count, plural, =0 {אין שיעורים} =1 {שיעור אחד} other {# שיעורים}}"
   },
+  "categories": {
+    "title": "קטגוריות",
+    "browse": "עיון בקטגוריות",
+    "noCategories": "אין קטגוריות עדיין",
+    "noLessonsInCategory": "אין שיעורים בקטגוריה זו עדיין",
+    "lessonsCount": "{count} שיעורים",
+    "emptyCategory": "ריק"
+  },
   "series": {
     "title": "קטעים קצרים",
     "noSeries": "אין קטעים קצרים עדיין"

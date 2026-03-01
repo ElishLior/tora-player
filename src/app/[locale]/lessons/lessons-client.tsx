@@ -17,6 +17,7 @@ interface LessonsClientProps {
   initialHasMore: boolean;
   locale: string;
   audioTypeFilter?: string;
+  categoryFilter?: string;
 }
 
 const PAGE_SIZE = 20;
@@ -49,16 +50,17 @@ export function LessonsClient({
   initialHasMore,
   locale,
   audioTypeFilter,
+  categoryFilter,
 }: LessonsClientProps) {
   const [lessons, setLessons] = useState<LessonWithRelations[]>(initialLessons);
   const [hasMore, setHasMore] = useState(initialHasMore);
 
   const fetchMore = useCallback(async () => {
     const offset = lessons.length;
-    const result = await getLessonsPaginated(offset, PAGE_SIZE, audioTypeFilter || undefined);
+    const result = await getLessonsPaginated(offset, PAGE_SIZE, audioTypeFilter || undefined, categoryFilter || undefined);
     setLessons((prev) => [...prev, ...result.lessons]);
     setHasMore(result.hasMore);
-  }, [lessons.length, audioTypeFilter]);
+  }, [lessons.length, audioTypeFilter, categoryFilter]);
 
   const { sentinelRef, isLoading } = useInfiniteScroll({ fetchMore, hasMore });
 

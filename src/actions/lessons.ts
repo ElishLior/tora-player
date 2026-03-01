@@ -60,7 +60,7 @@ export async function updateLesson(id: string, formData: FormData) {
   const raw: Record<string, unknown> = {};
   const fields = [
     'title', 'hebrew_title', 'description', 'date', 'series_id', 'part_number', 'parent_lesson_id', 'is_published',
-    'hebrew_date', 'parsha', 'teacher', 'location', 'summary', 'lesson_type', 'seder_number',
+    'hebrew_date', 'parsha', 'teacher', 'location', 'summary', 'lesson_type', 'seder_number', 'category_id',
   ];
 
   for (const field of fields) {
@@ -139,7 +139,7 @@ export async function getLesson(id: string) {
 
   const { data, error } = await supabase
     .from('lessons')
-    .select('*, series(*), snippets(*), bookmarks(*), audio_files:lesson_audio(*), images:lesson_images(*)')
+    .select('*, series(*), category:categories(id, hebrew_name), snippets(*), bookmarks(*), audio_files:lesson_audio(*), images:lesson_images(*)')
     .eq('id', id)
     .single();
 
@@ -312,7 +312,7 @@ export async function getLessonsByIds(ids: string[]) {
   const supabase = await requireServerSupabaseClient();
   const { data, error } = await supabase
     .from('lessons')
-    .select('*, series(*)')
+    .select('*, series(*), category:categories(id, hebrew_name)')
     .in('id', ids)
     .eq('is_published', true);
   if (error || !data) return [];
@@ -324,7 +324,7 @@ export async function searchLessons(query: string) {
 
   const { data, error } = await supabase
     .from('lessons')
-    .select('*, series(name, hebrew_name)')
+    .select('*, series(name, hebrew_name), category:categories(id, hebrew_name)')
     .eq('is_published', true)
     .or(`title.ilike.%${query}%,hebrew_title.ilike.%${query}%,description.ilike.%${query}%`)
     .order('date', { ascending: false })
