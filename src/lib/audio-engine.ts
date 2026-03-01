@@ -1,7 +1,11 @@
 'use client';
 
-import { Howl } from 'howler';
+import { Howl, Howler } from 'howler';
 import { normalizeAudioUrl } from '@/lib/audio-url';
+
+// Increase Howler's HTML5 audio pool to prevent "pool exhausted" warnings
+// Default is 10 — raise to 20 for safety with streaming + preloading
+Howler.html5PoolSize = 20;
 
 /**
  * Singleton audio engine wrapping Howler.js.

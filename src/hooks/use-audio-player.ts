@@ -187,9 +187,11 @@ export function useAudioPlayer() {
   // Preload next track in queue when current track starts playing
   const preloadRef = useRef<HTMLAudioElement | null>(null);
   useEffect(() => {
-    // Clean up any previous preloaded element
+    // Clean up any previous preloaded element — fully release the audio resource
     if (preloadRef.current) {
-      preloadRef.current.src = '';
+      preloadRef.current.pause();
+      preloadRef.current.removeAttribute('src');
+      preloadRef.current.load(); // Forces browser to release the audio resource
       preloadRef.current = null;
     }
 
@@ -210,7 +212,9 @@ export function useAudioPlayer() {
 
     return () => {
       if (preloadRef.current) {
-        preloadRef.current.src = '';
+        preloadRef.current.pause();
+        preloadRef.current.removeAttribute('src');
+        preloadRef.current.load();
         preloadRef.current = null;
       }
     };

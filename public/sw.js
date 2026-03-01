@@ -1,5 +1,5 @@
 // Tora Player Service Worker
-const CACHE_VERSION = 'tora-player-v5';
+const CACHE_VERSION = 'tora-player-v6';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DYNAMIC_CACHE = `${CACHE_VERSION}-dynamic`;
 const API_CACHE = `${CACHE_VERSION}-api`;
@@ -90,6 +90,11 @@ self.addEventListener('fetch', (event) => {
   // Skip chrome-extension and other non-http(s) requests
   if (!url.protocol.startsWith('http')) return;
 
+  // Skip audio/image streaming endpoints entirely — 206 partial responses can't be cached
+  if (url.pathname.startsWith('/api/audio/') || url.pathname.startsWith('/api/images/')) {
+    return; // Let browser handle natively (no SW interception)
+  }
+
   // Strategy 1: Network-first for API calls (always need fresh data)
   if (isApiRequest(url)) {
     event.respondWith(networkFirst(event.request, API_CACHE));
@@ -121,7 +126,8 @@ async function staleWhileRevalidate(request, cacheName) {
 
   const fetchPromise = fetch(request)
     .then((response) => {
-      if (response.ok) {
+      // Only cache full 200 responses — 206 partial responses cannot be cached
+      if (response.ok && response.status === 200) {
         cache.put(request, response.clone());
       }
       return response;
@@ -152,7 +158,8 @@ async function staleWhileRevalidate(request, cacheName) {
 async function networkFirst(request, cacheName) {
   try {
     const response = await fetch(request);
-    if (response.ok) {
+    // Only cache full 200 responses — 206 partial responses cannot be cached
+    if (response.ok && response.status === 200) {
       const cache = await caches.open(cacheName);
       cache.put(request, response.clone());
     }
@@ -176,7 +183,8 @@ async function cacheFirst(request, cacheName) {
 
   try {
     const response = await fetch(request);
-    if (response.ok) {
+    // Only cache full 200 responses — 206 partial responses cannot be cached
+    if (response.ok && response.status === 200) {
       const cache = await caches.open(cacheName);
       cache.put(request, response.clone());
     }
