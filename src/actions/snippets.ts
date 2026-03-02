@@ -129,9 +129,9 @@ export async function updateSnippetSubmission(
 
     const supabase = await requireServerSupabaseClient();
 
-    // If status is changing, set reviewed_at
+    // Set reviewed_at when status is explicitly changed to approved or rejected
     const updateData: Record<string, unknown> = { ...parsed.data };
-    if (parsed.data.status) {
+    if (parsed.data.status && parsed.data.status !== 'pending') {
       updateData.reviewed_at = new Date().toISOString();
     }
 

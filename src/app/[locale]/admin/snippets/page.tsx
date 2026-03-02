@@ -58,21 +58,30 @@ function audioBufferToWav(buffer: AudioBuffer): Blob {
 
 async function extractAudioSegment(audioUrl: string, startTime: number, endTime: number): Promise<Blob> {
   const resp = await fetch(audioUrl);
+  if (!resp.ok) {
+    throw new Error(`שגיאה בטעינת האודיו (${resp.status})`);
+  }
   const ab = await resp.arrayBuffer();
   const ctx = new AudioContext();
-  const decoded = await ctx.decodeAudioData(ab);
-  const sr = decoded.sampleRate;
-  const startSamp = Math.floor(startTime * sr);
-  const endSamp = Math.min(Math.floor(endTime * sr), decoded.length);
-  const len = endSamp - startSamp;
-  const offCtx = new OfflineAudioContext(decoded.numberOfChannels, len, sr);
-  const src = offCtx.createBufferSource();
-  src.buffer = decoded;
-  src.connect(offCtx.destination);
-  src.start(0, startTime, endTime - startTime);
-  const rendered = await offCtx.startRendering();
-  await ctx.close();
-  return audioBufferToWav(rendered);
+  try {
+    const decoded = await ctx.decodeAudioData(ab);
+    const sr = decoded.sampleRate;
+    const startSamp = Math.floor(startTime * sr);
+    const endSamp = Math.min(Math.floor(endTime * sr), decoded.length);
+    const len = endSamp - startSamp;
+    if (len <= 0) {
+      throw new Error('טווח הזמן שנבחר לא תקין');
+    }
+    const offCtx = new OfflineAudioContext(decoded.numberOfChannels, len, sr);
+    const src = offCtx.createBufferSource();
+    src.buffer = decoded;
+    src.connect(offCtx.destination);
+    src.start(0, startTime, endTime - startTime);
+    const rendered = await offCtx.startRendering();
+    return audioBufferToWav(rendered);
+  } finally {
+    await ctx.close();
+  }
 }
 
 // ---- Time helpers ----
@@ -177,6 +186,8 @@ export default function AdminSnippetsPage() {
     const result = await getPendingSnippetCount();
     if (result.data !== undefined) {
       setPendingCount(result.data);
+    } else if (result.error) {
+      console.error('Failed to load pending count:', result.error);
     }
   }, []);
 
@@ -194,6 +205,7 @@ export default function AdminSnippetsPage() {
     if (createClipId && !categoriesLoaded) {
       getCategories().then((res) => {
         if (res.data) setCategories(res.data);
+        else if (res.error) setError('שגיאה בטעינת קטגוריות: ' + res.error);
         setCategoriesLoaded(true);
       });
     }
@@ -231,6 +243,11 @@ export default function AdminSnippetsPage() {
 
     audio.addEventListener('ended', () => {
       setPlayingId(null);
+    });
+
+    audio.addEventListener('error', () => {
+      setPlayingId(null);
+      setError('שגיאה בנגינת התצוגה המקדימה');
     });
 
     // Start loading

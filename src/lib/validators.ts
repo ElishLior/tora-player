@@ -38,6 +38,7 @@ export const updateLessonSchema = z.object({
   summary: z.string().optional().nullable(),
   lesson_type: z.string().optional().nullable(),
   seder_number: z.number().int().positive().optional().nullable(),
+  category_id: z.string().uuid().optional().nullable(),
 });
 
 export const createPlaylistSchema = z.object({
@@ -95,14 +96,19 @@ export const updateCategorySchema = z.object({
 
 // ==================== SNIPPET SUBMISSIONS ====================
 
-export const submitSnippetSchema = z.object({
-  lesson_id: z.string().uuid(),
-  audio_file_id: z.string().uuid().optional().nullable(),
-  title: z.string().min(1, 'Title is required'),
-  description: z.string().optional().nullable(),
-  start_time: z.number().int().min(0),
-  end_time: z.number().int().min(1),
-});
+export const submitSnippetSchema = z
+  .object({
+    lesson_id: z.string().uuid(),
+    audio_file_id: z.string().uuid().optional().nullable(),
+    title: z.string().min(1, 'Title is required'),
+    description: z.string().optional().nullable(),
+    start_time: z.number().int().min(0),
+    end_time: z.number().int().min(1),
+  })
+  .refine((d) => d.end_time > d.start_time, {
+    message: 'end_time must be greater than start_time',
+    path: ['end_time'],
+  });
 
 export const updateSnippetSubmissionSchema = z.object({
   title: z.string().min(1).optional(),

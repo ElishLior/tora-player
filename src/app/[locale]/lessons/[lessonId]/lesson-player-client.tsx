@@ -159,6 +159,7 @@ function MarkSnippetDialogInline({
   const [snippetDescription, setSnippetDescription] = useState('');
   const [snippetSubmitting, setSnippetSubmitting] = useState(false);
   const [snippetSuccess, setSnippetSuccess] = useState(false);
+  const [snippetError, setSnippetError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -174,6 +175,7 @@ function MarkSnippetDialogInline({
       setSnippetDescription('');
       setSnippetSubmitting(false);
       setSnippetSuccess(false);
+      setSnippetError(null);
     }
   }, [isOpen, defaultStart, defaultEnd]);
 
@@ -186,6 +188,7 @@ function MarkSnippetDialogInline({
   async function handleSnippetSubmit() {
     if (!snippetTitle.trim()) return;
     setSnippetSubmitting(true);
+    setSnippetError(null);
     try {
       const result = await submitSnippet({
         lesson_id: lessonId,
@@ -196,7 +199,14 @@ function MarkSnippetDialogInline({
         end_time: endTotal,
       });
       if ('error' in result && result.error) {
-        console.error('Submit snippet error:', result.error);
+        const err = result.error;
+        const msg =
+          typeof err === 'string'
+            ? err
+            : '_form' in err
+              ? err._form?.[0]
+              : Object.values(err).flat().join(', ');
+        setSnippetError(msg || 'שגיאה בשליחת הסימון');
       } else {
         setSnippetSuccess(true);
         setTimeout(() => {
@@ -207,7 +217,7 @@ function MarkSnippetDialogInline({
         }, 2500);
       }
     } catch (err) {
-      console.error('Submit snippet error:', err);
+      setSnippetError(err instanceof Error ? err.message : 'שגיאה בשליחת הסימון');
     } finally {
       setSnippetSubmitting(false);
     }
@@ -311,6 +321,11 @@ function MarkSnippetDialogInline({
               dir="rtl"
             />
           </div>
+
+          {/* Error message */}
+          {snippetError && (
+            <p className="text-sm text-red-400 bg-red-500/10 rounded-lg px-3 py-2">{snippetError}</p>
+          )}
 
           {/* Buttons */}
           <div className="flex gap-3 pt-1">
