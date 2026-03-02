@@ -320,6 +320,47 @@ export async function getLessonsByIds(ids: string[]) {
   return data as LessonWithRelations[];
 }
 
+// ==================== BULK CATEGORY UPDATE (admin) ====================
+
+export async function bulkUpdateLessonCategory(
+  lessonIds: string[],
+  categoryId: string | null
+): Promise<{ success?: boolean; error?: string }> {
+  if (!(await isAdmin())) {
+    return { error: 'Unauthorized' };
+  }
+
+  if (!lessonIds.length) {
+    return { error: 'No lessons selected' };
+  }
+
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!lessonIds.every((id) => uuidRegex.test(id))) {
+    return { error: 'Invalid lesson ID' };
+  }
+  if (categoryId !== null && !uuidRegex.test(categoryId)) {
+    return { error: 'Invalid category ID' };
+  }
+
+  try {
+    const supabase = await requireServerSupabaseClient();
+
+    const { error } = await supabase
+      .from('lessons')
+      .update({ category_id: categoryId })
+      .in('id', lessonIds);
+
+    if (error) {
+      return { error: error.message };
+    }
+
+    revalidatePath('/[locale]', 'layout');
+    return { success: true };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Failed to update lessons' };
+  }
+}
+
 export async function searchLessons(query: string) {
   const supabase = await requireServerSupabaseClient();
 

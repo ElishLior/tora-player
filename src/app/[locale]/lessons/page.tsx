@@ -4,7 +4,6 @@ import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { getAllCategories } from '@/lib/supabase/queries';
 import { EmptyState } from '@/components/shared/empty-state';
-import { LessonCard } from '@/components/lessons/lesson-card';
 import { LessonsClient } from './lessons-client';
 import { Link } from '@/i18n/routing';
 import { BookOpen, Plus, Search } from 'lucide-react';
@@ -18,28 +17,6 @@ type Props = {
   searchParams: Promise<{ q?: string; type?: string; cat?: string }>;
 };
 
-function groupByDate(lessons: LessonWithRelations[], locale: string) {
-  const now = new Date();
-  const today = now.toISOString().split('T')[0];
-  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
-  const groups: { label: string; lessons: LessonWithRelations[] }[] = [
-    { label: locale === 'he' ? 'היום' : 'Today', lessons: [] },
-    { label: locale === 'he' ? 'השבוע' : 'This Week', lessons: [] },
-    { label: locale === 'he' ? 'החודש' : 'This Month', lessons: [] },
-    { label: locale === 'he' ? 'ישנים יותר' : 'Older', lessons: [] },
-  ];
-
-  for (const lesson of lessons) {
-    if (lesson.date >= today) groups[0].lessons.push(lesson);
-    else if (lesson.date >= weekAgo) groups[1].lessons.push(lesson);
-    else if (lesson.date >= monthAgo) groups[2].lessons.push(lesson);
-    else groups[3].lessons.push(lesson);
-  }
-
-  return groups.filter(g => g.lessons.length > 0);
-}
 
 export default async function LessonsPage({ params, searchParams }: Props) {
   const { locale } = await params;
@@ -201,18 +178,14 @@ export default async function LessonsPage({ params, searchParams }: Props) {
       {/* Lesson content */}
       {lessons.length > 0 ? (
         isSearchMode ? (
-          groupByDate(lessons, locale).map((group) => (
-            <section key={group.label}>
-              <h2 className="text-sm font-bold mb-2 text-muted-foreground uppercase tracking-wider">
-                {group.label}
-              </h2>
-              <div className="space-y-0.5">
-                {group.lessons.map((lesson) => (
-                  <LessonCard key={lesson.id} lesson={lesson} showProgress />
-                ))}
-              </div>
-            </section>
-          ))
+          <LessonsClient
+            initialLessons={[]}
+            initialHasMore={false}
+            locale={locale}
+            admin={admin}
+            categories={allCategories}
+            searchLessons={lessons}
+          />
         ) : (
           <LessonsClient
             initialLessons={lessons}
@@ -220,6 +193,8 @@ export default async function LessonsPage({ params, searchParams }: Props) {
             locale={locale}
             audioTypeFilter={audioTypeFilter}
             categoryFilter={categoryFilter}
+            admin={admin}
+            categories={allCategories}
           />
         )
       ) : (
