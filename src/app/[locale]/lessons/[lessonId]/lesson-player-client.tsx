@@ -180,7 +180,8 @@ function MarkSnippetDialogInline({
   const startTotal = Math.max(0, startMin * 60 + startSec);
   const endTotal = Math.max(0, endMin * 60 + endSec);
   const clipDuration = Math.max(0, endTotal - startTotal);
-  const isValid = endTotal > startTotal && startTotal >= 0 && endTotal <= Math.ceil(dur);
+  const maxDur = Math.ceil(dur) || 99999; // fallback if duration unknown
+  const isValid = endTotal > startTotal && startTotal >= 0 && endTotal <= maxDur;
 
   async function handleSnippetSubmit() {
     if (!snippetTitle.trim()) return;
@@ -430,11 +431,15 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
   }
 
   // Track the currently playing audio file ID for snippet submissions
+  // Falls back to first audio file when nothing is playing (free action)
   const currentAudioFileId = useMemo(() => {
-    if (!currentTrack || !isCurrentLesson) return null;
-    const activeFile = audioFiles.find((af) => isFileActive(af));
-    return activeFile?.id ?? null;
-  }, [currentTrack, isCurrentLesson, audioFiles]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (currentTrack && isCurrentLesson) {
+      const activeFile = audioFiles.find((af) => isFileActive(af));
+      if (activeFile) return activeFile.id;
+    }
+    // Default to first audio file when not playing
+    return sortedAudioFiles[0]?.id ?? null;
+  }, [currentTrack, isCurrentLesson, audioFiles, sortedAudioFiles]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleFileClick(audio: LessonAudio) {
     if (isFileActive(audio)) {
@@ -674,11 +679,10 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
             <span className="text-[10px]">{locale === 'he' ? 'סימניה' : 'Bookmark'}</span>
           </button>
 
-          {/* Mark snippet */}
+          {/* Mark snippet — always enabled, not dependent on player state */}
           <button
             onClick={() => setShowShareClipDialog(true)}
-            disabled={!isCurrentLesson}
-            className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
           >
             <Scissors className="h-5 w-5" />
             <span className="text-[10px]">{locale === 'he' ? 'סימון קטע' : 'Mark Snippet'}</span>
