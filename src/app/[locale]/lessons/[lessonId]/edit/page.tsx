@@ -190,8 +190,17 @@ export default function EditLessonPage() {
       if (sederNumber) formData.set('seder_number', sederNumber);
 
       const result = await updateLesson(lessonId, formData);
-      if (result.error) {
-        setFormError('שגיאה בעדכון השיעור');
+      if ('error' in result) {
+        const err = result.error;
+        const errMsg =
+          typeof err === 'object' && err && '_form' in err
+            ? (err as Record<string, string[]>)._form?.join(', ')
+            : typeof err === 'object' && err
+              ? Object.entries(err as Record<string, string[]>)
+                  .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
+                  .join('; ')
+              : String(err);
+        setFormError(`שגיאה בעדכון השיעור: ${errMsg}`);
         setSaving(false);
         return;
       }
