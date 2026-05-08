@@ -1,0 +1,170 @@
+export type DependencyStatus = 'ok' | 'degraded';
+
+export interface HealthBody {
+  status: DependencyStatus;
+  timestamp: string;
+  version: string;
+  checks: {
+    supabase: 'connected' | 'unconfigured' | 'error';
+    schema: 'ok' | 'skipped' | 'error';
+    lessons: {
+      total: number | null;
+      published: number | null;
+    };
+    r2: 'configured' | 'unconfigured';
+  };
+}
+
+export interface HealthResult {
+  httpStatus: 200 | 503;
+  body: HealthBody;
+}
+
+type HealthEnv = Partial<Record<string, string | undefined>>;
+type Fetcher = (input: string, init?: RequestInit) => Promise<Response>;
+
+const REQUIRED_R2_ENV = [
+  'R2_ACCOUNT_ID',
+  'R2_ACCESS_KEY_ID',
+  'R2_SECRET_ACCESS_KEY',
+  'R2_BUCKET_NAME',
+] as const;
+
+const REQUIRED_SCHEMA_CHECKS = [
+  '/rest/v1/lessons?select=id&limit=0',
+  '/rest/v1/lesson_audio?select=id&limit=0',
+  '/rest/v1/lesson_images?select=id&limit=0',
+  '/rest/v1/categories?select=id&limit=0',
+  '/rest/v1/snippets?select=id&limit=0',
+  '/rest/v1/playback_progress?select=id&limit=0',
+  '/rest/v1/lessons?select=id,category_id,hebrew_date,parsha,lesson_type,seder_number&limit=0',
+] as const;
+
+function withTimeout(): AbortSignal | undefined {
+  return typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+    ? AbortSignal.timeout(3000)
+    : undefined;
+}
+
+function parseCount(contentRange: string | null): number | null {
+  if (!contentRange) return null;
+  const total = contentRange.split('/').pop();
+  if (!total || total === '*') return null;
+  const parsed = Number(total);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function isR2Configured(env: HealthEnv) {
+  return REQUIRED_R2_ENV.every((key) => Boolean(env[key]));
+}
+
+export async function runHealthChecks(
+  env: HealthEnv = process.env,
+  fetcher: Fetcher = fetch,
+): Promise<HealthResult> {
+  const version = env.npm_package_version || '0.1.0';
+  const timestamp = new Date().toISOString();
+  const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, '');
+  const supabaseKey = env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const r2 = isR2Configured(env) ? 'configured' : 'unconfigured';
+
+  const checks: HealthBody['checks'] = {
+    supabase: 'unconfigured',
+    schema: 'skipped',
+    lessons: {
+      total: null,
+      published: null,
+    },
+    r2,
+  };
+
+  if (supabaseUrl && supabaseKey) {
+    const headers = {
+      apikey: supabaseKey,
+      Authorization: `Bearer ${supabaseKey}`,
+    };
+
+    try {
+      const connectivity = await fetcher(`${supabaseUrl}/rest/v1/lessons?select=id&limit=0`, {
+        method: 'GET',
+        headers,
+        signal: withTimeout(),
+      });
+
+      if (connectivity.ok) {
+        checks.supabase = 'connected';
+      } else {
+        checks.supabase = 'error';
+      }
+    } catch {
+      checks.supabase = 'error';
+    }
+
+    if (checks.supabase === 'connected') {
+      checks.schema = 'ok';
+
+      for (const path of REQUIRED_SCHEMA_CHECKS) {
+        try {
+          const response = await fetcher(`${supabaseUrl}${path}`, {
+            method: 'GET',
+            headers,
+            signal: withTimeout(),
+          });
+          if (!response.ok) {
+            checks.schema = 'error';
+            break;
+          }
+        } catch {
+          checks.schema = 'error';
+          break;
+        }
+      }
+
+      if (checks.schema === 'ok') {
+        const countHeaders = {
+          ...headers,
+          Prefer: 'count=exact',
+          'Range-Unit': 'items',
+          Range: '0-0',
+        };
+
+        try {
+          const [total, published] = await Promise.all([
+            fetcher(`${supabaseUrl}/rest/v1/lessons?select=id`, {
+              method: 'GET',
+              headers: countHeaders,
+              signal: withTimeout(),
+            }),
+            fetcher(`${supabaseUrl}/rest/v1/lessons?select=id&is_published=eq.true`, {
+              method: 'GET',
+              headers: countHeaders,
+              signal: withTimeout(),
+            }),
+          ]);
+
+          if (total.ok) checks.lessons.total = parseCount(total.headers.get('Content-Range'));
+          if (published.ok) {
+            checks.lessons.published = parseCount(published.headers.get('Content-Range'));
+          }
+        } catch {
+          checks.schema = 'error';
+        }
+      }
+    }
+  }
+
+  const status: DependencyStatus =
+    checks.supabase === 'connected' && checks.schema === 'ok' && checks.r2 === 'configured'
+      ? 'ok'
+      : 'degraded';
+
+  return {
+    httpStatus: status === 'ok' ? 200 : 503,
+    body: {
+      status,
+      timestamp,
+      version,
+      checks,
+    },
+  };
+}

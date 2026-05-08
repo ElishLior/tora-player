@@ -55,6 +55,8 @@
     "thisMonth": "החודש",
     "older": "ישנים יותר",
     "noLessons": "אין שיעורים עדיין",
+    "loadErrorTitle": "לא ניתן לטעון שיעורים כרגע",
+    "loadErrorDescription": "יש בעיה בחיבור למסד הנתונים. נסה שוב בעוד רגע.",
     "dragOrClick": "גרור קובץ לכאן או לחץ לבחירה",
     "pasteWhatsApp": "הדבק טקסט מווטסאפ",
     "autoNamePreview": "שם מוצע:",
