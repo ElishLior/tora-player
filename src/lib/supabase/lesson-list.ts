@@ -93,7 +93,15 @@ function classifyLessonListError(error: unknown): LessonListFailureCode {
 }
 
 function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : 'Failed to load lessons.';
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string' && error.trim()) return error;
+
+  if (typeof error === 'object' && error !== null) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string' && message.trim()) return message;
+  }
+
+  return 'Failed to load lessons.';
 }
 
 function failure(

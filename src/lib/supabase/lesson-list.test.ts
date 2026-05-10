@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { loadInitialLessonList, type LessonListReader } from './lesson-list';
+import {
+  loadInitialLessonList,
+  loadPaginatedLessonList,
+  type LessonListReader,
+} from './lesson-list';
 import type { Category, LessonWithRelations } from '@/types/database';
 
 const category: Category = {
@@ -78,6 +82,47 @@ describe('loadInitialLessonList', () => {
     expect(result).toMatchObject({
       ok: false,
       code: 'schema',
+    });
+  });
+
+  it('preserves Supabase plain-object error messages', async () => {
+    const reader = createReader({
+      getLessonsPage: vi.fn(async () => {
+        throw {
+          code: '42P01',
+          message: 'relation "lessons" does not exist',
+        };
+      }),
+    });
+
+    const result = await loadInitialLessonList(reader, {});
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: 'schema',
+      message: 'relation "lessons" does not exist',
+    });
+  });
+
+  it('returns paginated failures with the original Supabase message', async () => {
+    const reader = createReader({
+      getLessonsPage: vi.fn(async () => {
+        throw {
+          code: 'PGRST301',
+          message: 'JWT expired',
+        };
+      }),
+    });
+
+    const result = await loadPaginatedLessonList(reader, {
+      offset: 20,
+      limit: 20,
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: 'query',
+      message: 'JWT expired',
     });
   });
 
