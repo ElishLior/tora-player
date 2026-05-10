@@ -4,8 +4,36 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useAudioStore, type AudioTrack } from '@/stores/audio-store';
 import { audioEngine } from '@/lib/audio-engine';
 import { getOfflineAudioUrl, revokeOfflineAudioUrl } from '@/lib/offline-storage';
+import { resumeTrackPlayback } from '@/lib/audio-resume';
 
 const PROGRESS_SAVE_INTERVAL = 10000; // Save progress every 10 seconds
+
+function applyAudioElementAttributes() {
+  const audioEl = audioEngine.getAudioElement();
+  if (audioEl) {
+    audioEl.setAttribute('playsinline', '');
+    audioEl.setAttribute('webkit-playsinline', '');
+  }
+}
+
+async function resumeCurrentTrackPlayback(track: AudioTrack, currentTime: number) {
+  const resumed = await resumeTrackPlayback(
+    { track, currentTime },
+    {
+      getOfflineAudioUrl,
+      ensurePlaying: audioEngine.ensurePlaying.bind(audioEngine),
+      markPlaying: () => useAudioStore.getState().play(),
+      isEngineLoaded: () => audioEngine.isLoaded(),
+      getCurrentEngineUrl: () => audioEngine.getCurrentUrl(),
+      isLoadedUrlCurrentTrack: (url, currentTrack) => url === currentTrack.audioUrl,
+      isStillCurrent: (trackId) => useAudioStore.getState().currentTrack?.id === trackId,
+      shouldResume: () => useAudioStore.getState().isPlaying,
+    },
+  );
+
+  if (resumed) applyAudioElementAttributes();
+  return resumed;
+}
 
 export function useAudioPlayer() {
   const store = useAudioStore();
@@ -72,15 +100,18 @@ export function useAudioPlayer() {
       });
 
       // Set proper attributes on the native <audio> element for iOS background playback
-      const audioEl = audioEngine.getAudioElement();
-      if (audioEl) {
-        audioEl.setAttribute('playsinline', '');
-        audioEl.setAttribute('webkit-playsinline', '');
-      }
+      applyAudioElementAttributes();
 
-      // NOTE: Do NOT call audioEngine.play() here. The play/pause sync effect
-      // is the SOLE authority for calling play(). Calling it here too caused
-      // a dual-effect race condition (two useEffects both calling play()).
+      // If the user switched tracks while playback was already active, the
+      // play/pause sync effect may have seen the previous track still playing.
+      // Resume this newly loaded URL only when play intent and track identity
+      // are still current.
+      const latestState = useAudioStore.getState();
+      if (latestState.isPlaying && latestState.currentTrack?.id === track.id) {
+        audioEngine.ensurePlaying(url, {
+          startPosition: latestState.currentTime > 0 ? latestState.currentTime : undefined,
+        });
+      }
     }
 
     loadTrack();
@@ -97,31 +128,10 @@ export function useAudioPlayer() {
       const state = useAudioStore.getState();
       if (!state.currentTrack?.audioUrl) return;
 
-      // If engine lost its state, re-load and resume
-      if (!audioEngine.isLoaded()) {
-        // Try offline first, then fall back to streaming
-        getOfflineAudioUrl(state.currentTrack.id).then((offlineUrl) => {
-          const url = offlineUrl || state.currentTrack!.audioUrl;
-          // Use onLoad callback to play when ready, instead of setTimeout
-          if (useAudioStore.getState().isPlaying) {
-            const prevOnLoad = audioEngine['onLoad'];
-            audioEngine.setOnLoad((duration) => {
-              audioEngine.setOnLoad(prevOnLoad || (() => {}));
-              prevOnLoad?.(duration);
-              if (useAudioStore.getState().isPlaying) {
-                audioEngine.play();
-              }
-            });
-          }
-          audioEngine.load(url, {
-            startPosition: state.currentTime > 0 ? state.currentTime : undefined,
-          });
-          const audioEl = audioEngine.getAudioElement();
-          if (audioEl) {
-            audioEl.setAttribute('playsinline', '');
-            audioEl.setAttribute('webkit-playsinline', '');
-          }
-        });
+      // If the browser kept the Howl object but paused/stalled the native element,
+      // actively resume instead of only checking for a missing engine instance.
+      if (state.isPlaying && (!audioEngine.isLoaded() || !audioEngine.isPlaying() || audioEngine.isNativePaused())) {
+        void resumeCurrentTrackPlayback(state.currentTrack, state.currentTime);
       }
     }
 
@@ -134,40 +144,11 @@ export function useAudioPlayer() {
   useEffect(() => {
     if (!store.currentTrack) return;
     if (store.isPlaying) {
-      // Guard: if engine is already playing, don't call play() again
-      if (audioEngine.isPlaying()) return;
+      // Guard: if the active sound is really playing, don't call play() again.
+      if (audioEngine.isPlaying() && !audioEngine.isNativePaused()) return;
 
-      // If engine is not loaded (e.g., after page refresh, browser killed audio),
-      // re-load the track first, then play via onLoad callback
-      if (!audioEngine.isLoaded() && store.currentTrack.audioUrl) {
-        const trackId = store.currentTrack.id;
-        const trackUrl = store.currentTrack.audioUrl;
-        const startPos = store.currentTime > 0 ? store.currentTime : undefined;
-        // Try offline first
-        getOfflineAudioUrl(trackId).then((offlineUrl) => {
-          // Check state is still isPlaying before proceeding (user may have paused during async)
-          if (!useAudioStore.getState().isPlaying) return;
-          const url = offlineUrl || trackUrl;
-          // Set onLoad to trigger play when the track is actually ready
-          const prevOnLoad = audioEngine['onLoad'];
-          audioEngine.setOnLoad((duration) => {
-            // Restore the original onLoad handler
-            audioEngine.setOnLoad(prevOnLoad || (() => {}));
-            prevOnLoad?.(duration);
-            // Only play if store still says isPlaying (user may have paused during load)
-            if (useAudioStore.getState().isPlaying) {
-              audioEngine.play();
-            }
-          });
-          audioEngine.load(url, { startPosition: startPos });
-          const audioEl = audioEngine.getAudioElement();
-          if (audioEl) {
-            audioEl.setAttribute('playsinline', '');
-            audioEl.setAttribute('webkit-playsinline', '');
-          }
-        });
-      } else {
-        audioEngine.play();
+      if (store.currentTrack.audioUrl) {
+        void resumeCurrentTrackPlayback(store.currentTrack, store.currentTime);
       }
     } else {
       audioEngine.pause();

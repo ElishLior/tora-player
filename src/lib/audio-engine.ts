@@ -88,7 +88,7 @@ class AudioEngine {
             // Guard: don't auto-resume if user explicitly paused,
             // or if the Howl/URL has changed since the error (stale unlock)
             if (this.howl === howlAtError && this.currentUrl === urlAtError && !this._userPaused) {
-              this.howl.play();
+              this.play();
             }
           });
         }
@@ -96,13 +96,23 @@ class AudioEngine {
     });
   }
 
+  ensurePlaying(url: string, options?: { startPosition?: number }) {
+    const normalizedUrl = normalizeAudioUrl(url) || url;
+    if (!this.howl || this.currentUrl !== normalizedUrl) {
+      this.load(normalizedUrl, options);
+    } else if (options?.startPosition !== undefined) {
+      this.seek(options.startPosition);
+    }
+    this.play();
+  }
+
   play() {
     if (!this.howl) return;
     // If already playing, don't create a duplicate stream
-    if (this.howl.playing(this.soundId ?? undefined)) return;
+    if (this.soundId !== null && this.howl.playing(this.soundId)) return;
     // Reuse existing sound ID to resume instead of creating a new stream
     if (this.soundId !== null) {
-      this.howl.play(this.soundId);
+      this.soundId = this.howl.play(this.soundId);
     } else {
       this.soundId = this.howl.play();
     }
@@ -159,7 +169,13 @@ class AudioEngine {
   }
 
   isPlaying(): boolean {
-    return this.howl?.playing() || false;
+    if (!this.howl) return false;
+    return this.soundId !== null ? this.howl.playing(this.soundId) : this.howl.playing();
+  }
+
+  isNativePaused(): boolean {
+    const audioEl = this.getAudioElement();
+    return Boolean(audioEl?.paused || audioEl?.ended || audioEl?.error);
   }
 
   /** Check if the audio engine has a loaded Howl instance */

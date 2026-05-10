@@ -3,6 +3,8 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useAudioStore } from '@/stores/audio-store';
 import { audioEngine } from '@/lib/audio-engine';
+import { getOfflineAudioUrl } from '@/lib/offline-storage';
+import { resumeTrackPlayback } from '@/lib/audio-resume';
 
 /**
  * Integrates with the Media Session API for:
@@ -148,8 +150,27 @@ export function useMediaSession() {
     if (!('mediaSession' in navigator)) return;
 
     const handlers: [MediaSessionAction, MediaSessionActionHandler][] = [
-      ['play', () => { useAudioStore.getState().play(); }],
-      ['pause', () => { useAudioStore.getState().pause(); }],
+      ['play', () => {
+        const state = useAudioStore.getState();
+        state.play();
+        void resumeTrackPlayback(
+          { track: state.currentTrack, currentTime: state.currentTime },
+          {
+            getOfflineAudioUrl,
+            ensurePlaying: audioEngine.ensurePlaying.bind(audioEngine),
+            markPlaying: () => useAudioStore.getState().play(),
+            isEngineLoaded: () => audioEngine.isLoaded(),
+            getCurrentEngineUrl: () => audioEngine.getCurrentUrl(),
+            isLoadedUrlCurrentTrack: (url, currentTrack) => url === currentTrack.audioUrl,
+            isStillCurrent: (trackId) => useAudioStore.getState().currentTrack?.id === trackId,
+            shouldResume: () => useAudioStore.getState().isPlaying,
+          },
+        );
+      }],
+      ['pause', () => {
+        audioEngine.pause();
+        useAudioStore.getState().pause();
+      }],
       ['seekforward', () => {
         const newTime = Math.min(audioEngine.getCurrentTime() + 15, audioEngine.getDuration());
         audioEngine.seek(newTime);
