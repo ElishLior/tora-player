@@ -1,7 +1,20 @@
 'use client';
 
-import { useState } from 'react';
-import { Play, Pause, ChevronDown, Bookmark, FileDown, List, Cast, Car, Scissors } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  Play,
+  Pause,
+  ChevronDown,
+  Bookmark,
+  FileDown,
+  Cast,
+  Car,
+  Scissors,
+  Download,
+  CheckCircle,
+  Loader2,
+  BookOpen,
+} from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useLocale } from 'next-intl';
@@ -9,28 +22,75 @@ import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { SeekBar } from './seek-bar';
 import { SpeedControl } from './speed-control';
 import { handleCastClick } from '@/lib/cast-utils';
-import { getAudioDownloadUrl, sanitizeDownloadFilename } from '@/lib/audio-download';
 import { useBookmarksStore } from '@/stores/bookmarks-store';
 import { BookmarkDialog } from '@/components/bookmarks/bookmark-dialog';
 import { getTagInfo } from '@/components/bookmarks/bookmark-dialog';
 import { ShareClipDialog } from '@/components/player/share-clip-dialog';
+import { downloadLessonAudioFiles, getDownloadedLesson } from '@/lib/offline-storage';
+import {
+  getTrackDownloadFilename,
+  getTrackDownloadUrl,
+  getTrackLessonId,
+  getTrackOfflineDownloadInput,
+  getTrackOfflineLessonInput,
+  isTrackDownloadedInLesson,
+} from '@/lib/player-track-actions';
+import { notifyOfflineDownloadsChanged } from '@/lib/offline-events';
 
 function Skip15Back({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
       <path d="M12 5V1L7 5l5 4V5" />
       <path d="M19.07 7.93A8 8 0 1 1 7 5.3" />
-      <text x="12" y="15.5" textAnchor="middle" fill="currentColor" stroke="none" fontSize="7.5" fontWeight="bold" fontFamily="system-ui">15</text>
+      <text
+        x="12"
+        y="15.5"
+        textAnchor="middle"
+        fill="currentColor"
+        stroke="none"
+        fontSize="7.5"
+        fontWeight="bold"
+        fontFamily="system-ui"
+      >
+        15
+      </text>
     </svg>
   );
 }
 
 function Skip15Forward({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
       <path d="M12 5V1l5 4-5 4V5" />
       <path d="M4.93 7.93A8 8 0 1 0 17 5.3" />
-      <text x="12" y="15.5" textAnchor="middle" fill="currentColor" stroke="none" fontSize="7.5" fontWeight="bold" fontFamily="system-ui">15</text>
+      <text
+        x="12"
+        y="15.5"
+        textAnchor="middle"
+        fill="currentColor"
+        stroke="none"
+        fontSize="7.5"
+        fontWeight="bold"
+        fontFamily="system-ui"
+      >
+        15
+      </text>
     </svg>
   );
 }
@@ -59,16 +119,68 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
   const bookmarks = useBookmarksStore((s) => s.bookmarks);
   const [showBookmarkDialog, setShowBookmarkDialog] = useState(false);
   const [showShareClipDialog, setShowShareClipDialog] = useState(false);
+  const [offlineSaveState, setOfflineSaveState] = useState<'idle' | 'downloading' | 'downloaded' | 'error'>('idle');
+  const [offlineSaveProgress, setOfflineSaveProgress] = useState(0);
+
+  const lessonId = currentTrack ? getTrackLessonId(currentTrack) : '';
+
+  useEffect(() => {
+    if (!currentTrack) {
+      setOfflineSaveState('idle');
+      setOfflineSaveProgress(0);
+      return;
+    }
+
+    let cancelled = false;
+
+    setOfflineSaveState('idle');
+    setOfflineSaveProgress(0);
+
+    getDownloadedLesson(lessonId).then((downloadedLesson) => {
+      if (!cancelled && isTrackDownloadedInLesson(currentTrack, downloadedLesson)) {
+        setOfflineSaveState('downloaded');
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentTrack, lessonId]);
+
+  const handleSaveOffline = useCallback(async () => {
+    if (!currentTrack) return;
+    if (offlineSaveState === 'downloaded' || offlineSaveState === 'downloading') return;
+
+    setOfflineSaveState('downloading');
+    setOfflineSaveProgress(0);
+
+    const success = await downloadLessonAudioFiles(
+      lessonId,
+      [getTrackOfflineDownloadInput(currentTrack)],
+      getTrackOfflineLessonInput(currentTrack),
+      (pct) => setOfflineSaveProgress(pct),
+    );
+
+    if (success) {
+      setOfflineSaveProgress(100);
+      setOfflineSaveState('downloaded');
+      notifyOfflineDownloadsChanged(lessonId);
+      return;
+    }
+
+    setOfflineSaveState('error');
+    setTimeout(() => {
+      setOfflineSaveState('idle');
+      setOfflineSaveProgress(0);
+    }, 3000);
+  }, [currentTrack, lessonId, offlineSaveState]);
 
   if (!currentTrack) return null;
 
-  const lessonId = currentTrack.lessonId || currentTrack.id;
   const lessonBookmarks = bookmarks.filter((b) => b.lessonId === lessonId);
   const bookmarkCount = lessonBookmarks.length;
-  const downloadFilename = sanitizeDownloadFilename(
-    `${currentTrack.originalName || currentTrack.hebrewTitle || currentTrack.title}.mp3`
-  );
-  const downloadUrl = getAudioDownloadUrl(currentTrack.audioUrl, downloadFilename);
+  const downloadFilename = getTrackDownloadFilename(currentTrack);
+  const downloadUrl = getTrackDownloadUrl(currentTrack);
 
   // Tag color map for bookmark markers
   const tagColorMap: Record<string, string> = {
@@ -80,7 +192,8 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
 
   return (
     <>
-      <div className="fixed inset-0 z-[100] flex flex-col safe-area-inset animate-slide-up"
+      <div
+        className="fixed inset-0 z-[100] flex flex-col safe-area-inset animate-slide-up"
         style={{
           background: 'linear-gradient(180deg, hsl(141 30% 12%) 0%, hsl(0 0% 7%) 40%)',
         }}
@@ -95,24 +208,30 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
             <ChevronDown className="h-6 w-6" />
           </button>
           <div className="text-center">
-            <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">
-              {t('nowPlaying')}
-            </p>
+            <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">{t('nowPlaying')}</p>
             {currentTrack.seriesName && (
               <p className="text-xs font-bold text-foreground" dir="rtl">
                 {currentTrack.seriesName}
               </p>
             )}
           </div>
-          <button className="rounded-full p-2 text-muted-foreground hover:text-foreground transition-colors">
-            <List className="h-5 w-5" />
+          <button
+            onClick={() => {
+              onClose();
+              router.push(`/${locale}/lessons/${lessonId}`);
+            }}
+            className="rounded-full p-2 text-muted-foreground hover:text-foreground transition-colors"
+            aria-label={t('openLesson')}
+          >
+            <BookOpen className="h-5 w-5" />
           </button>
         </div>
 
         {/* Content */}
         <div className="flex-1 flex flex-col items-center px-8 gap-5 overflow-y-auto pt-4 pb-6">
           {/* Large artwork */}
-          <div className="w-64 h-64 sm:w-72 sm:h-72 rounded-xl shadow-2xl flex-shrink-0 flex items-center justify-center overflow-hidden"
+          <div
+            className="w-64 h-64 sm:w-72 sm:h-72 rounded-xl shadow-2xl flex-shrink-0 flex items-center justify-center overflow-hidden"
             style={{
               background: 'linear-gradient(135deg, hsl(141 30% 18%) 0%, hsl(141 20% 8%) 100%)',
             }}
@@ -131,9 +250,7 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
               {currentTrack.hebrewTitle || currentTrack.title}
             </h2>
             <p className="text-sm text-muted-foreground" dir="rtl">
-              {currentTrack.seriesName && (
-                <span className="text-primary">{currentTrack.seriesName}</span>
-              )}
+              {currentTrack.seriesName && <span className="text-primary">{currentTrack.seriesName}</span>}
               {currentTrack.date && currentTrack.seriesName && ' · '}
               {currentTrack.date}
             </p>
@@ -187,11 +304,7 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
               className="rounded-full p-4 bg-foreground text-background hover:scale-105 transition-transform shadow-xl"
               aria-label={isPlaying ? t('pause') : t('play')}
             >
-              {isPlaying ? (
-                <Pause className="h-8 w-8 fill-current" />
-              ) : (
-                <Play className="h-8 w-8 fill-current ml-1" />
-              )}
+              {isPlaying ? <Pause className="h-8 w-8 fill-current" /> : <Play className="h-8 w-8 fill-current ml-1" />}
             </button>
 
             {/* RTL: right-arrow icon = skip BACKWARD (Hebrew reads R→L, right = backward) */}
@@ -211,11 +324,7 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
           <div className="flex items-center justify-center gap-6 pt-2 flex-wrap flex-shrink-0">
             <button
               onClick={() => setShowBookmarkDialog(true)}
-              className={`flex flex-col items-center gap-1.5 transition-colors ${
-                bookmarkCount > 0
-                  ? 'text-primary'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
+              className={`flex flex-col items-center gap-1.5 transition-colors ${bookmarkCount > 0 ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
             >
               <div className="relative">
                 <Bookmark className={`h-5 w-5 ${bookmarkCount > 0 ? 'fill-current' : ''}`} />
@@ -232,14 +341,35 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
               className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
             >
               <Scissors className="h-5 w-5" />
-              <span className="text-[10px]">שתף קטע</span>
+              <span className="text-[10px]">{t('markSnippet')}</span>
             </button>
             <button
               onClick={() => router.push(`/${locale}/driving`)}
               className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
             >
               <Car className="h-5 w-5" />
-              <span className="text-[10px]">מצב נהיגה</span>
+              <span className="text-[10px]">{t('drivingMode')}</span>
+            </button>
+            <button
+              onClick={handleSaveOffline}
+              disabled={offlineSaveState === 'downloaded' || offlineSaveState === 'downloading'}
+              className={`flex flex-col items-center gap-1.5 transition-colors disabled:cursor-not-allowed ${offlineSaveState === 'downloaded' ? 'text-green-400' : offlineSaveState === 'downloading' ? 'text-primary' : offlineSaveState === 'error' ? 'text-red-400' : 'text-muted-foreground hover:text-foreground'}`}
+              aria-label={t('saveOffline')}
+            >
+              {offlineSaveState === 'downloading' ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : offlineSaveState === 'downloaded' ? (
+                <CheckCircle className="h-5 w-5" />
+              ) : (
+                <Download className="h-5 w-5" />
+              )}
+              <span className="text-[10px] whitespace-nowrap">
+                {offlineSaveState === 'downloading'
+                  ? `${offlineSaveProgress}%`
+                  : offlineSaveState === 'downloaded'
+                    ? t('savedOffline')
+                    : t('saveOffline')}
+              </span>
             </button>
             <a
               href={downloadUrl}
@@ -248,7 +378,7 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
               aria-label={locale === 'he' ? 'הורדת קובץ למכשיר' : 'Download file to device'}
             >
               <FileDown className="h-5 w-5" />
-              <span className="text-[10px]">{t('download')}</span>
+              <span className="text-[10px] whitespace-nowrap">{t('downloadFile')}</span>
             </a>
             <button
               onClick={() => void handleCastClick()}
@@ -268,6 +398,7 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
         onClose={() => setShowBookmarkDialog(false)}
         lessonId={lessonId}
         position={currentTime}
+        locale={locale}
       />
 
       {/* Share clip dialog */}
