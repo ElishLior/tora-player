@@ -32,7 +32,9 @@ describe('resumeTrackPlayback', () => {
 
     expect(result).toBe(true);
     expect(getOfflineAudioUrl).not.toHaveBeenCalled();
-    expect(ensurePlaying).toHaveBeenCalledWith('blob:already-loaded', { startPosition: 42 });
+    expect(ensurePlaying).toHaveBeenCalledWith('blob:already-loaded', {
+      startPosition: 42,
+    });
     expect(markPlaying).toHaveBeenCalled();
   });
 
@@ -54,8 +56,10 @@ describe('resumeTrackPlayback', () => {
     );
 
     expect(result).toBe(true);
-    expect(getOfflineAudioUrl).toHaveBeenCalledWith(track.id);
-    expect(ensurePlaying).toHaveBeenCalledWith(track.audioUrl, { startPosition: 42 });
+    expect(getOfflineAudioUrl).toHaveBeenCalledWith(track);
+    expect(ensurePlaying).toHaveBeenCalledWith(track.audioUrl, {
+      startPosition: 42,
+    });
   });
 
   it('prefers an offline blob URL when the engine must be loaded', async () => {
@@ -74,7 +78,9 @@ describe('resumeTrackPlayback', () => {
     );
 
     expect(result).toBe(true);
-    expect(ensurePlaying).toHaveBeenCalledWith('blob:lesson-1', { startPosition: undefined });
+    expect(ensurePlaying).toHaveBeenCalledWith('blob:lesson-1', {
+      startPosition: undefined,
+    });
   });
 
   it('does not resume when playback is no longer requested after offline lookup', async () => {

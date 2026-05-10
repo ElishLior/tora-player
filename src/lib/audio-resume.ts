@@ -6,13 +6,13 @@ interface ResumeTrackState {
 }
 
 interface ResumeTrackDeps {
-  getOfflineAudioUrl: (trackId: string) => Promise<string | null>;
+  getOfflineAudioUrl: (track: AudioTrack) => Promise<string | null>;
   ensurePlaying: (url: string, options?: { startPosition?: number }) => void;
   markPlaying: () => void;
   isEngineLoaded: () => boolean;
   getCurrentEngineUrl: () => string | null;
   isLoadedUrlCurrentTrack?: (url: string, track: AudioTrack) => boolean;
-  isStillCurrent?: (trackId: string) => boolean;
+  isStillCurrent?: (track: AudioTrack) => boolean;
   shouldResume?: () => boolean;
 }
 
@@ -32,16 +32,17 @@ export async function resumeTrackPlayback(
   if (
     deps.isEngineLoaded() &&
     loadedUrl &&
-    (deps.isLoadedUrlCurrentTrack?.(loadedUrl, track) ?? loadedUrl === track.audioUrl)
+    (deps.isLoadedUrlCurrentTrack?.(loadedUrl, track) ??
+      loadedUrl === track.audioUrl)
   ) {
     deps.ensurePlaying(loadedUrl, { startPosition });
     deps.markPlaying();
     return true;
   }
 
-  const offlineUrl = await deps.getOfflineAudioUrl(track.id).catch(() => null);
+  const offlineUrl = await deps.getOfflineAudioUrl(track).catch(() => null);
 
-  if (deps.isStillCurrent && !deps.isStillCurrent(track.id)) {
+  if (deps.isStillCurrent && !deps.isStillCurrent(track)) {
     return false;
   }
 
