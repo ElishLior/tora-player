@@ -12,6 +12,7 @@ import {
   AbortMultipartUploadCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { getR2BucketName } from './r2-config';
 
 const r2Client = new S3Client({
   region: 'auto',
@@ -22,7 +23,7 @@ const r2Client = new S3Client({
   },
 });
 
-const BUCKET = (process.env.R2_BUCKET_NAME || 'tora-player-audio').trim();
+const BUCKET = getR2BucketName(process.env);
 
 export async function getUploadPresignedUrl(key: string, contentType: string) {
   const command = new PutObjectCommand({

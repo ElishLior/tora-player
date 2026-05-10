@@ -1,3 +1,5 @@
+import { isR2RuntimeConfigured } from './r2-config';
+
 export type DependencyStatus = 'ok' | 'degraded';
 
 export interface HealthBody {
@@ -8,6 +10,7 @@ export interface HealthBody {
     supabase: 'connected' | 'unconfigured' | 'error';
     schema: 'ok' | 'skipped' | 'error';
     lessons: {
+      status: 'skipped' | 'ok' | 'error';
       total: number | null;
       published: number | null;
     };
@@ -22,13 +25,6 @@ export interface HealthResult {
 
 type HealthEnv = Partial<Record<string, string | undefined>>;
 type Fetcher = (input: string, init?: RequestInit) => Promise<Response>;
-
-const REQUIRED_R2_ENV = [
-  'R2_ACCOUNT_ID',
-  'R2_ACCESS_KEY_ID',
-  'R2_SECRET_ACCESS_KEY',
-  'R2_BUCKET_NAME',
-] as const;
 
 const REQUIRED_SCHEMA_CHECKS = [
   '/rest/v1/lessons?select=id&limit=0',
@@ -54,10 +50,6 @@ function parseCount(contentRange: string | null): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function isR2Configured(env: HealthEnv) {
-  return REQUIRED_R2_ENV.every((key) => Boolean(env[key]));
-}
-
 export async function runHealthChecks(
   env: HealthEnv = process.env,
   fetcher: Fetcher = fetch,
@@ -66,12 +58,13 @@ export async function runHealthChecks(
   const timestamp = new Date().toISOString();
   const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, '');
   const supabaseKey = env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const r2 = isR2Configured(env) ? 'configured' : 'unconfigured';
+  const r2 = isR2RuntimeConfigured(env) ? 'configured' : 'unconfigured';
 
   const checks: HealthBody['checks'] = {
     supabase: 'unconfigured',
     schema: 'skipped',
     lessons: {
+      status: 'skipped',
       total: null,
       published: null,
     },
@@ -142,19 +135,29 @@ export async function runHealthChecks(
             }),
           ]);
 
-          if (total.ok) checks.lessons.total = parseCount(total.headers.get('Content-Range'));
-          if (published.ok) {
-            checks.lessons.published = parseCount(published.headers.get('Content-Range'));
-          }
+          const totalCount = total.ok ? parseCount(total.headers.get('Content-Range')) : null;
+          const publishedCount = published.ok
+            ? parseCount(published.headers.get('Content-Range'))
+            : null;
+
+          checks.lessons.total = totalCount;
+          checks.lessons.published = publishedCount;
+          checks.lessons.status =
+            total.ok && published.ok && totalCount !== null && publishedCount !== null
+              ? 'ok'
+              : 'error';
         } catch {
-          checks.schema = 'error';
+          checks.lessons.status = 'error';
         }
       }
     }
   }
 
   const status: DependencyStatus =
-    checks.supabase === 'connected' && checks.schema === 'ok' && checks.r2 === 'configured'
+    checks.supabase === 'connected' &&
+    checks.schema === 'ok' &&
+    checks.lessons.status === 'ok' &&
+    checks.r2 === 'configured'
       ? 'ok'
       : 'degraded';
 

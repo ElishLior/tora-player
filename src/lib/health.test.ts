@@ -39,7 +39,11 @@ describe('runHealthChecks', () => {
     expect(result.body.status).toBe('ok');
     expect(result.body.checks.supabase).toBe('connected');
     expect(result.body.checks.schema).toBe('ok');
-    expect(result.body.checks.lessons).toEqual({ total: 134, published: 134 });
+    expect(result.body.checks.lessons).toEqual({
+      status: 'ok',
+      total: 134,
+      published: 134,
+    });
     expect(result.body.checks.r2).toBe('configured');
   });
 
@@ -57,10 +61,47 @@ describe('runHealthChecks', () => {
     expect(result.body.checks.schema).toBe('error');
   });
 
-  it('returns degraded when R2 is not configured', async () => {
-    const envWithoutR2 = { ...configuredEnv, R2_BUCKET_NAME: undefined };
+  it('returns degraded when lesson count probes fail', async () => {
+    const result = await runHealthChecks(configuredEnv, async (input) => {
+      const url = String(input);
+      if (url === 'https://example.supabase.co/rest/v1/lessons?select=id') {
+        return new Response('count failed', { status: 500 });
+      }
+      if (url.includes('is_published=eq.true')) return okResponse('0-0/134');
+      return okResponse('0-0/134');
+    });
 
-    const result = await runHealthChecks(envWithoutR2, async () => okResponse('0-0/1'));
+    expect(result.httpStatus).toBe(503);
+    expect(result.body.status).toBe('degraded');
+    expect(result.body.checks.lessons.status).toBe('error');
+    expect(result.body.checks.lessons.total).toBeNull();
+    expect(result.body.checks.lessons.published).toBe(134);
+  });
+
+  it('uses the runtime default R2 bucket when R2_BUCKET_NAME is omitted', async () => {
+    const envWithoutBucket = { ...configuredEnv, R2_BUCKET_NAME: undefined };
+
+    const result = await runHealthChecks(envWithoutBucket, async (input) => {
+      const url = String(input);
+      if (url.includes('is_published=eq.true')) return okResponse('0-0/134');
+      if (url.includes('/lessons?select=id')) return okResponse('0-0/134');
+      return okResponse();
+    });
+
+    expect(result.httpStatus).toBe(200);
+    expect(result.body.status).toBe('ok');
+    expect(result.body.checks.r2).toBe('configured');
+  });
+
+  it('returns degraded when an R2 credential is missing', async () => {
+    const envWithoutR2Secret = { ...configuredEnv, R2_SECRET_ACCESS_KEY: undefined };
+
+    const result = await runHealthChecks(envWithoutR2Secret, async (input) => {
+      const url = String(input);
+      if (url.includes('is_published=eq.true')) return okResponse('0-0/134');
+      if (url.includes('/lessons?select=id')) return okResponse('0-0/134');
+      return okResponse();
+    });
 
     expect(result.httpStatus).toBe(503);
     expect(result.body.status).toBe('degraded');
