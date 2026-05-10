@@ -209,7 +209,7 @@ export default function DrivingModePage() {
         showRecoveryNotice ||
         playbackRecoveryState === "needs-user-gesture") && (
         <div
-          className="flex-shrink-0 space-y-2 px-4"
+          className="mx-auto w-full max-w-3xl flex-shrink-0 space-y-2 px-4"
           dir={isRTL ? "rtl" : "ltr"}
         >
           {showOfflineRecommendation && (
@@ -273,37 +273,39 @@ export default function DrivingModePage() {
 
       {/* ── Center: Main controls ── */}
       <div className="flex-1 flex items-center justify-center">
-        <div dir="ltr" className="flex items-center justify-center gap-10">
+        <div
+          dir="ltr"
+          className="flex items-center justify-center gap-3 sm:gap-8 md:gap-10"
+        >
           {/* Skip backward */}
           <button
             onClick={() => skipBackward(15)}
-            className="rounded-full p-5 bg-white/10 text-white hover:bg-white/20 active:bg-white/30 transition-colors"
+            className="rounded-full p-4 bg-white/10 text-white transition-colors hover:bg-white/20 active:bg-white/30 sm:p-5"
             aria-label={t("skipBackward")}
           >
-            <Skip15BackLarge className="h-14 w-14" />
+            <Skip15BackLarge className="h-12 w-12 sm:h-14 sm:w-14" />
           </button>
 
           {/* Play / Pause */}
           <button
             onClick={togglePlay}
-            className="rounded-full flex items-center justify-center bg-white text-black hover:scale-105 active:scale-95 transition-transform shadow-2xl"
-            style={{ width: 120, height: 120 }}
+            className="flex h-24 w-24 items-center justify-center rounded-full bg-white text-black shadow-2xl transition-transform hover:scale-105 active:scale-95 sm:h-[120px] sm:w-[120px]"
             aria-label={isPlaying ? t("pause") : t("play")}
           >
             {isPlaying ? (
-              <Pause className="h-16 w-16 fill-current" />
+              <Pause className="h-14 w-14 fill-current sm:h-16 sm:w-16" />
             ) : (
-              <Play className="h-16 w-16 fill-current ml-2" />
+              <Play className="ml-1 h-14 w-14 fill-current sm:ml-2 sm:h-16 sm:w-16" />
             )}
           </button>
 
           {/* Skip forward */}
           <button
             onClick={() => skipForward(15)}
-            className="rounded-full p-5 bg-white/10 text-white hover:bg-white/20 active:bg-white/30 transition-colors"
+            className="rounded-full p-4 bg-white/10 text-white transition-colors hover:bg-white/20 active:bg-white/30 sm:p-5"
             aria-label={t("skipForward")}
           >
-            <Skip15ForwardLarge className="h-14 w-14" />
+            <Skip15ForwardLarge className="h-12 w-12 sm:h-14 sm:w-14" />
           </button>
         </div>
       </div>
