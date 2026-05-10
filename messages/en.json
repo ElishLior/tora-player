@@ -80,6 +80,19 @@
     "noActiveLesson": "No active lesson",
     "clipMode": "Clip Mode"
   },
+  "driving": {
+    "title": "Driving Mode",
+    "noActiveLesson": "No active lesson",
+    "back": "Back",
+    "close": "Close driving mode",
+    "play": "Play",
+    "pause": "Pause",
+    "skipForward": "15 seconds forward",
+    "skipBackward": "15 seconds back",
+    "offlineRecommended": "For stable driving playback or low-signal areas, save this lesson offline before the drive.",
+    "playbackRecovering": "Playback stalled and Tora Player is trying to resume.",
+    "tapToResume": "Tap to resume playback"
+  },
   "playlists": {
     "title": "Playlists",
     "create": "Create New Playlist",

@@ -548,6 +548,13 @@ export function useAudioPlayer() {
     store.setCurrentTime(newTime);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const resumePlayback = useCallback(() => {
+    const state = useAudioStore.getState();
+    if (!state.currentTrack?.audioUrl) return Promise.resolve(false);
+    state.play();
+    return resumeCurrentTrackPlayback(state.currentTrack, state.currentTime);
+  }, []);
+
   // Play a specific track
   const playTrack = useCallback(
     (track: AudioTrack, queue?: AudioTrack[], queueIndex?: number) => {
@@ -566,6 +573,7 @@ export function useAudioPlayer() {
     seekTo,
     skipForward,
     skipBackward,
+    resumePlayback,
     playTrack,
   };
 }
