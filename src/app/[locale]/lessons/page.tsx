@@ -2,27 +2,38 @@ export const dynamic = 'force-dynamic';
 
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { getAllCategories } from '@/lib/supabase/queries';
+import {
+  createSupabaseLessonListReader,
+  loadInitialLessonList,
+  type LessonListFailureCode,
+} from '@/lib/supabase/lesson-list';
 import { EmptyState } from '@/components/shared/empty-state';
 import { LessonsClient } from './lessons-client';
 import { Link } from '@/i18n/routing';
-import { BookOpen, Plus, Search } from 'lucide-react';
+import { AlertTriangle, BookOpen, Plus, Search } from 'lucide-react';
 import { isAdmin } from '@/actions/auth';
 import type { LessonWithRelations, Category } from '@/types/database';
-
-const PAGE_SIZE = 20;
 
 type Props = {
   params: Promise<{ locale: string }>;
   searchParams: Promise<{ q?: string; type?: string; cat?: string }>;
 };
 
+function buildRetryHref(filters: { q?: string; audioTypeFilter?: string; categoryFilter?: string }) {
+  const params = new URLSearchParams();
+  if (filters.q) params.set('q', filters.q);
+  if (filters.audioTypeFilter) params.set('type', filters.audioTypeFilter);
+  if (filters.categoryFilter) params.set('cat', filters.categoryFilter);
+  const query = params.toString();
+  return query ? `/lessons?${query}` : '/lessons';
+}
 
 export default async function LessonsPage({ params, searchParams }: Props) {
   const { locale } = await params;
   const { q, type: audioTypeFilter, cat: categoryFilter } = await searchParams;
   setRequestLocale(locale);
   const t = await getTranslations('lessons');
+  const commonT = await getTranslations('common');
 
   const supabase = await createServerSupabaseClient();
   const admin = await isAdmin();
@@ -31,65 +42,28 @@ export default async function LessonsPage({ params, searchParams }: Props) {
   let hasMore = false;
   let isSearchMode = false;
   let allCategories: Category[] = [];
+  let loadError: { code: LessonListFailureCode; message: string } | null = null;
 
-  if (supabase) {
-    try {
-      // Fetch leaf categories (sub-categories) for filter tabs
-      allCategories = await getAllCategories(supabase);
+  const lessonListResult = await loadInitialLessonList(
+    supabase ? createSupabaseLessonListReader(supabase) : null,
+    { q, audioTypeFilter, categoryFilter },
+  );
 
-      // If filtering by audio type, get matching lesson IDs first
-      let filterLessonIds: string[] | null = null;
-      if (audioTypeFilter) {
-        const { data: audioMatches } = await supabase
-          .from('lesson_audio')
-          .select('lesson_id')
-          .eq('audio_type', audioTypeFilter);
-        filterLessonIds = [...new Set((audioMatches || []).map((a: { lesson_id: string }) => a.lesson_id))];
-      }
+  allCategories = lessonListResult.allCategories;
 
-      // Category filter: get matching category IDs (include children)
-      let categoryIds: string[] | null = null;
-      if (categoryFilter) {
-        const children = allCategories.filter(c => c.parent_id === categoryFilter);
-        categoryIds = [categoryFilter, ...children.map(c => c.id)];
-      }
-
-      if (q) {
-        // Search mode
-        isSearchMode = true;
-        const escaped = q.replace(/[%_\\]/g, '\\$&');
-        let query = supabase
-          .from('lessons')
-          .select('*, series(name, hebrew_name), category:categories(id, hebrew_name)')
-          .eq('is_published', true)
-          .or(`title.ilike.%${escaped}%,hebrew_title.ilike.%${escaped}%,description.ilike.%${escaped}%`)
-          .order('date', { ascending: false })
-          .limit(50);
-        if (filterLessonIds) query = query.in('id', filterLessonIds);
-        if (categoryIds) query = query.in('category_id', categoryIds);
-        const { data } = await query;
-        lessons = (data || []) as LessonWithRelations[];
-      } else {
-        // Normal/filtered mode with pagination
-        let query = supabase
-          .from('lessons')
-          .select('*, series(name, hebrew_name), category:categories(id, hebrew_name)')
-          .eq('is_published', true)
-          .order('date', { ascending: false });
-
-        if (filterLessonIds) query = query.in('id', filterLessonIds);
-        if (categoryIds) query = query.in('category_id', categoryIds);
-
-        query = query.range(0, PAGE_SIZE);
-        const { data } = await query;
-
-        lessons = (data || []) as LessonWithRelations[];
-        hasMore = lessons.length > PAGE_SIZE;
-        if (hasMore) lessons = lessons.slice(0, PAGE_SIZE);
-      }
-    } catch {
-      lessons = [];
-    }
+  if (lessonListResult.ok) {
+    lessons = lessonListResult.lessons;
+    hasMore = lessonListResult.hasMore;
+    isSearchMode = lessonListResult.isSearchMode;
+  } else {
+    console.error('Failed to load lessons page:', {
+      code: lessonListResult.code,
+      message: lessonListResult.message,
+    });
+    loadError = {
+      code: lessonListResult.code,
+      message: lessonListResult.message,
+    };
   }
 
   // Build leaf categories for filter tabs (sub-categories under "שיעורים")
@@ -176,7 +150,21 @@ export default async function LessonsPage({ params, searchParams }: Props) {
       </div>
 
       {/* Lesson content */}
-      {lessons.length > 0 ? (
+      {loadError ? (
+        <EmptyState
+          icon={AlertTriangle}
+          title={t('loadErrorTitle')}
+          description={t('loadErrorDescription')}
+          action={
+            <Link
+              href={buildRetryHref({ q, audioTypeFilter, categoryFilter })}
+              className="rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              {commonT('retry')}
+            </Link>
+          }
+        />
+      ) : lessons.length > 0 ? (
         isSearchMode ? (
           <LessonsClient
             initialLessons={[]}

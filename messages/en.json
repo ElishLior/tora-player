@@ -55,6 +55,8 @@
     "thisMonth": "This Month",
     "older": "Older",
     "noLessons": "No lessons yet",
+    "loadErrorTitle": "Lessons cannot be loaded right now",
+    "loadErrorDescription": "There is a database connection problem. Please try again in a moment.",
     "dragOrClick": "Drag a file here or click to select",
     "pasteWhatsApp": "Paste text from WhatsApp",
     "autoNamePreview": "Suggested name:",

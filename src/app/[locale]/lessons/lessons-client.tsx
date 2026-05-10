@@ -6,6 +6,10 @@ import { LessonCardSkeleton } from '@/components/lessons/lesson-card-skeleton';
 import { useInfiniteScroll } from '@/hooks/use-infinite-scroll';
 import { getLessonsPaginated } from '@/actions/lessons-paginated';
 import { bulkUpdateLessonCategory } from '@/actions/lessons';
+import {
+  canAutoLoadMore,
+  getLoadMoreErrorMessage,
+} from '@/lib/lessons/pagination-state';
 import { CheckSquare, X, Save, Loader2 } from 'lucide-react';
 import type { LessonWithRelations, Category } from '@/types/database';
 
@@ -75,6 +79,8 @@ export function LessonsClient({
   // Infinite scroll state (normal mode only)
   const [lessons, setLessons] = useState<LessonWithRelations[]>(initialLessons);
   const [hasMore, setHasMore] = useState(initialHasMore);
+  const [pageError, setPageError] = useState<string | null>(null);
+  const [isRetryingPage, setIsRetryingPage] = useState(false);
 
   const fetchMore = useCallback(async () => {
     const offset = lessons.length;
@@ -84,11 +90,36 @@ export function LessonsClient({
       audioTypeFilter || undefined,
       categoryFilter || undefined
     );
+
+    if (result.error) {
+      setPageError(getLoadMoreErrorMessage(locale));
+      return;
+    }
+
+    setPageError(null);
     setLessons((prev) => [...prev, ...result.lessons]);
     setHasMore(result.hasMore);
-  }, [lessons.length, audioTypeFilter, categoryFilter]);
+  }, [lessons.length, audioTypeFilter, categoryFilter, locale]);
 
-  const { sentinelRef, isLoading } = useInfiniteScroll({ fetchMore, hasMore: !isSearchMode && hasMore });
+  const shouldAutoLoadMore = canAutoLoadMore({
+    isSearchMode,
+    hasMore,
+    pageError,
+  });
+
+  const { sentinelRef, isLoading } = useInfiniteScroll({
+    fetchMore,
+    hasMore: shouldAutoLoadMore,
+  });
+
+  const retryLoadMore = useCallback(async () => {
+    setIsRetryingPage(true);
+    try {
+      await fetchMore();
+    } finally {
+      setIsRetryingPage(false);
+    }
+  }, [fetchMore]);
 
   // All visible lessons (either search results or paginated)
   const allLessons = isSearchMode ? searchLessons : lessons;
@@ -269,6 +300,30 @@ export function LessonsClient({
           {Array.from({ length: 4 }).map((_, i) => (
             <LessonCardSkeleton key={`skeleton-${i}`} />
           ))}
+        </div>
+      )}
+
+      {!isSearchMode && pageError && (
+        <div
+          role="alert"
+          className="mt-4 flex flex-col gap-3 rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200 sm:flex-row sm:items-center sm:justify-between"
+          dir={locale === 'he' ? 'rtl' : 'ltr'}
+        >
+          <span>{pageError}</span>
+          <button
+            type="button"
+            onClick={retryLoadMore}
+            disabled={isRetryingPage}
+            className="self-start rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60 sm:self-auto"
+          >
+            {isRetryingPage
+              ? locale === 'he'
+                ? 'טוען...'
+                : 'Loading...'
+              : locale === 'he'
+                ? 'נסה שוב'
+                : 'Retry'}
+          </button>
         </div>
       )}
 
