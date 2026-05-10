@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const BASE_URL = 'http://localhost:3000';
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000';
 
 test.describe('Tora Player Smoke Tests', () => {
   test('Home page loads at /he with Hebrew content', async ({ page }) => {
@@ -14,18 +14,19 @@ test.describe('Tora Player Smoke Tests', () => {
     expect(htmlContent).toContain('he');
   });
 
-  test('Navigate to /he/lessons page', async ({ page }) => {
+  test('Navigate to /he/lessons page and render restored lessons', async ({ page }) => {
     await page.goto(`${BASE_URL}/he/lessons`);
     await expect(page).toHaveURL(/\/he\/lessons/);
-    const body = page.locator('body');
-    await expect(body).toBeVisible();
+    await expect(page.locator('body')).toBeVisible();
+    await expect(page.getByText('לא ניתן לטעון שיעורים כרגע')).toHaveCount(0);
+    await expect(page.getByText('אין שיעורים עדיין')).toHaveCount(0);
+    await expect(page.locator('a[href*="/lessons/"]').first()).toBeVisible();
   });
 
-  test('Navigate to /he/lessons/upload page', async ({ page }) => {
+  test('Navigate to /he/lessons/upload redirects guests to admin login', async ({ page }) => {
     await page.goto(`${BASE_URL}/he/lessons/upload`);
-    await expect(page).toHaveURL(/\/he\/lessons\/upload/);
-    const body = page.locator('body');
-    await expect(body).toBeVisible();
+    await expect(page).toHaveURL(/\/he\/admin\/login\?from=%2Fhe%2Flessons%2Fupload/);
+    await expect(page.locator('body')).toBeVisible();
   });
 
   test('Navigate to /he/series page', async ({ page }) => {
@@ -95,7 +96,7 @@ test.describe('Tora Player Smoke Tests', () => {
     await page.goto(`${BASE_URL}/he`);
     const header = page.locator('header');
     await expect(header).toBeVisible();
-    const title = page.locator('h1');
+    const title = header.locator('h1');
     await expect(title).toContainText('נגן תורה');
   });
 });
