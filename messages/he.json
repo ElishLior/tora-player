@@ -80,6 +80,19 @@
     "noActiveLesson": "אין שיעור פעיל",
     "clipMode": "מצב קטע"
   },
+  "driving": {
+    "title": "מצב נהיגה",
+    "noActiveLesson": "אין שיעור פעיל",
+    "back": "חזרה",
+    "close": "סגור מצב נהיגה",
+    "play": "נגן",
+    "pause": "השהה",
+    "skipForward": "15 שניות קדימה",
+    "skipBackward": "15 שניות אחורה",
+    "offlineRecommended": "להאזנה יציבה בנהיגה או באזורים בלי קליטה, שמור את השיעור לאופליין לפני הנסיעה.",
+    "playbackRecovering": "הנגן זיהה עצירה זמנית ומנסה להמשיך את ההשמעה.",
+    "tapToResume": "הקש כדי להמשיך להשמיע"
+  },
   "playlists": {
     "title": "רשימות השמעה",
     "create": "יצירת רשימה חדשה",
