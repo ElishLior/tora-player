@@ -1,5 +1,5 @@
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 export interface AudioTrack {
   id: string;
@@ -20,6 +20,23 @@ export interface AudioTrack {
   mimeType?: string;
 }
 
+export interface PlaybackDiagnostic {
+  at: string;
+  event: string;
+  action: string;
+  trackId?: string;
+  audioFileId?: string;
+  offlineKey?: string;
+  currentTime: number;
+  result?:
+    | "attempted"
+    | "blocked"
+    | "cooldown"
+    | "succeeded"
+    | "failed"
+    | "ignored";
+}
+
 interface AudioPlayerState {
   // Current track
   currentTrack: AudioTrack | null;
@@ -29,6 +46,26 @@ interface AudioPlayerState {
   volume: number;
   playbackSpeed: number;
   isMiniPlayerExpanded: boolean;
+  lastNativePlaybackState:
+    | "unknown"
+    | "playing"
+    | "paused"
+    | "waiting"
+    | "stalled"
+    | "errored"
+    | "ended";
+  playbackRecoveryState:
+    | "idle"
+    | "recovering"
+    | "stalled"
+    | "resumed"
+    | "needs-user-gesture"
+    | "failed";
+  playbackDiagnostics: PlaybackDiagnostic[];
+  recoveryAttemptsByTrack: Record<
+    string,
+    { count: number; lastAttemptAt: number; playBlocked: boolean }
+  >;
 
   // Queue
   queue: AudioTrack[];
@@ -51,6 +88,17 @@ interface AudioPlayerState {
   addToQueue: (track: AudioTrack) => void;
   removeFromQueue: (index: number) => void;
   toggleMiniPlayer: () => void;
+  setNativePlaybackState: (
+    state: AudioPlayerState["lastNativePlaybackState"],
+  ) => void;
+  setPlaybackRecoveryState: (
+    state: AudioPlayerState["playbackRecoveryState"],
+  ) => void;
+  addPlaybackDiagnostic: (diagnostic: PlaybackDiagnostic) => void;
+  clearPlaybackDiagnostics: () => void;
+  markPlaybackRecoveryAttempt: (trackKey: string) => void;
+  markPlaybackRecoverySucceeded: (trackKey: string) => void;
+  markPlaybackNeedsUserGesture: (trackKey: string) => void;
 }
 
 export const useAudioStore = create<AudioPlayerState>()(
@@ -63,6 +111,10 @@ export const useAudioStore = create<AudioPlayerState>()(
       volume: 1,
       playbackSpeed: 1,
       isMiniPlayerExpanded: false,
+      lastNativePlaybackState: "unknown",
+      playbackRecoveryState: "idle",
+      playbackDiagnostics: [],
+      recoveryAttemptsByTrack: {},
       queue: [],
       queueIndex: -1,
 
@@ -139,9 +191,62 @@ export const useAudioStore = create<AudioPlayerState>()(
 
       toggleMiniPlayer: () =>
         set((state) => ({ isMiniPlayerExpanded: !state.isMiniPlayerExpanded })),
+
+      setNativePlaybackState: (state) =>
+        set({ lastNativePlaybackState: state }),
+      setPlaybackRecoveryState: (state) =>
+        set({ playbackRecoveryState: state }),
+      addPlaybackDiagnostic: (diagnostic) =>
+        set((state) => ({
+          playbackDiagnostics: [
+            ...state.playbackDiagnostics.slice(-19),
+            diagnostic,
+          ],
+        })),
+      clearPlaybackDiagnostics: () => set({ playbackDiagnostics: [] }),
+      markPlaybackRecoveryAttempt: (trackKey) =>
+        set((state) => {
+          const previous = state.recoveryAttemptsByTrack[trackKey];
+          return {
+            playbackRecoveryState: "recovering",
+            recoveryAttemptsByTrack: {
+              ...state.recoveryAttemptsByTrack,
+              [trackKey]: {
+                count: (previous?.count ?? 0) + 1,
+                lastAttemptAt: Date.now(),
+                playBlocked: previous?.playBlocked ?? false,
+              },
+            },
+          };
+        }),
+      markPlaybackRecoverySucceeded: (trackKey) =>
+        set((state) => {
+          const recoveryAttemptsByTrack = {
+            ...state.recoveryAttemptsByTrack,
+          };
+          delete recoveryAttemptsByTrack[trackKey];
+
+          return {
+            playbackRecoveryState: "resumed",
+            recoveryAttemptsByTrack,
+          };
+        }),
+      markPlaybackNeedsUserGesture: (trackKey) =>
+        set((state) => ({
+          playbackRecoveryState: "needs-user-gesture",
+          recoveryAttemptsByTrack: {
+            ...state.recoveryAttemptsByTrack,
+            [trackKey]: {
+              count: state.recoveryAttemptsByTrack[trackKey]?.count ?? 0,
+              lastAttemptAt:
+                state.recoveryAttemptsByTrack[trackKey]?.lastAttemptAt ?? 0,
+              playBlocked: true,
+            },
+          },
+        })),
     }),
     {
-      name: 'tora-player-audio',
+      name: "tora-player-audio",
       partialize: (state) => ({
         volume: state.volume,
         playbackSpeed: state.playbackSpeed,
@@ -152,6 +257,6 @@ export const useAudioStore = create<AudioPlayerState>()(
         // NOTE: isPlaying intentionally excluded — persisting it caused
         // phantom auto-resume on page refresh / rehydration
       }),
-    }
-  )
+    },
+  ),
 );

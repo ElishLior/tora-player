@@ -1,11 +1,35 @@
-'use client';
+"use client";
 
-import { Howl, Howler } from 'howler';
-import { normalizeAudioUrl } from '@/lib/audio-url';
+import { Howl, Howler } from "howler";
+import { normalizeAudioUrl } from "@/lib/audio-url";
 
 // Increase Howler's HTML5 audio pool to prevent "pool exhausted" warnings
 // Default is 10 — raise to 20 for safety with streaming + preloading
 Howler.html5PoolSize = 20;
+
+export interface LoadedAudioTrackIdentity {
+  lessonId?: string;
+  audioFileId?: string;
+  offlineKey?: string;
+  sourceUrl: string;
+  resolvedUrl: string;
+}
+
+export interface NativeAudioEventSnapshot {
+  type: string;
+  paused: boolean;
+  ended: boolean;
+  errored: boolean;
+  readyState: number;
+  currentUrl: string | null;
+  loadedTrackIdentity: LoadedAudioTrackIdentity | null;
+}
+
+interface AudioEngineLoadOptions {
+  startPosition?: number;
+  trackIdentity?: Omit<LoadedAudioTrackIdentity, "resolvedUrl">;
+  forceReload?: boolean;
+}
 
 /**
  * Singleton audio engine wrapping Howler.js.
@@ -19,6 +43,11 @@ class AudioEngine {
   private onEnd: (() => void) | null = null;
   private onLoad: ((duration: number) => void) | null = null;
   private onError: ((error: string) => void) | null = null;
+  private onNativeAudioEvent:
+    | ((event: NativeAudioEventSnapshot) => void)
+    | null = null;
+  private nativeAudioCleanup: (() => void) | null = null;
+  private loadedTrackIdentity: LoadedAudioTrackIdentity | null = null;
   private animationFrameId: number | null = null;
   private _userPaused = false; // Track if user explicitly paused to prevent auto-resume
 
@@ -29,34 +58,119 @@ class AudioEngine {
   private detectFormat(url: string): string[] {
     // Try to get extension from the encoded file key in the URL
     const decoded = decodeURIComponent(url);
-    const ext = decoded.split('.').pop()?.split('?')[0]?.toLowerCase();
+    const ext = decoded.split(".").pop()?.split("?")[0]?.toLowerCase();
     switch (ext) {
-      case 'mp3':                return ['mp3'];
-      case 'm4a': case 'aac':   return ['m4a'];
-      case 'mp4':                return ['mp4'];
-      case 'ogg': case 'opus':  return ['ogg'];
-      case 'wav':                return ['wav'];
-      case 'flac':               return ['flac'];
-      case 'webm':               return ['webm'];
-      default:                   return ['mp3', 'm4a', 'ogg', 'wav', 'webm'];
+      case "mp3":
+        return ["mp3"];
+      case "m4a":
+      case "aac":
+        return ["m4a"];
+      case "mp4":
+        return ["mp4"];
+      case "ogg":
+      case "opus":
+        return ["ogg"];
+      case "wav":
+        return ["wav"];
+      case "flac":
+        return ["flac"];
+      case "webm":
+        return ["webm"];
+      default:
+        return ["mp3", "m4a", "ogg", "wav", "webm"];
     }
   }
 
-  load(url: string, options?: { startPosition?: number }) {
+  private buildNativeAudioSnapshot(type: string): NativeAudioEventSnapshot {
+    const audioEl = this.getAudioElement();
+    return {
+      type,
+      paused: audioEl?.paused ?? true,
+      ended: audioEl?.ended ?? false,
+      errored: Boolean(audioEl?.error),
+      readyState: audioEl?.readyState ?? 0,
+      currentUrl: this.currentUrl,
+      loadedTrackIdentity: this.loadedTrackIdentity,
+    };
+  }
+
+  private emitNativeAudioSnapshot(
+    type: string,
+    overrides?: Partial<NativeAudioEventSnapshot>,
+  ) {
+    this.onNativeAudioEvent?.({
+      ...this.buildNativeAudioSnapshot(type),
+      ...overrides,
+    });
+  }
+
+  private attachNativeAudioEventListeners() {
+    this.nativeAudioCleanup?.();
+
+    const audioEl = this.getAudioElement();
+    if (!audioEl) {
+      this.nativeAudioCleanup = null;
+      return;
+    }
+
+    const eventTypes = [
+      "pause",
+      "playing",
+      "waiting",
+      "stalled",
+      "suspend",
+      "error",
+      "ended",
+      "emptied",
+    ];
+    const listener = (event: Event) => {
+      this.onNativeAudioEvent?.({
+        type: event.type,
+        paused: audioEl.paused,
+        ended: audioEl.ended,
+        errored: Boolean(audioEl.error),
+        readyState: audioEl.readyState,
+        currentUrl: this.currentUrl,
+        loadedTrackIdentity: this.loadedTrackIdentity,
+      });
+    };
+
+    for (const eventType of eventTypes) {
+      audioEl.addEventListener(eventType, listener);
+    }
+
+    this.nativeAudioCleanup = () => {
+      for (const eventType of eventTypes) {
+        audioEl.removeEventListener(eventType, listener);
+      }
+    };
+  }
+
+  load(url: string, options?: AudioEngineLoadOptions) {
     // Normalize the URL to use stream proxy instead of direct R2
     const normalizedUrl = normalizeAudioUrl(url) || url;
+    const loadedTrackIdentity = options?.trackIdentity
+      ? { ...options.trackIdentity, resolvedUrl: normalizedUrl }
+      : { sourceUrl: url, resolvedUrl: normalizedUrl };
 
     // Don't reload same track
-    if (this.currentUrl === normalizedUrl && this.howl) {
+    if (
+      this.currentUrl === normalizedUrl &&
+      this.howl &&
+      !options?.forceReload
+    ) {
+      this.loadedTrackIdentity = loadedTrackIdentity;
       if (options?.startPosition) {
         this.howl.seek(options.startPosition);
       }
+      this.attachNativeAudioEventListeners();
       return;
     }
 
     // Cleanup previous
     this.unload();
     this.currentUrl = normalizedUrl;
+    this.loadedTrackIdentity = loadedTrackIdentity;
 
     this.howl = new Howl({
       src: [normalizedUrl],
@@ -64,6 +178,7 @@ class AudioEngine {
       html5: true, // Required for streaming long audio files
       preload: true,
       onload: () => {
+        this.attachNativeAudioEventListeners();
         const duration = this.howl?.duration() || 0;
         this.onLoad?.(duration);
         if (options?.startPosition && options.startPosition > 0) {
@@ -75,33 +190,52 @@ class AudioEngine {
         this.onEnd?.();
       },
       onloaderror: (_id: number, error: unknown) => {
+        this.emitNativeAudioSnapshot("error", { errored: true, paused: true });
         this.onError?.(`Failed to load audio: ${error}`);
       },
       onplayerror: (_id: number, error: unknown) => {
+        this.emitNativeAudioSnapshot("error", { errored: true, paused: true });
         this.onError?.(`Playback error: ${error}`);
         // Try to recover — but only if user hasn't explicitly paused
         // and the same Howl instance is still active (not stale)
         if (this.howl) {
           const howlAtError = this.howl;
           const urlAtError = this.currentUrl;
-          this.howl.once('unlock', () => {
+          this.howl.once("unlock", () => {
             // Guard: don't auto-resume if user explicitly paused,
             // or if the Howl/URL has changed since the error (stale unlock)
-            if (this.howl === howlAtError && this.currentUrl === urlAtError && !this._userPaused) {
+            if (
+              this.howl === howlAtError &&
+              this.currentUrl === urlAtError &&
+              !this._userPaused
+            ) {
               this.play();
             }
           });
         }
       },
     });
+    this.attachNativeAudioEventListeners();
   }
 
-  ensurePlaying(url: string, options?: { startPosition?: number }) {
+  ensurePlaying(url: string, options?: AudioEngineLoadOptions) {
     const normalizedUrl = normalizeAudioUrl(url) || url;
+    if (options?.forceReload) {
+      this.unload();
+    }
+
     if (!this.howl || this.currentUrl !== normalizedUrl) {
-      this.load(normalizedUrl, options);
-    } else if (options?.startPosition !== undefined) {
-      this.seek(options.startPosition);
+      this.load(url, options);
+    } else {
+      if (options?.trackIdentity) {
+        this.loadedTrackIdentity = {
+          ...options.trackIdentity,
+          resolvedUrl: normalizedUrl,
+        };
+      }
+      if (options?.startPosition !== undefined) {
+        this.seek(options.startPosition);
+      }
     }
     this.play();
   }
@@ -159,8 +293,9 @@ class AudioEngine {
 
   getCurrentTime(): number {
     if (!this.howl) return 0;
-    const seek = this.soundId !== null ? this.howl.seek(this.soundId) : this.howl.seek();
-    return typeof seek === 'number' ? seek : 0;
+    const seek =
+      this.soundId !== null ? this.howl.seek(this.soundId) : this.howl.seek();
+    return typeof seek === "number" ? seek : 0;
   }
 
   getDuration(): number {
@@ -170,7 +305,9 @@ class AudioEngine {
 
   isPlaying(): boolean {
     if (!this.howl) return false;
-    return this.soundId !== null ? this.howl.playing(this.soundId) : this.howl.playing();
+    return this.soundId !== null
+      ? this.howl.playing(this.soundId)
+      : this.howl.playing();
   }
 
   isNativePaused(): boolean {
@@ -186,6 +323,11 @@ class AudioEngine {
   /** Get the current audio URL being played */
   getCurrentUrl(): string | null {
     return this.currentUrl;
+  }
+
+  getNativeAudioSnapshot(type = "snapshot"): NativeAudioEventSnapshot | null {
+    if (!this.getAudioElement()) return null;
+    return this.buildNativeAudioSnapshot(type);
   }
 
   /**
@@ -212,12 +354,15 @@ class AudioEngine {
 
   unload() {
     this.stopTimeTracking();
+    this.nativeAudioCleanup?.();
+    this.nativeAudioCleanup = null;
     if (this.howl) {
       this.howl.unload();
       this.howl = null;
     }
     this.currentUrl = null;
     this.soundId = null;
+    this.loadedTrackIdentity = null;
   }
 
   // Event listeners
@@ -235,6 +380,10 @@ class AudioEngine {
 
   setOnError(cb: (error: string) => void) {
     this.onError = cb;
+  }
+
+  setOnNativeAudioEvent(cb: (event: NativeAudioEventSnapshot) => void) {
+    this.onNativeAudioEvent = cb;
   }
 
   private startTimeTracking() {
