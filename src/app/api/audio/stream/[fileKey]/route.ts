@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { buildContentDisposition, sanitizeDownloadFilename } from '@/lib/audio-download';
 import { getDownloadPresignedUrl } from '@/lib/r2';
 
 /**
@@ -38,6 +39,8 @@ export async function GET(
   try {
     const { fileKey } = await params;
     const decodedKey = decodeURIComponent(fileKey);
+    const downloadMode = request.nextUrl.searchParams.get('download') === '1';
+    const requestedFilename = request.nextUrl.searchParams.get('filename');
 
     const signedUrl = await getDownloadPresignedUrl(decodedKey);
     const contentType = getContentType(decodedKey);
@@ -64,6 +67,14 @@ export async function GET(
     responseHeaders.set('Content-Type', contentType);
     responseHeaders.set('Accept-Ranges', 'bytes');
     responseHeaders.set('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+    responseHeaders.set('X-Content-Type-Options', 'nosniff');
+    if (downloadMode) {
+      const fallbackName = decodedKey.split('/').pop() || 'audio.mp3';
+      responseHeaders.set(
+        'Content-Disposition',
+        buildContentDisposition(sanitizeDownloadFilename(requestedFilename || fallbackName))
+      );
+    }
 
     // Forward content-related headers from R2
     const contentLength = r2Response.headers.get('Content-Length');

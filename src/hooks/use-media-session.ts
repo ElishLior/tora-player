@@ -156,13 +156,22 @@ export function useMediaSession() {
         void resumeTrackPlayback(
           { track: state.currentTrack, currentTime: state.currentTime },
           {
-            getOfflineAudioUrl,
+            getOfflineAudioUrl: (track) =>
+              getOfflineAudioUrl(track.lessonId || track.id, track.audioUrl, track.offlineKey),
             ensurePlaying: audioEngine.ensurePlaying.bind(audioEngine),
             markPlaying: () => useAudioStore.getState().play(),
             isEngineLoaded: () => audioEngine.isLoaded(),
             getCurrentEngineUrl: () => audioEngine.getCurrentUrl(),
             isLoadedUrlCurrentTrack: (url, currentTrack) => url === currentTrack.audioUrl,
-            isStillCurrent: (trackId) => useAudioStore.getState().currentTrack?.id === trackId,
+            isStillCurrent: (track) => {
+              const currentTrack = useAudioStore.getState().currentTrack;
+              return Boolean(
+                currentTrack &&
+                (currentTrack.lessonId || currentTrack.id) === (track.lessonId || track.id) &&
+                currentTrack.audioUrl === track.audioUrl &&
+                (currentTrack.offlineKey || '') === (track.offlineKey || ''),
+              );
+            },
             shouldResume: () => useAudioStore.getState().isPlaying,
           },
         );

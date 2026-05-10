@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Play, Pause, ChevronDown, Bookmark, Download, List, Cast, Car, Scissors } from 'lucide-react';
+import { Play, Pause, ChevronDown, Bookmark, FileDown, List, Cast, Car, Scissors } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useLocale } from 'next-intl';
@@ -9,6 +9,7 @@ import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { SeekBar } from './seek-bar';
 import { SpeedControl } from './speed-control';
 import { handleCastClick } from '@/lib/cast-utils';
+import { getAudioDownloadUrl, sanitizeDownloadFilename } from '@/lib/audio-download';
 import { useBookmarksStore } from '@/stores/bookmarks-store';
 import { BookmarkDialog } from '@/components/bookmarks/bookmark-dialog';
 import { getTagInfo } from '@/components/bookmarks/bookmark-dialog';
@@ -61,8 +62,13 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
 
   if (!currentTrack) return null;
 
-  const lessonBookmarks = bookmarks.filter((b) => b.lessonId === currentTrack.id);
+  const lessonId = currentTrack.lessonId || currentTrack.id;
+  const lessonBookmarks = bookmarks.filter((b) => b.lessonId === lessonId);
   const bookmarkCount = lessonBookmarks.length;
+  const downloadFilename = sanitizeDownloadFilename(
+    `${currentTrack.originalName || currentTrack.hebrewTitle || currentTrack.title}.mp3`
+  );
+  const downloadUrl = getAudioDownloadUrl(currentTrack.audioUrl, downloadFilename);
 
   // Tag color map for bookmark markers
   const tagColorMap: Record<string, string> = {
@@ -235,10 +241,15 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
               <Car className="h-5 w-5" />
               <span className="text-[10px]">מצב נהיגה</span>
             </button>
-            <button className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors">
-              <Download className="h-5 w-5" />
+            <a
+              href={downloadUrl}
+              download={downloadFilename}
+              className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+              aria-label={locale === 'he' ? 'הורדת קובץ למכשיר' : 'Download file to device'}
+            >
+              <FileDown className="h-5 w-5" />
               <span className="text-[10px]">{t('download')}</span>
-            </button>
+            </a>
             <button
               onClick={() => void handleCastClick()}
               className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
@@ -255,7 +266,7 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
       <BookmarkDialog
         isOpen={showBookmarkDialog}
         onClose={() => setShowBookmarkDialog(false)}
-        lessonId={currentTrack.id}
+        lessonId={lessonId}
         position={currentTime}
       />
 
@@ -263,7 +274,7 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
       <ShareClipDialog
         isOpen={showShareClipDialog}
         onClose={() => setShowShareClipDialog(false)}
-        lessonId={currentTrack.id}
+        lessonId={lessonId}
         currentTime={currentTime}
         duration={duration}
         lessonTitle={currentTrack.hebrewTitle || currentTrack.title}

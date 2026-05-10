@@ -3,7 +3,11 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useAudioStore, type AudioTrack } from '@/stores/audio-store';
 import { audioEngine } from '@/lib/audio-engine';
-import { getOfflineAudioUrl, revokeOfflineAudioUrl } from '@/lib/offline-storage';
+import {
+  getOfflineAudioUrl,
+  getOfflineKey,
+  revokeOfflineAudioUrl,
+} from '@/lib/offline-storage';
 import { resumeTrackPlayback } from '@/lib/audio-resume';
 
 const PROGRESS_SAVE_INTERVAL = 10000; // Save progress every 10 seconds
@@ -16,17 +20,39 @@ function applyAudioElementAttributes() {
   }
 }
 
-async function resumeCurrentTrackPlayback(track: AudioTrack, currentTime: number) {
+function isSameAudioTrack(
+  a: AudioTrack | null | undefined,
+  b: AudioTrack | null | undefined,
+) {
+  if (!a || !b) return false;
+  return (
+    (a.lessonId || a.id) === (b.lessonId || b.id) &&
+    a.audioUrl === b.audioUrl &&
+    (a.offlineKey || '') === (b.offlineKey || '')
+  );
+}
+
+async function resumeCurrentTrackPlayback(
+  track: AudioTrack,
+  currentTime: number,
+) {
   const resumed = await resumeTrackPlayback(
     { track, currentTime },
     {
-      getOfflineAudioUrl,
+      getOfflineAudioUrl: (currentTrack) =>
+        getOfflineAudioUrl(
+          currentTrack.lessonId || currentTrack.id,
+          currentTrack.audioUrl,
+          currentTrack.offlineKey,
+        ),
       ensurePlaying: audioEngine.ensurePlaying.bind(audioEngine),
       markPlaying: () => useAudioStore.getState().play(),
       isEngineLoaded: () => audioEngine.isLoaded(),
       getCurrentEngineUrl: () => audioEngine.getCurrentUrl(),
-      isLoadedUrlCurrentTrack: (url, currentTrack) => url === currentTrack.audioUrl,
-      isStillCurrent: (trackId) => useAudioStore.getState().currentTrack?.id === trackId,
+      isLoadedUrlCurrentTrack: (url, currentTrack) =>
+        url === currentTrack.audioUrl,
+      isStillCurrent: (currentTrack) =>
+        isSameAudioTrack(useAudioStore.getState().currentTrack, currentTrack),
       shouldResume: () => useAudioStore.getState().isPlaying,
     },
   );
@@ -39,7 +65,7 @@ export function useAudioPlayer() {
   const store = useAudioStore();
   const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastSavedTimeRef = useRef(0);
-  const prevTrackIdRef = useRef<string | null>(null);
+  const prevOfflineKeyRef = useRef<string | null>(null);
 
   // Sync engine with store state
   useEffect(() => {
@@ -68,11 +94,21 @@ export function useAudioPlayer() {
   useEffect(() => {
     if (!store.currentTrack?.audioUrl) return;
 
-    // Revoke old blob URL when switching tracks to free memory
-    if (prevTrackIdRef.current && prevTrackIdRef.current !== store.currentTrack.id) {
-      revokeOfflineAudioUrl(prevTrackIdRef.current);
+    const trackOfflineKey =
+      store.currentTrack.offlineKey ||
+      getOfflineKey(
+        store.currentTrack.lessonId || store.currentTrack.id,
+        store.currentTrack,
+      );
+
+    // Revoke old blob URL when switching tracks/files to free memory
+    if (
+      prevOfflineKeyRef.current &&
+      prevOfflineKeyRef.current !== trackOfflineKey
+    ) {
+      revokeOfflineAudioUrl(prevOfflineKeyRef.current);
     }
-    prevTrackIdRef.current = store.currentTrack.id;
+    prevOfflineKeyRef.current = trackOfflineKey;
 
     let cancelled = false;
 
@@ -83,7 +119,11 @@ export function useAudioPlayer() {
       // Try offline blob URL first, fall back to streaming URL
       let url = track.audioUrl;
       try {
-        const offlineUrl = await getOfflineAudioUrl(track.id);
+        const offlineUrl = await getOfflineAudioUrl(
+          track.lessonId || track.id,
+          track.audioUrl,
+          track.offlineKey,
+        );
         if (offlineUrl && !cancelled) {
           url = offlineUrl;
         }
@@ -94,9 +134,10 @@ export function useAudioPlayer() {
       if (cancelled) return;
 
       audioEngine.load(url, {
-        startPosition: useAudioStore.getState().currentTime > 0
-          ? useAudioStore.getState().currentTime
-          : undefined,
+        startPosition:
+          useAudioStore.getState().currentTime > 0
+            ? useAudioStore.getState().currentTime
+            : undefined,
       });
 
       // Set proper attributes on the native <audio> element for iOS background playback
@@ -107,9 +148,13 @@ export function useAudioPlayer() {
       // Resume this newly loaded URL only when play intent and track identity
       // are still current.
       const latestState = useAudioStore.getState();
-      if (latestState.isPlaying && latestState.currentTrack?.id === track.id) {
+      if (
+        latestState.isPlaying &&
+        isSameAudioTrack(latestState.currentTrack, track)
+      ) {
         audioEngine.ensurePlaying(url, {
-          startPosition: latestState.currentTime > 0 ? latestState.currentTime : undefined,
+          startPosition:
+            latestState.currentTime > 0 ? latestState.currentTime : undefined,
         });
       }
     }
@@ -119,7 +164,7 @@ export function useAudioPlayer() {
     return () => {
       cancelled = true;
     };
-  }, [store.currentTrack?.id, store.currentTrack?.audioUrl]);
+  }, [store.currentTrack?.id, store.currentTrack?.audioUrl, store.currentTrack?.offlineKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Re-initialize audio when app comes back to foreground (browser may have killed audio context)
   useEffect(() => {
@@ -130,13 +175,19 @@ export function useAudioPlayer() {
 
       // If the browser kept the Howl object but paused/stalled the native element,
       // actively resume instead of only checking for a missing engine instance.
-      if (state.isPlaying && (!audioEngine.isLoaded() || !audioEngine.isPlaying() || audioEngine.isNativePaused())) {
+      if (
+        state.isPlaying &&
+        (!audioEngine.isLoaded() ||
+          !audioEngine.isPlaying() ||
+          audioEngine.isNativePaused())
+      ) {
         void resumeCurrentTrackPlayback(state.currentTrack, state.currentTime);
       }
     }
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    return () =>
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []); // Empty deps — uses getState() for fresh state
 
   // Sync play/pause — re-load engine if needed, then play/pause
@@ -153,7 +204,7 @@ export function useAudioPlayer() {
     } else {
       audioEngine.pause();
     }
-  }, [store.isPlaying, store.currentTrack?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [store.isPlaying, store.currentTrack?.id, store.currentTrack?.audioUrl, store.currentTrack?.offlineKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sync volume
   useEffect(() => {
@@ -216,7 +267,10 @@ export function useAudioPlayer() {
       if (Math.abs(currentTime - lastSavedTimeRef.current) > 5) {
         lastSavedTimeRef.current = currentTime;
         // Save to server (fire-and-forget)
-        saveProgress(store.currentTrack!.id, Math.round(currentTime));
+        saveProgress(
+          store.currentTrack!.lessonId || store.currentTrack!.id,
+          Math.round(currentTime),
+        );
       }
     }, PROGRESS_SAVE_INTERVAL);
 
@@ -235,7 +289,10 @@ export function useAudioPlayer() {
 
   // Skip forward/backward — update both store AND audio engine
   const skipForward = useCallback((seconds = 15) => {
-    const newTime = Math.min(audioEngine.getCurrentTime() + seconds, audioEngine.getDuration());
+    const newTime = Math.min(
+      audioEngine.getCurrentTime() + seconds,
+      audioEngine.getDuration(),
+    );
     audioEngine.seek(newTime);
     store.setCurrentTime(newTime);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps

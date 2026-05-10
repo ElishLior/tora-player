@@ -9,6 +9,8 @@
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write \"src/**/*.{ts,tsx,css,json}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css,json}\"",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {

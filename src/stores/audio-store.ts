@@ -3,6 +3,10 @@ import { persist } from 'zustand/middleware';
 
 export interface AudioTrack {
   id: string;
+  lessonId?: string;
+  audioFileId?: string;
+  fileKey?: string;
+  offlineKey?: string;
   title: string;
   hebrewTitle: string;
   audioUrl: string;
@@ -12,6 +16,8 @@ export interface AudioTrack {
   date: string;
   artworkUrl?: string;
   description?: string;
+  originalName?: string;
+  mimeType?: string;
 }
 
 interface AudioPlayerState {

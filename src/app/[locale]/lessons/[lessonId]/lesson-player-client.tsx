@@ -1,17 +1,18 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Play, Pause, Cast, Volume2, X, ChevronRight, ChevronLeft, ChevronDown, StickyNote, Plus, Trash2, Pencil, Clock, Check, Scissors, Car, Download, CheckCircle, Loader2, Bookmark } from 'lucide-react';
+import { Play, Pause, Cast, Volume2, X, ChevronRight, ChevronLeft, ChevronDown, StickyNote, Plus, Trash2, Pencil, Clock, Check, Scissors, Car, Download, CheckCircle, Loader2, Bookmark, FileDown } from 'lucide-react';
 import { useLocale } from 'next-intl';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { SeekBar } from '@/components/player/seek-bar';
 import { SpeedControl } from '@/components/player/speed-control';
 import { handleCastClick } from '@/lib/cast-utils';
+import { getAudioDownloadUrl, sanitizeDownloadFilename } from '@/lib/audio-download';
 import type { LessonWithRelations, LessonAudio, LessonImage } from '@/types/database';
 import { normalizeAudioUrl } from '@/lib/audio-url';
 import { getNotes, addNote, updateNote, deleteNote, type LocalNote } from '@/lib/local-notes';
-import { downloadLesson, isLessonDownloaded } from '@/lib/offline-storage';
+import { downloadLessonAudioFiles, getDownloadedLesson, getOfflineKey } from '@/lib/offline-storage';
 import { useBookmarksStore } from '@/stores/bookmarks-store';
 import { submitSnippet } from '@/actions/snippets';
 
@@ -48,6 +49,77 @@ function formatDur(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
   return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+type DownloadState = 'idle' | 'downloading' | 'downloaded' | 'error';
+
+interface LessonAudioAsset {
+  audioFileId?: string;
+  fileKey?: string;
+  audioUrl: string;
+  title: string;
+  originalName?: string | null;
+  audioType?: string | null;
+  duration: number;
+  fileSize?: number;
+  sortOrder: number;
+  offlineKey: string;
+}
+
+function getSortedAudioFiles(lesson: LessonWithRelations): LessonAudio[] {
+  return [...(lesson.audio_files || [])].sort((a, b) => {
+    const order = a.sort_order - b.sort_order;
+    if (order !== 0) return order;
+    return a.id.localeCompare(b.id);
+  });
+}
+
+function getLessonAudioAssets(lesson: LessonWithRelations): LessonAudioAsset[] {
+  const sortedAudioFiles = getSortedAudioFiles(lesson);
+  if (sortedAudioFiles.length > 0) {
+    return sortedAudioFiles
+      .map((audio, index) => {
+        const audioUrl = normalizeAudioUrl(audio.audio_url) || audio.audio_url;
+        return {
+          audioFileId: audio.id,
+          fileKey: audio.file_key,
+          audioUrl,
+          title: audio.original_name || `חלק ${index + 1}`,
+          originalName: audio.original_name,
+          audioType: audio.audio_type,
+          duration: audio.duration || 0,
+          fileSize: audio.file_size,
+          sortOrder: audio.sort_order ?? index,
+          offlineKey: getOfflineKey(lesson.id, {
+            audioFileId: audio.id,
+            fileKey: audio.file_key,
+            audioUrl,
+          }),
+        };
+      });
+  }
+
+  const audioUrl = normalizeAudioUrl(lesson.audio_url) || lesson.audio_url;
+  if (!audioUrl) return [];
+
+  return [
+    {
+      audioUrl,
+      title: lesson.hebrew_title || lesson.title,
+      duration: lesson.duration,
+      fileSize: lesson.file_size,
+      sortOrder: 0,
+      offlineKey: getOfflineKey(lesson.id, { audioUrl }),
+    },
+  ];
+}
+
+function getAudioAssetFilename(lesson: LessonWithRelations, asset: LessonAudioAsset, index = 0): string {
+  const baseTitle = asset.originalName || asset.title || lesson.hebrew_title || lesson.title || 'lesson';
+  const suffix = asset.audioType ? ` - ${asset.audioType}` : index > 0 ? ` - ${index + 1}` : '';
+  const extension = decodeURIComponent(asset.audioUrl).split('?')[0]?.split('.').pop() || 'mp3';
+  const titleWithoutExtension = baseTitle.replace(/\.[a-z0-9]{2,5}$/i, '');
+  return sanitizeDownloadFilename(`${titleWithoutExtension}${suffix}.${extension}`, extension);
 }
 
 // Inlined — cannot import separate 'use client' files into this component
@@ -368,7 +440,28 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
     setTrack,
   } = useAudioPlayer();
 
-  const isCurrentLesson = currentTrack?.id === lesson.id;
+  const currentLessonId = currentTrack?.lessonId || currentTrack?.id;
+  const isCurrentLesson = currentLessonId === lesson.id;
+  const sortedAudioFiles = useMemo(() => getSortedAudioFiles(lesson), [lesson]);
+  const lessonAudioAssets = useMemo(() => getLessonAudioAssets(lesson), [lesson]);
+  const primaryAudioAsset = lessonAudioAssets[0] || null;
+
+  const createTrackFromAsset = useCallback((asset: LessonAudioAsset) => ({
+    id: lesson.id,
+    lessonId: lesson.id,
+    audioFileId: asset.audioFileId,
+    fileKey: asset.fileKey,
+    offlineKey: asset.offlineKey,
+    title: lesson.title,
+    hebrewTitle: lesson.hebrew_title || lesson.title,
+    audioUrl: asset.audioUrl,
+    audioUrlFallback: normalizeAudioUrl(lesson.audio_url_fallback) || undefined,
+    duration: asset.duration || lesson.duration,
+    seriesName: lesson.series?.hebrew_name || lesson.series?.name || undefined,
+    date: lesson.date,
+    description: lesson.description || lesson.summary || undefined,
+    originalName: asset.originalName || asset.title,
+  }), [lesson]);
 
   // ── Clip mode: read start/end from URL search params ──
   const clipStartParam = searchParams.get('start');
@@ -396,18 +489,10 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
     if (clipSeekDoneRef.current) return; // Already handled
 
     // Start playing the lesson so the seek effect above can fire
-    playTrack({
-      id: lesson.id,
-      title: lesson.title,
-      hebrewTitle: lesson.hebrew_title || lesson.title,
-      audioUrl: normalizeAudioUrl(lesson.audio_url) || lesson.audio_url!,
-      audioUrlFallback: normalizeAudioUrl(lesson.audio_url_fallback) || undefined,
-      duration: lesson.duration,
-      seriesName: lesson.series?.hebrew_name || lesson.series?.name || undefined,
-      date: lesson.date,
-      description: lesson.description || lesson.summary || undefined,
-    });
-  }, [clipStart, isCurrentLesson]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (primaryAudioAsset) {
+      playTrack(createTrackFromAsset(primaryAudioAsset));
+    }
+  }, [clipStart, isCurrentLesson, primaryAudioAsset, playTrack, createTrackFromAsset]);
 
   // Auto-pause at clip end
   useEffect(() => {
@@ -420,86 +505,130 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
   const handlePlay = () => {
     if (isCurrentLesson) {
       togglePlay();
-    } else {
-      playTrack({
-        id: lesson.id,
-        title: lesson.title,
-        hebrewTitle: lesson.hebrew_title || lesson.title,
-        audioUrl: normalizeAudioUrl(lesson.audio_url) || lesson.audio_url!,
-        audioUrlFallback: normalizeAudioUrl(lesson.audio_url_fallback) || undefined,
-        duration: lesson.duration,
-        seriesName: lesson.series?.hebrew_name || lesson.series?.name || undefined,
-        date: lesson.date,
-        description: lesson.description || lesson.summary || undefined,
-      });
+    } else if (primaryAudioAsset) {
+      playTrack(createTrackFromAsset(primaryAudioAsset));
     }
   };
 
   // Audio file list helpers
-  const audioFiles = lesson.audio_files || [];
-  const sortedAudioFiles = [...audioFiles].sort((a, b) => a.sort_order - b.sort_order);
-
-  function isFileActive(audio: LessonAudio): boolean {
+  function isFileActive(asset: LessonAudioAsset): boolean {
     if (!currentTrack) return false;
-    const normalizedFileUrl = normalizeAudioUrl(audio.audio_url);
-    return currentTrack.audioUrl === normalizedFileUrl || currentTrack.audioUrl === audio.audio_url;
+    if (currentTrack.audioFileId && asset.audioFileId) {
+      return currentTrack.audioFileId === asset.audioFileId;
+    }
+    const normalizedFileUrl = normalizeAudioUrl(asset.audioUrl);
+    return currentTrack.audioUrl === normalizedFileUrl || currentTrack.audioUrl === asset.audioUrl;
   }
 
   // Track the currently playing audio file ID for snippet submissions
   // Falls back to first audio file when nothing is playing (free action)
   const currentAudioFileId = useMemo(() => {
     if (currentTrack && isCurrentLesson) {
-      const activeFile = audioFiles.find((af) => isFileActive(af));
-      if (activeFile) return activeFile.id;
+      const activeAsset = lessonAudioAssets.find((asset) => isFileActive(asset));
+      if (activeAsset?.audioFileId) return activeAsset.audioFileId;
     }
     // Default to first audio file when not playing
     return sortedAudioFiles[0]?.id ?? null;
-  }, [currentTrack, isCurrentLesson, audioFiles, sortedAudioFiles]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentTrack, isCurrentLesson, lessonAudioAssets, sortedAudioFiles]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function handleFileClick(audio: LessonAudio) {
-    if (isFileActive(audio)) {
+  function handleFileClick(asset: LessonAudioAsset) {
+    if (isFileActive(asset)) {
       togglePlay();
       return;
     }
-    setTrack({
-      id: lesson.id,
-      title: lesson.title,
-      hebrewTitle: lesson.hebrew_title || lesson.title,
-      audioUrl: normalizeAudioUrl(audio.audio_url) || audio.audio_url,
-      duration: audio.duration || lesson.duration,
-      seriesName: lesson.series?.hebrew_name || lesson.series?.name || undefined,
-      date: lesson.date,
-      description: lesson.description || lesson.summary || undefined,
-    });
+    setTrack(createTrackFromAsset(asset));
   }
 
   // ---- Offline download state (inlined — webpack workaround) ----
-  const [dlState, setDlState] = useState<'idle' | 'downloading' | 'downloaded' | 'error'>('idle');
-  const [dlProgress, setDlProgress] = useState(0);
-  const [isDownloaded, setIsDownloaded] = useState(false);
+  const [dlState, setDlState] = useState<Record<string, DownloadState>>({});
+  const [dlProgress, setDlProgress] = useState<Record<string, number>>({});
+  const [downloadedKeys, setDownloadedKeys] = useState<Set<string>>(new Set());
+
+  const refreshDownloadedKeys = useCallback(async () => {
+    const downloadedLesson = await getDownloadedLesson(lesson.id);
+    setDownloadedKeys(new Set(downloadedLesson?.audioFiles.map((file) => file.offlineKey) ?? []));
+  }, [lesson.id]);
 
   useEffect(() => {
     let cancelled = false;
-    isLessonDownloaded(lesson.id).then((v) => { if (!cancelled) setIsDownloaded(v); });
+    getDownloadedLesson(lesson.id).then((downloadedLesson) => {
+      if (!cancelled) {
+        setDownloadedKeys(new Set(downloadedLesson?.audioFiles.map((file) => file.offlineKey) ?? []));
+      }
+    });
     return () => { cancelled = true; };
   }, [lesson.id]);
 
-  const effectiveDlState = isDownloaded && dlState === 'idle' ? 'downloaded' : dlState;
+  const getAssetDownloadState = useCallback((asset: LessonAudioAsset): DownloadState => {
+    const state = dlState[asset.offlineKey] || 'idle';
+    if (downloadedKeys.has(asset.offlineKey) && state === 'idle') return 'downloaded';
+    return state;
+  }, [dlState, downloadedKeys]);
 
-  const handleDownload = useCallback(async () => {
-    if (effectiveDlState === 'downloaded' || effectiveDlState === 'downloading') return;
-    const audioUrl = normalizeAudioUrl(lesson.audio_url) || lesson.audio_url;
-    if (!audioUrl) return;
-    setDlState('downloading');
-    setDlProgress(0);
-    const success = await downloadLesson(
-      lesson.id, audioUrl,
-      { lessonId: lesson.id, title: lesson.title, hebrewTitle: lesson.hebrew_title || lesson.title, audioUrl, duration: lesson.duration, fileSize: 0, seriesName: lesson.series?.hebrew_name || lesson.series?.name || undefined, date: lesson.date },
-      (pct) => setDlProgress(pct),
+  const allAudioDownloaded = lessonAudioAssets.length > 0 &&
+    lessonAudioAssets.every((asset) => downloadedKeys.has(asset.offlineKey));
+  const lessonSaveState: DownloadState =
+    dlState.__lesson === 'downloading'
+      ? 'downloading'
+      : dlState.__lesson === 'error'
+        ? 'error'
+        : allAudioDownloaded
+          ? 'downloaded'
+          : 'idle';
+
+  const saveAudioAssets = useCallback(async (
+    assets: LessonAudioAsset[],
+    stateKey: string
+  ) => {
+    if (assets.length === 0 || dlState[stateKey] === 'downloading') return;
+    setDlState((prev) => ({ ...prev, [stateKey]: 'downloading' }));
+    setDlProgress((prev) => ({ ...prev, [stateKey]: 0 }));
+
+    const success = await downloadLessonAudioFiles(
+      lesson.id,
+      assets.map((asset) => ({
+        audioFileId: asset.audioFileId,
+        fileKey: asset.fileKey,
+        audioUrl: asset.audioUrl,
+        title: asset.title,
+        originalName: asset.originalName,
+        audioType: asset.audioType,
+        duration: asset.duration,
+        fileSize: asset.fileSize,
+        sortOrder: asset.sortOrder,
+      })),
+      {
+        lessonId: lesson.id,
+        title: lesson.title,
+        hebrewTitle: lesson.hebrew_title || lesson.title,
+        duration: lesson.duration,
+        seriesName: lesson.series?.hebrew_name || lesson.series?.name || undefined,
+        date: lesson.date,
+      },
+      (pct) => setDlProgress((prev) => ({ ...prev, [stateKey]: pct })),
     );
-    if (success) { setDlState('downloaded'); setIsDownloaded(true); }
-    else { setDlState('error'); setTimeout(() => setDlState('idle'), 3000); }
-  }, [effectiveDlState, lesson]);
+
+    if (success) {
+      setDlState((prev) => {
+        const next = { ...prev, [stateKey]: 'downloaded' as DownloadState };
+        for (const asset of assets) next[asset.offlineKey] = 'downloaded';
+        return next;
+      });
+      await refreshDownloadedKeys();
+    } else {
+      setDlState((prev) => ({ ...prev, [stateKey]: 'error' }));
+      setTimeout(() => setDlState((prev) => ({ ...prev, [stateKey]: 'idle' })), 3000);
+    }
+  }, [dlState, lesson, refreshDownloadedKeys]);
+
+  const handleSaveLessonOffline = useCallback(() => {
+    const remainingAssets = lessonAudioAssets.filter((asset) => !downloadedKeys.has(asset.offlineKey));
+    saveAudioAssets(remainingAssets.length > 0 ? remainingAssets : lessonAudioAssets, '__lesson');
+  }, [downloadedKeys, lessonAudioAssets, saveAudioAssets]);
+
+  const handleSaveAssetOffline = useCallback((asset: LessonAudioAsset) => {
+    saveAudioAssets([asset], asset.offlineKey);
+  }, [saveAudioAssets]);
 
   // ---- Bookmark state ----
   const [showBookmarkDialog, setShowBookmarkDialog] = useState(false);
@@ -574,6 +703,13 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
 
   const displayTime = isCurrentLesson ? currentTime : 0;
   const displayDuration = isCurrentLesson ? duration : lesson.duration;
+  const lessonSaveProgress = dlProgress.__lesson || 0;
+  const primaryDownloadFilename = primaryAudioAsset
+    ? getAudioAssetFilename(lesson, primaryAudioAsset)
+    : '';
+  const primaryDownloadUrl = primaryAudioAsset
+    ? getAudioDownloadUrl(primaryAudioAsset.audioUrl, primaryDownloadFilename)
+    : '#';
 
   return (
     <div className="space-y-4">
@@ -712,33 +848,47 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
             <span className="text-[10px]">{locale === 'he' ? 'מצב נהיגה' : 'Driving'}</span>
           </button>
 
-          {/* Download */}
+          {/* Save for offline playback */}
           <button
-            onClick={handleDownload}
-            disabled={effectiveDlState === 'downloaded' || effectiveDlState === 'downloading' || !lesson.audio_url}
+            onClick={handleSaveLessonOffline}
+            disabled={lessonSaveState === 'downloaded' || lessonSaveState === 'downloading' || lessonAudioAssets.length === 0}
             className={`flex flex-col items-center gap-1.5 transition-colors disabled:cursor-not-allowed ${
-              effectiveDlState === 'downloaded'
+              lessonSaveState === 'downloaded'
                 ? 'text-green-400'
-                : effectiveDlState === 'downloading'
+                : lessonSaveState === 'downloading'
                 ? 'text-primary'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
+            aria-label={locale === 'he' ? 'שמור להאזנה לא מקוונת' : 'Save for offline listening'}
           >
-            {effectiveDlState === 'downloading' ? (
+            {lessonSaveState === 'downloading' ? (
               <Loader2 className="h-5 w-5 animate-spin" />
-            ) : effectiveDlState === 'downloaded' ? (
+            ) : lessonSaveState === 'downloaded' ? (
               <CheckCircle className="h-5 w-5" />
             ) : (
               <Download className="h-5 w-5" />
             )}
-            <span className="text-[10px]">
-              {effectiveDlState === 'downloading'
-                ? `${dlProgress}%`
-                : effectiveDlState === 'downloaded'
-                ? (locale === 'he' ? 'הורד' : 'Saved')
-                : (locale === 'he' ? 'הורדה' : 'Download')}
+            <span className="text-[10px] whitespace-nowrap">
+              {lessonSaveState === 'downloading'
+                ? `${lessonSaveProgress}%`
+                : lessonSaveState === 'downloaded'
+                ? (locale === 'he' ? 'נשמר' : 'Saved')
+                : (locale === 'he' ? 'שמירה אופליין' : 'Save offline')}
             </span>
           </button>
+
+          {/* Device file download */}
+          <a
+            href={primaryDownloadUrl}
+            download={primaryDownloadFilename}
+            className={`flex flex-col items-center gap-1.5 transition-colors ${
+              primaryAudioAsset ? 'text-muted-foreground hover:text-foreground' : 'pointer-events-none opacity-30'
+            }`}
+            aria-label={locale === 'he' ? 'הורדת קובץ למכשיר' : 'Download file to device'}
+          >
+            <FileDown className="h-5 w-5" />
+            <span className="text-[10px] whitespace-nowrap">{locale === 'he' ? 'הורדת קובץ' : 'Download file'}</span>
+          </a>
 
           {/* Cast */}
           <button
@@ -752,64 +902,122 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
       </div>
 
       {/* Audio files list (inlined to avoid webpack dev chunk issue) */}
-      {sortedAudioFiles.length > 1 && (
+      {lessonAudioAssets.length > 1 && (
         <div className="rounded-xl bg-[hsl(var(--surface-elevated))] p-4">
           <h2 className="text-sm font-bold mb-3 text-muted-foreground uppercase tracking-wider">
             {locale === 'he' ? 'קבצי שמע' : 'Audio Files'}
           </h2>
           <div className="space-y-0.5">
-            {sortedAudioFiles.map((audio, index) => {
-              const active = isFileActive(audio);
+            {lessonAudioAssets.map((asset, index) => {
+              const active = isFileActive(asset);
               const playing = active && isPlaying;
+              const assetDownloadState = getAssetDownloadState(asset);
+              const assetProgress = dlProgress[asset.offlineKey] || 0;
+              const assetFilename = getAudioAssetFilename(lesson, asset, index);
               return (
-                <button
-                  key={audio.id}
-                  onClick={() => handleFileClick(audio)}
+                <div
+                  key={asset.offlineKey}
                   className={`w-full flex items-center gap-3 rounded-md p-2.5 transition-colors group text-start ${
                     active
                       ? 'bg-primary/10'
                       : 'hover:bg-[hsl(var(--surface-highlight))]'
                   }`}
                 >
-                  <span className="w-5 text-center flex-shrink-0">
-                    {playing ? (
-                      <Volume2 className="h-4 w-4 text-primary animate-pulse mx-auto" />
-                    ) : active ? (
-                      <Pause className="h-4 w-4 text-primary mx-auto" />
-                    ) : (
-                      <>
-                        <span className="text-sm font-medium text-muted-foreground group-hover:hidden">
-                          {index + 1}
-                        </span>
-                        <Play className="h-4 w-4 text-foreground hidden group-hover:block mx-auto" />
-                      </>
-                    )}
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleFileClick(asset)}
+                    className="min-w-0 flex-1 flex items-center gap-3 text-start"
+                    aria-label={playing ? (locale === 'he' ? 'השהה' : 'Pause') : (locale === 'he' ? 'נגן' : 'Play')}
+                  >
+                    <span className="w-5 text-center flex-shrink-0">
+                      {playing ? (
+                        <Volume2 className="h-4 w-4 text-primary animate-pulse mx-auto" />
+                      ) : active ? (
+                        <Pause className="h-4 w-4 text-primary mx-auto" />
+                      ) : (
+                        <>
+                          <span className="text-sm font-medium text-muted-foreground group-hover:hidden">
+                            {index + 1}
+                          </span>
+                          <Play className="h-4 w-4 text-foreground hidden group-hover:block mx-auto" />
+                        </>
+                      )}
+                    </span>
 
-                  <div className="flex-1 min-w-0 flex items-center gap-2">
-                    <p
-                      className={`text-sm font-medium truncate ${active ? 'text-primary' : ''}`}
-                      dir="rtl"
-                    >
-                      {audio.original_name || `${locale === 'he' ? 'חלק' : 'Part'} ${index + 1}`}
-                    </p>
-                    {audio.audio_type && (
-                      <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${
-                        audio.audio_type === 'עץ חיים'
-                          ? 'bg-primary/15 text-primary'
-                          : 'bg-amber-500/15 text-amber-400'
-                      }`}>
-                        {audio.audio_type}
+                    <div className="flex-1 min-w-0 flex items-center gap-2">
+                      <p
+                        className={`text-sm font-medium truncate ${active ? 'text-primary' : ''}`}
+                        dir="rtl"
+                      >
+                        {asset.originalName || asset.title || `${locale === 'he' ? 'חלק' : 'Part'} ${index + 1}`}
+                      </p>
+                      {asset.audioType && (
+                        <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${
+                          asset.audioType === 'עץ חיים'
+                            ? 'bg-primary/15 text-primary'
+                            : 'bg-amber-500/15 text-amber-400'
+                        }`}>
+                          {asset.audioType}
+                        </span>
+                      )}
+                    </div>
+
+                    {asset.duration > 0 && (
+                      <span className="text-xs text-muted-foreground tabular-nums flex-shrink-0">
+                        {formatDur(asset.duration)}
                       </span>
                     )}
-                  </div>
+                  </button>
 
-                  {audio.duration > 0 && (
-                    <span className="text-xs text-muted-foreground tabular-nums flex-shrink-0">
-                      {formatDur(audio.duration)}
-                    </span>
-                  )}
-                </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSaveAssetOffline(asset);
+                    }}
+                    disabled={assetDownloadState === 'downloaded' || assetDownloadState === 'downloading'}
+                    className={`h-8 w-8 rounded-full flex items-center justify-center transition-colors disabled:cursor-not-allowed ${
+                      assetDownloadState === 'downloaded'
+                        ? 'text-green-400'
+                        : assetDownloadState === 'downloading'
+                          ? 'text-primary'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--surface-highlight))]'
+                    }`}
+                    aria-label={
+                      assetDownloadState === 'downloaded'
+                        ? (locale === 'he' ? 'נשמר לאופליין' : 'Saved offline')
+                        : assetDownloadState === 'downloading'
+                          ? `${assetProgress}%`
+                          : (locale === 'he' ? 'שמור קובץ לאופליין' : 'Save file offline')
+                    }
+                    title={
+                      assetDownloadState === 'downloading'
+                        ? `${assetProgress}%`
+                        : locale === 'he'
+                          ? 'שמור לאופליין'
+                          : 'Save offline'
+                    }
+                  >
+                    {assetDownloadState === 'downloading' ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : assetDownloadState === 'downloaded' ? (
+                      <CheckCircle className="h-4 w-4" />
+                    ) : (
+                      <Download className="h-4 w-4" />
+                    )}
+                  </button>
+
+                  <a
+                    href={getAudioDownloadUrl(asset.audioUrl, assetFilename)}
+                    download={assetFilename}
+                    onClick={(e) => e.stopPropagation()}
+                    className="h-8 w-8 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--surface-highlight))] transition-colors"
+                    aria-label={locale === 'he' ? 'הורדת קובץ למכשיר' : 'Download file to device'}
+                    title={locale === 'he' ? 'הורדת קובץ' : 'Download file'}
+                  >
+                    <FileDown className="h-4 w-4" />
+                  </a>
+                </div>
               );
             })}
           </div>
