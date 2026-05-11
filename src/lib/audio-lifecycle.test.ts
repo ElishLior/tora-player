@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getAudioRecoveryAction,
+  getNativeAudioSyncAction,
   type AudioLifecycleSnapshot,
 } from "./audio-lifecycle";
 
@@ -116,5 +117,39 @@ describe("getAudioRecoveryAction", () => {
         recoveryAttemptsForTrack: 3,
       }),
     ).toBe("needs-user-gesture");
+  });
+});
+
+describe("getNativeAudioSyncAction", () => {
+  it("marks UI as playing when native audio resumes the current track outside React intent", () => {
+    expect(
+      getNativeAudioSyncAction("playing", {
+        ...baseSnapshot,
+        intentPlaying: false,
+        enginePlaying: false,
+        nativePaused: false,
+      }),
+    ).toBe("mark-playing");
+  });
+
+  it("does not mark UI as playing for stale or non-playing native events", () => {
+    expect(
+      getNativeAudioSyncAction("playing", {
+        ...baseSnapshot,
+        intentPlaying: false,
+        enginePlaying: true,
+        nativePaused: false,
+        sameTrack: false,
+      }),
+    ).toBe("none");
+
+    expect(
+      getNativeAudioSyncAction("pause", {
+        ...baseSnapshot,
+        intentPlaying: false,
+        enginePlaying: false,
+        nativePaused: true,
+      }),
+    ).toBe("none");
   });
 });

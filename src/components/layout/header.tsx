@@ -57,30 +57,31 @@ export function Header({ locale }: HeaderProps) {
 
           {/* Now Playing indicator — shows when a track is loaded */}
           {currentTrack && (
-            <button
-              onClick={toggleMiniPlayer}
-              className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors max-w-[140px]"
-              aria-label={isRTL ? 'מתנגן כעת' : 'Now Playing'}
-            >
-              <Music className="h-3 w-3 flex-shrink-0" />
-              <span className="truncate" dir="rtl">
-                {currentTrack.hebrewTitle || currentTrack.title}
-              </span>
-              <span
-                role="button"
-                tabIndex={0}
-                onClick={(e) => { e.stopPropagation(); togglePlay(); }}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); togglePlay(); } }}
-                className="flex-shrink-0 p-0.5 cursor-pointer"
-                aria-label={isPlaying ? 'Pause' : 'Play'}
+            <div className="flex items-center gap-1 rounded-full bg-primary/10 px-1 py-0.5 text-xs font-medium text-primary max-w-[160px]">
+              <button
+                type="button"
+                onClick={toggleMiniPlayer}
+                className="min-w-0 flex items-center gap-1.5 rounded-full px-1.5 py-0.5 hover:bg-primary/15 transition-colors"
+                aria-label={isRTL ? 'מתנגן כעת' : 'Now Playing'}
+              >
+                <Music className="h-3 w-3 flex-shrink-0" />
+                <span className="truncate" dir="rtl">
+                  {currentTrack.hebrewTitle || currentTrack.title}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={togglePlay}
+                className="flex-shrink-0 rounded-full p-1 hover:bg-primary/15 transition-colors"
+                aria-label={isPlaying ? (isRTL ? 'השהה' : 'Pause') : isRTL ? 'נגן' : 'Play'}
               >
                 {isPlaying ? (
                   <Pause className="h-3 w-3 fill-current" />
                 ) : (
                   <Play className="h-3 w-3 fill-current" />
                 )}
-              </span>
-            </button>
+              </button>
+            </div>
           )}
 
           {isAdminVisible && (

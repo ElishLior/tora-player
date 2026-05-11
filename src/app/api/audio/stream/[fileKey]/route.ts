@@ -47,7 +47,7 @@ export async function GET(
 
     // Forward Range header from the client (for seeking / partial content)
     const fetchHeaders: HeadersInit = {};
-    const rangeHeader = request.headers.get('Range');
+    const rangeHeader = downloadMode ? null : request.headers.get('Range');
     if (rangeHeader) {
       fetchHeaders['Range'] = rangeHeader;
     }
@@ -64,7 +64,7 @@ export async function GET(
 
     // Build response headers
     const responseHeaders = new Headers();
-    responseHeaders.set('Content-Type', contentType);
+    responseHeaders.set('Content-Type', downloadMode ? 'application/octet-stream' : contentType);
     responseHeaders.set('Accept-Ranges', 'bytes');
     responseHeaders.set('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
     responseHeaders.set('X-Content-Type-Options', 'nosniff');
