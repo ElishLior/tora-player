@@ -203,7 +203,7 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
           <button
             onClick={onClose}
             className="rounded-full p-2 text-muted-foreground hover:text-foreground transition-colors"
-            aria-label="Close player"
+            aria-label={locale === 'he' ? 'סגור נגן' : 'Close player'}
           >
             <ChevronDown className="h-6 w-6" />
           </button>
@@ -383,7 +383,7 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
             <button
               onClick={() => void handleCastClick()}
               className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
-              aria-label="Cast"
+              aria-label={locale === 'he' ? 'שדר' : 'Cast'}
             >
               <Cast className="h-5 w-5" />
               <span className="text-[10px]">{t('cast') || 'שדר'}</span>

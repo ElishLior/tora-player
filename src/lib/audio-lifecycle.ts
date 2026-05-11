@@ -20,6 +20,8 @@ export type AudioRecoveryAction =
   | "mark-ended"
   | "mark-paused";
 
+export type NativeAudioSyncAction = "none" | "mark-playing";
+
 export interface AudioLifecycleSnapshot {
   intentPlaying: boolean;
   engineLoaded: boolean;
@@ -109,4 +111,18 @@ export function getAudioRecoveryAction(
   }
 
   return "none";
+}
+
+export function getNativeAudioSyncAction(
+  eventName: NativeAudioLifecycleEvent,
+  snapshot: AudioLifecycleSnapshot,
+): NativeAudioSyncAction {
+  if (eventName !== "playing") return "none";
+  if (snapshot.intentPlaying) return "none";
+  if (!snapshot.sameTrack) return "none";
+  if (snapshot.nativePaused || snapshot.nativeEnded || snapshot.nativeErrored) {
+    return "none";
+  }
+
+  return "mark-playing";
 }

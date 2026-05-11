@@ -5,6 +5,7 @@ import { useAudioStore, type AudioTrack } from "@/stores/audio-store";
 import { audioEngine, type NativeAudioEventSnapshot } from "@/lib/audio-engine";
 import {
   getAudioRecoveryAction,
+  getNativeAudioSyncAction,
   type NativeAudioLifecycleEvent,
 } from "@/lib/audio-lifecycle";
 import {
@@ -127,7 +128,7 @@ function handleNativeAudioEvent(event: NativeAudioEventSnapshot) {
   }
 
   const lifecycleEvent = event.type as NativeAudioLifecycleEvent;
-  const action = getAudioRecoveryAction(lifecycleEvent, {
+  const lifecycleSnapshot = {
     intentPlaying: state.isPlaying,
     engineLoaded: audioEngine.isLoaded(),
     enginePlaying: audioEngine.isPlaying(),
@@ -145,7 +146,26 @@ function handleNativeAudioEvent(event: NativeAudioEventSnapshot) {
       ? now - recoveryAttempt.lastAttemptAt
       : Number.POSITIVE_INFINITY,
     playBlockedByBrowser: recoveryAttempt?.playBlocked ?? false,
-  });
+  };
+
+  const syncAction = getNativeAudioSyncAction(lifecycleEvent, lifecycleSnapshot);
+  if (syncAction === "mark-playing") {
+    state.play();
+    state.setPlaybackRecoveryState("idle");
+    state.addPlaybackDiagnostic({
+      at: new Date().toISOString(),
+      event: event.type,
+      action: syncAction,
+      trackId: state.currentTrack?.id,
+      audioFileId: state.currentTrack?.audioFileId,
+      offlineKey: state.currentTrack?.offlineKey,
+      currentTime: audioEngine.getCurrentTime(),
+      result: "succeeded",
+    });
+    return;
+  }
+
+  const action = getAudioRecoveryAction(lifecycleEvent, lifecycleSnapshot);
 
   state.addPlaybackDiagnostic({
     at: new Date().toISOString(),

@@ -67,7 +67,7 @@ export function MiniPlayer() {
                 void handleCastClick();
               }}
               className="p-2 text-muted-foreground hover:text-foreground transition-colors"
-              aria-label="Cast"
+              aria-label={locale === 'he' ? 'שדר' : 'Cast'}
             >
               <Cast className="h-4 w-4" />
             </button>
@@ -79,7 +79,7 @@ export function MiniPlayer() {
                 togglePlay();
               }}
               className="p-1 text-foreground hover:scale-105 transition-transform"
-              aria-label={isPlaying ? 'Pause' : 'Play'}
+              aria-label={isPlaying ? (locale === 'he' ? 'השהה' : 'Pause') : locale === 'he' ? 'נגן' : 'Play'}
             >
               {isPlaying ? (
                 <Pause className="h-6 w-6 fill-current" />
