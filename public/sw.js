@@ -9,7 +9,11 @@ const BUILD_ID = new URL(self.location.href).searchParams.get('v') || 'dev';
 const CACHE_PREFIX = 'tora-player-';
 const STATIC_CACHE = `${CACHE_PREFIX}${BUILD_ID}-static`;
 const PAGES_CACHE = `${CACHE_PREFIX}${BUILD_ID}-pages`;
-const SHARE_TARGET_CACHE = 'share-target-v1';
+// Files shared to the app wait here until the upload page takes them
+// (src/app/[locale]/lessons/upload/shared-files.ts). Not build-scoped, so a
+// worker update never drops a pending share.
+const SHARE_STASH = 'share-target-v2';
+const LEGACY_SHARE_CACHES = ['share-target-v1'];
 
 const DEFAULT_LOCALE = 'he';
 const LOCALES = ['he', 'en'];
@@ -74,7 +78,11 @@ self.addEventListener('activate', (event) => {
       const names = await caches.keys();
       await Promise.all(
         names
-          .filter((name) => name.startsWith(CACHE_PREFIX) && name !== STATIC_CACHE && name !== PAGES_CACHE)
+          .filter(
+            (name) =>
+              (name.startsWith(CACHE_PREFIX) && name !== STATIC_CACHE && name !== PAGES_CACHE) ||
+              LEGACY_SHARE_CACHES.includes(name),
+          )
           .map((name) => caches.delete(name)),
       );
       await self.clients.claim();
@@ -121,8 +129,8 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Share target POSTs from other apps (WhatsApp etc.).
-  if (request.method === 'POST' && url.origin === self.location.origin && url.pathname.includes('/share-target')) {
+  // Share target POSTs from the Android share sheet (manifest share_target).
+  if (request.method === 'POST' && url.origin === self.location.origin && /^\/(?:he|en)\/lessons\/share-target\/?$/.test(url.pathname)) {
     event.respondWith(handleShareTarget(request));
     return;
   }
@@ -215,28 +223,34 @@ async function staleWhileRevalidate(event) {
   return network;
 }
 
-// Handle share target POST: stash the form data and redirect to the share-target page.
+// Stash every shared file (audio and images, whatever the form field is
+// called — older installs still post "audio") and open the upload page,
+// which loads them as if they were dropped. Admin login, if needed, happens
+// on the way; the stash survives it. Shares add to a stash not yet taken.
 async function handleShareTarget(request) {
+  const url = new URL(request.url);
+  const target = `/${localeOf(url)}/lessons/upload?shared=1`;
   try {
     const formData = await request.formData();
-    const cache = await caches.open(SHARE_TARGET_CACHE);
-
-    const body = new FormData();
-    for (const [key, value] of formData.entries()) {
-      body.append(key, value);
+    const cache = await caches.open(SHARE_STASH);
+    const batch = Date.now();
+    let index = 0;
+    for (const value of formData.values()) {
+      if (!(value instanceof File) || value.size === 0) continue;
+      const key = `/share-target/stash/${batch}-${String(index++).padStart(4, '0')}`;
+      await cache.put(
+        key,
+        new Response(value, {
+          headers: {
+            'Content-Type': value.type || 'application/octet-stream',
+            'X-File-Name': encodeURIComponent(value.name),
+            'X-File-Modified': String(value.lastModified || batch),
+          },
+        }),
+      );
     }
-    await cache.put('/share-target-data', new Response(body));
-
-    const params = new URLSearchParams();
-    for (const key of ['title', 'text', 'url']) {
-      const value = formData.get(key);
-      if (value) params.set(key, value);
-    }
-
-    const query = params.toString();
-    return Response.redirect(`/he/lessons/share-target${query ? `?${query}` : ''}`, 303);
   } catch (err) {
     console.error('[SW] Share target error:', err);
-    return Response.redirect('/he/lessons/upload', 303);
   }
+  return Response.redirect(target, 303);
 }

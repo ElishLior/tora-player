@@ -1,8 +1,11 @@
-import { setRequestLocale } from 'next-intl/server';
+import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { createSupabaseLessonListReader } from '@/lib/supabase/lesson-list';
+import { matchTags, tagPath, type TagCount } from '@/lib/tag-links';
+import { Link } from '@/i18n/routing';
 import { LessonCard } from '@/components/lessons/lesson-card';
 import { EmptyState } from '@/components/shared/empty-state';
-import { Search } from 'lucide-react';
+import { AlertTriangle, Search } from 'lucide-react';
 import type { LessonWithRelations } from '@/types/database';
 
 type Props = {
@@ -12,25 +15,27 @@ type Props = {
 
 export default async function SearchPage({ params, searchParams }: Props) {
   const { locale } = await params;
-  const { q } = await searchParams;
+  const q = (await searchParams).q?.trim();
   setRequestLocale(locale);
+  const tagT = await getTranslations('tagBrowse');
+  const lessonsT = await getTranslations('lessons');
 
   let results: LessonWithRelations[] = [];
+  let tags: TagCount[] = [];
+  let failed = false;
 
-  if (q && q.length > 0) {
+  if (q) {
     const supabase = await createServerSupabaseClient();
     if (supabase) {
       try {
-        const { data } = await supabase
-          .from('lessons')
-          .select('*, series(name, hebrew_name)')
-          .eq('is_published', true)
-          .or(`title.ilike.%${q}%,hebrew_title.ilike.%${q}%,description.ilike.%${q}%`)
-          .order('date', { ascending: false })
-          .limit(50);
-        results = (data || []) as LessonWithRelations[];
-      } catch {
-        results = [];
+        const reader = createSupabaseLessonListReader(supabase);
+        const tagCounts = await reader.getTagCounts();
+        const matched = matchTags(tagCounts, q);
+        tags = tagCounts.filter((row) => matched.includes(row.tag));
+        results = await reader.searchLessons(q, {}, matched);
+      } catch (error) {
+        console.error('Search failed:', error);
+        failed = true;
       }
     }
   }
@@ -52,8 +57,29 @@ export default async function SearchPage({ params, searchParams }: Props) {
         />
       </form>
 
+      {tags.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="text-sm font-bold text-muted-foreground">{tagT('matchingTags')}</h2>
+          <ul className="flex flex-wrap gap-2">
+            {tags.map(({ tag, lesson_count }) => (
+              <li key={tag}>
+                <Link
+                  href={tagPath(tag)}
+                  className="inline-flex items-baseline gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/20"
+                >
+                  <bdi>#{tag}</bdi>
+                  <span className="text-xs font-normal text-muted-foreground tabular-nums">{lesson_count}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {q ? (
-        results.length > 0 ? (
+        failed ? (
+          <EmptyState icon={AlertTriangle} title={lessonsT('loadErrorTitle')} description={lessonsT('loadErrorDescription')} />
+        ) : results.length > 0 ? (
           <div className="space-y-3">
             {results.map((lesson) => (
               <LessonCard key={lesson.id} lesson={lesson} />

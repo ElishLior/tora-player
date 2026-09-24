@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { LISTEN_MIN_SECONDS, LISTEN_SOURCES } from '@/lib/listen-tracking';
+import { NOTIFY_MODES } from '@/lib/notifications/batch-rules';
 import { MAX_NOTE_LENGTH } from '@/lib/note-rules';
+import { normalizeTags } from '@/lib/tags';
 
 // Relaxed UUID pattern — accepts any 8-4-4-4-12 hex string
 // (Zod's .uuid() rejects non-RFC-4122 UUIDs like our category IDs)
@@ -8,6 +10,9 @@ const uuidLike = z.string().regex(
   /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/,
   'Invalid UUID'
 );
+
+/** Lesson topic tags as sent by a client; stored normalized (src/lib/tags.ts). */
+export const lessonTagsSchema = z.array(z.string().max(200)).max(50).transform((tags) => normalizeTags(tags));
 
 export const createLessonSchema = z.object({
   title: z.string().min(1, 'Title is required'),
@@ -28,6 +33,7 @@ export const createLessonSchema = z.object({
   lesson_type: z.string().optional().nullable(),
   seder_number: z.number().int().positive().optional().nullable(),
   category_id: uuidLike.optional().nullable(),
+  tags: lessonTagsSchema.optional(),
 });
 
 export const updateLessonSchema = z.object({
@@ -67,16 +73,24 @@ export const completeAudioUploadSchema = z.object({
   audioType: z.string().trim().min(1).max(50).optional().nullable(),
 });
 
-export const duplicateAudioCandidatesSchema = z
+/** Dropped files checked against the lessons already stored on their dates. */
+export const uploadLookupCandidatesSchema = z
   .array(
     z.object({
       fileId: z.string().min(1).max(100),
+      kind: z.enum(['audio', 'image']),
       date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
       size: z.number().int().min(0),
       name: z.string().max(255),
     }),
   )
-  .max(500);
+  .max(1000);
+
+/** Lessons published by one upload batch and how to announce them. */
+export const announceLessonsSchema = z.object({
+  lessonIds: z.array(uuidLike).min(1).max(200),
+  mode: z.enum(NOTIFY_MODES),
+});
 
 export const createPlaylistSchema = z.object({
   name: z.string().min(1, 'Playlist name is required'),

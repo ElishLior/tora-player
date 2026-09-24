@@ -3,9 +3,24 @@
 import { revalidatePath } from 'next/cache';
 import { AdminRequiredError, requireAdmin } from '@/lib/auth/admin';
 import { createAdminSupabaseClient } from '@/lib/supabase/admin';
-import { notifyNewLesson } from '@/lib/notifications/notify';
-import { createLessonSchema, duplicateAudioCandidatesSchema } from '@/lib/validators';
-import type { DraftLessonFields } from '@/lib/upload-drafts';
+import { notifyNewLesson, notifyNewLessons } from '@/lib/notifications/notify';
+import type { NotifyMode } from '@/lib/notifications/batch-rules';
+import { normalizeTags } from '@/lib/tags';
+import {
+  announceLessonsSchema,
+  createLessonSchema,
+  lessonTagsSchema,
+  uploadLookupCandidatesSchema,
+} from '@/lib/validators';
+import {
+  matchUploadLookup,
+  SHORT_LESSON_TYPE,
+  SHORTS_CATEGORY_ID,
+  type DraftLessonFields,
+  type LookupCandidate,
+  type LookupLesson,
+  type UploadLookup,
+} from '@/lib/upload-drafts';
 
 type ActionResult<T> = { data: T; error?: undefined } | { data?: undefined; error: string };
 
@@ -42,51 +57,83 @@ export async function createDraftLesson(fields: DraftLessonFields): Promise<Acti
 }
 
 /**
- * Find dropped audio files that already exist on a lesson of the same date
- * (same byte size or same original filename). Returns fileId → lesson title.
+ * Check dropped files against the lessons already stored on their dates:
+ * files already there are duplicates, and each date's daily lesson is where
+ * new parts/images of that date get appended.
  */
-export async function findDuplicateAudio(
-  candidates: Array<{ fileId: string; date: string; size: number; name: string }>,
-): Promise<ActionResult<Record<string, string>>> {
+export async function lookupUploadTargets(candidates: LookupCandidate[]): Promise<ActionResult<UploadLookup>> {
   const denied = await authorize();
   if (denied) return { error: denied };
 
-  const parsed = duplicateAudioCandidatesSchema.safeParse(candidates);
-  if (!parsed.success) return { error: 'Invalid duplicate check' };
-  if (parsed.data.length === 0) return { data: {} };
+  const parsed = uploadLookupCandidatesSchema.safeParse(candidates);
+  if (!parsed.success) return { error: 'Invalid upload lookup' };
+  if (parsed.data.length === 0) return { data: { duplicates: {}, existingByDate: {} } };
 
   const dates = [...new Set(parsed.data.map((c) => c.date))];
   const { data, error } = await createAdminSupabaseClient()
-    .from('lesson_audio')
-    .select('file_size, source_filename, lessons!inner(title, date)')
-    .in('lessons.date', dates);
+    .from('lessons')
+    .select(
+      'id, title, hebrew_title, date, is_published, lesson_type, category_id, created_at, ' +
+        'lesson_audio(file_size, source_filename, sort_order), lesson_images(file_size, source_filename, sort_order)',
+    )
+    .in('date', dates);
   if (error) return { error: error.message };
 
-  const existing = (data ?? []).flatMap((row) => {
-    const lessons = Array.isArray(row.lessons) ? row.lessons : [row.lessons];
-    return lessons.map((lesson: { title: string; date: string }) => ({
-      size: Number(row.file_size),
-      name: row.source_filename as string | null,
-      title: lesson.title,
-      date: lesson.date,
-    }));
-  });
+  type MediaRow = { file_size: number | string; source_filename: string | null; sort_order: number };
+  const media = (rows: MediaRow[] | null) =>
+    (rows ?? []).map((m) => ({ size: Number(m.file_size), name: m.source_filename, sortOrder: m.sort_order }));
+  const lessons: LookupLesson[] = ((data ?? []) as unknown as Array<{
+    id: string;
+    title: string;
+    hebrew_title: string | null;
+    date: string;
+    is_published: boolean;
+    lesson_type: string | null;
+    category_id: string | null;
+    created_at: string;
+    lesson_audio: MediaRow[] | null;
+    lesson_images: MediaRow[] | null;
+  }>).map((row) => ({
+    id: row.id,
+    title: row.hebrew_title || row.title,
+    date: row.date,
+    isPublished: row.is_published,
+    isShort: row.lesson_type === SHORT_LESSON_TYPE || row.category_id === SHORTS_CATEGORY_ID,
+    createdAt: row.created_at,
+    audio: media(row.lesson_audio),
+    images: media(row.lesson_images),
+  }));
+  return { data: matchUploadLookup(parsed.data, lessons) };
+}
 
-  const duplicates: Record<string, string> = {};
-  for (const candidate of parsed.data) {
-    const match = existing.find(
-      (e) => e.date === candidate.date && (e.size === candidate.size || e.name === candidate.name),
-    );
-    if (match) duplicates[candidate.fileId] = match.title;
-  }
-  return { data: duplicates };
+/** Add topic tags from an upload draft to the existing lesson it was appended to. */
+export async function mergeLessonTags(lessonId: string, tags: string[]): Promise<ActionResult<{ tags: string[] }>> {
+  const denied = await authorize();
+  if (denied) return { error: denied };
+
+  const parsed = lessonTagsSchema.safeParse(tags);
+  if (!parsed.success) return { error: 'Invalid tags' };
+  const supabase = createAdminSupabaseClient();
+  const { data: lesson, error } = await supabase.from('lessons').select('tags').eq('id', lessonId).maybeSingle();
+  if (error) return { error: error.message };
+  if (!lesson) return { error: 'Lesson not found' };
+
+  const merged = normalizeTags([...((lesson.tags as string[] | null) ?? []), ...parsed.data]);
+  const { error: updateError } = await supabase.from('lessons').update({ tags: merged }).eq('id', lessonId);
+  if (updateError) return { error: updateError.message };
+  return { data: { tags: merged } };
 }
 
 /**
- * Publish a lesson once its uploads are complete and tell subscribers.
- * Refuses lessons without audio so listeners never get an empty lesson.
+ * Publish a lesson once its uploads are complete. Refuses lessons without
+ * audio so listeners never get an empty lesson. `newlyPublished` is false
+ * when it was already public. With `notify` (single-lesson callers) the
+ * lesson is announced; batch callers announce once via announceUploadedLessons.
  */
-export async function publishUploadedLesson(lessonId: string): Promise<ActionResult<{ id: string }>> {
+export async function publishUploadedLesson(
+  lessonId: string,
+  notify = true,
+): Promise<ActionResult<{ id: string; newlyPublished: boolean }>> {
   const denied = await authorize();
   if (denied) return { error: denied };
 
@@ -107,7 +154,19 @@ export async function publishUploadedLesson(lessonId: string): Promise<ActionRes
   if (error) return { error: error.message };
 
   revalidatePath('/[locale]', 'layout');
+  const newlyPublished = (data ?? []).length > 0;
   // Only the call that actually flipped the flag notifies (retries don't re-send).
-  if (data && data.length > 0) await notifyNewLesson(lessonId);
-  return { data: { id: lessonId } };
+  if (notify && newlyPublished) await notifyNewLesson(lessonId);
+  return { data: { id: lessonId, newlyPublished } };
+}
+
+/** Announce the lessons one upload batch published, once, in the admin's chosen mode. */
+export async function announceUploadedLessons(lessonIds: string[], mode: NotifyMode): Promise<ActionResult<null>> {
+  const denied = await authorize();
+  if (denied) return { error: denied };
+
+  const parsed = announceLessonsSchema.safeParse({ lessonIds, mode });
+  if (!parsed.success) return { error: 'Invalid announcement' };
+  await notifyNewLessons(parsed.data.lessonIds, parsed.data.mode);
+  return { data: null };
 }

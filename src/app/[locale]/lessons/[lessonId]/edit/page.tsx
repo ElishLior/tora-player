@@ -27,6 +27,7 @@ import { UploadZone, type SelectedFile } from '@/components/upload/upload-zone';
 import type { LessonAudio, LessonImage, CategoryWithChildren } from '@/types/database';
 import { getCategories } from '@/actions/categories';
 import { generateLessonMetadata } from '@/lib/hebrew-date';
+import { TagInput } from '@/components/tags/tag-input';
 
 interface MetadataSuggestion {
   title: string;
@@ -69,6 +70,7 @@ export default function EditLessonPage() {
   // Category
   const [categoryId, setCategoryId] = useState<string>('');
   const [categories, setCategories] = useState<CategoryWithChildren[]>([]);
+  const [tags, setTags] = useState<string[]>([]);
 
   // Metadata fields
   const [hebrewDate, setHebrewDate] = useState('');
@@ -117,6 +119,7 @@ export default function EditLessonPage() {
         setDate(lesson.date || '');
         setIsPublished(lesson.is_published);
         setCategoryId(lesson.category_id || '');
+        setTags(lesson.tags ?? []);
         // Metadata
         setHebrewDate(lesson.hebrew_date || '');
         setParsha(lesson.parsha || '');
@@ -182,6 +185,7 @@ export default function EditLessonPage() {
       formData.set('summary', summary);
       formData.set('lesson_type', lessonType);
       formData.set('category_id', categoryId || '');
+      formData.set('tags', JSON.stringify(tags));
       if (sederNumber) formData.set('seder_number', sederNumber);
 
       const result = await updateLesson(lessonId, formData);
@@ -659,6 +663,9 @@ export default function EditLessonPage() {
             ))}
           </select>
         </div>
+
+        {/* Topic tags */}
+        <TagInput value={tags} onChange={setTags} showLabel disabled={saving} />
 
         {/* Success / Error */}
         {successMsg && (
