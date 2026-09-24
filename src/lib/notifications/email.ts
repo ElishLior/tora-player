@@ -59,6 +59,7 @@ export async function sendNewLessonEmails(lesson: { id: string; title: string })
 <html lang="he" dir="rtl">
 <body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,Helvetica,sans-serif;direction:rtl;text-align:right;color:#18181b">
 <div style="max-width:480px;margin:0 auto;padding:24px">
+<p style="margin:0 0 12px;text-align:center"><img src="${appUrl}/brand/email-logo.png" width="120" height="120" alt="${escapeHtml(t('appName'))}" style="display:inline-block;border:0"></p>
 <p style="margin:0 0 8px;font-size:13px;color:#71717a">${escapeHtml(t('appName'))}</p>
 <h1 style="margin:0 0 12px;font-size:20px">${escapeHtml(t('heading'))}</h1>
 <p style="margin:0 0 20px;font-size:17px"><bdi>${title}</bdi></p>
