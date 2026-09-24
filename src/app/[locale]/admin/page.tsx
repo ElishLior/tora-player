@@ -2,7 +2,7 @@
 
 import { useParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { Shield, Upload, BarChart3, LogOut, BookOpen, ListMusic, Library, FolderTree, Scissors, Bell } from 'lucide-react';
+import { Shield, Upload, BarChart3, LogOut, BookOpen, ListMusic, Library, FolderTree, Scissors, Bell, Users } from 'lucide-react';
 import Link from 'next/link';
 import { signOutAndReset } from '@/lib/account/sync';
 
@@ -11,14 +11,15 @@ export default function AdminDashboardPage() {
   const locale = params.locale as string;
   const isRTL = locale === 'he';
   const tNotifications = useTranslations('notifications.admin');
+  const tStats = useTranslations('adminStats');
+  const tUsers = useTranslations('adminUsers');
+
+  const insightLinks = [
+    { href: `/${locale}/admin/stats`, icon: BarChart3, label: tStats('title'), description: tStats('cardDescription') },
+    { href: `/${locale}/admin/users`, icon: Users, label: tUsers('title'), description: tUsers('cardDescription') },
+  ];
 
   const adminLinks = [
-    {
-      href: `/${locale}/admin/stats`,
-      icon: BarChart3,
-      label: isRTL ? 'סטטיסטיקות' : 'Statistics',
-      description: isRTL ? 'צפייה בנתוני שימוש וסטטיסטיקות' : 'View usage data and statistics',
-    },
     {
       href: `/${locale}/lessons/upload`,
       icon: Upload,
@@ -90,29 +91,21 @@ export default function AdminDashboardPage() {
         </button>
       </div>
 
-      {/* Quick Stats */}
+      {/* Insights */}
       <div className="mb-8 grid grid-cols-2 gap-3">
-        <Link
-          href={`/${locale}/admin/stats`}
-          className="rounded-xl border border-border/50 bg-[hsl(var(--surface-elevated))] p-4 hover:border-primary/30 hover:bg-[hsl(var(--surface-highlight))] transition-colors"
-        >
-          <div className="flex items-center gap-2 text-primary">
-            <BarChart3 className="h-4 w-4" />
-            <span className="text-xs font-medium">{isRTL ? 'סטטיסטיקות' : 'Statistics'}</span>
-          </div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {isRTL ? 'צפה בנתונים' : 'View data'}
-          </p>
-        </Link>
-        <div className="rounded-xl border border-border/50 bg-[hsl(var(--surface-elevated))] p-4">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Upload className="h-4 w-4" />
-            <span className="text-xs">{isRTL ? 'העלאות אחרונות' : 'Recent Uploads'}</span>
-          </div>
-          <p className="mt-1 text-sm text-muted-foreground/60">
-            {isRTL ? 'בקרוב...' : 'Coming soon...'}
-          </p>
-        </div>
+        {insightLinks.map((link) => (
+          <Link
+            key={link.href}
+            href={link.href}
+            className="rounded-xl border border-border/50 bg-[hsl(var(--surface-elevated))] p-4 hover:border-primary/30 hover:bg-[hsl(var(--surface-highlight))] transition-colors"
+          >
+            <div className="flex items-center gap-2 text-primary">
+              <link.icon className="h-4 w-4" />
+              <span className="text-sm font-medium">{link.label}</span>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">{link.description}</p>
+          </Link>
+        ))}
       </div>
 
       {/* Admin Links */}

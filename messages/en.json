@@ -1,4 +1,125 @@
 {
+  "adminStats": {
+    "title": "Statistics",
+    "subtitle": "Listening, users and content",
+    "cardDescription": "Listens, listeners, sign-ups and top lessons",
+    "back": "Back to dashboard",
+    "period": "{days} days",
+    "periodLabel": "Period",
+    "trackingNote": "A listen counts after 30 seconds of actual playback. Times are Israel time.",
+    "kpi": {
+      "listens": "Listens",
+      "listeners": "Unique listeners",
+      "listenersHint": "{count} signed in",
+      "hours": "Listening hours",
+      "signups": "New sign-ups",
+      "signupsHint": "{count} users in total",
+      "push": "Push subscribers",
+      "pushHint": "+{count} this period",
+      "lessons": "Lessons",
+      "lessonsHint": "{count} published"
+    },
+    "active": {
+      "title": "Active listeners",
+      "day": "24 hours",
+      "week": "7 days",
+      "month": "30 days"
+    },
+    "charts": {
+      "listens": "Listens per day",
+      "signups": "Sign-ups per day",
+      "push": "New push subscribers per day",
+      "listensTooltip": "{date}: {listens} listens, {listeners} listeners",
+      "countTooltip": "{date}: {count}",
+      "total": "Total {count}"
+    },
+    "top": {
+      "byListens": "Most played lessons",
+      "byMinutes": "Most listening time",
+      "listens": "{count} listens",
+      "minutes": "{count} min",
+      "listeners": "{count} listeners",
+      "empty": "No listens in this period yet"
+    },
+    "recentSignups": {
+      "title": "Recent sign-ups",
+      "empty": "No registered users yet",
+      "noEmail": "No email"
+    },
+    "content": {
+      "title": "Content and usage",
+      "audioFiles": "Audio files",
+      "images": "Images",
+      "series": "Series",
+      "bookmarks": "Bookmarks",
+      "emailOptIn": "Email recipients",
+      "completion": "{completed} of {tracked} lessons started by signed-in users were completed"
+    },
+    "error": "Loading statistics failed: {message}"
+  },
+  "adminUsers": {
+    "title": "Users",
+    "subtitle": "Accounts, activity and permissions",
+    "cardDescription": "User list, listening activity and admin roles",
+    "back": "Back to dashboard",
+    "searchPlaceholder": "Search by email or name",
+    "search": "Search",
+    "count": "{total, plural, one {# user} other {# users}}",
+    "sortLabel": "Sort",
+    "sort": {
+      "created": "Joined",
+      "lastSignIn": "Last sign-in",
+      "lastListen": "Last listen",
+      "listened": "Listening time",
+      "email": "Email"
+    },
+    "dir": {
+      "asc": "Ascending",
+      "desc": "Descending"
+    },
+    "columns": {
+      "user": "User",
+      "joined": "Joined",
+      "lastSignIn": "Last sign-in",
+      "lastListen": "Last listen",
+      "listened": "Listening time",
+      "email": "Email",
+      "push": "Push",
+      "role": "Role"
+    },
+    "never": "—",
+    "minutes": "{count} min",
+    "listens": "{count} listens",
+    "pushDevices": "{count, plural, =0 {None} one {# device} other {# devices}}",
+    "role": {
+      "admin": "Admin",
+      "user": "User",
+      "envAdmin": "Admin (ADMIN_EMAILS)",
+      "you": "you"
+    },
+    "actions": {
+      "makeAdmin": "Make admin",
+      "removeAdmin": "Remove admin",
+      "emailOn": "Email on",
+      "emailOff": "Email off",
+      "toggleEmail": "Turn new-lesson emails on or off",
+      "confirmMakeAdmin": "Give admin access to {name}?",
+      "confirmRemoveAdmin": "Remove admin access from {name}?"
+    },
+    "errors": {
+      "unauthorized": "Admin access required.",
+      "invalid": "Invalid request.",
+      "cannot_demote_self": "You cannot remove your own admin role.",
+      "failed": "Saving failed. Please try again."
+    },
+    "pagination": {
+      "previous": "Previous",
+      "next": "Next",
+      "page": "Page {page} of {pageCount}"
+    },
+    "loadFailed": "Loading users failed.",
+    "empty": "No users found"
+  },
   "common": {
     "appName": "Tora Player",
     "offline": "Offline",

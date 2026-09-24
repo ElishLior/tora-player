@@ -3,6 +3,7 @@
 import { audioEngine, type AudioEngineStatus } from "@/lib/audio-engine";
 import { getPlaybackReaction, getRetryDelayMs } from "@/lib/audio-lifecycle";
 import { planTrackPlayback, resolveTrackSource } from "@/lib/audio-resume";
+import { startListenTracking } from "@/lib/listen-tracker";
 import { OFFLINE_DOWNLOADS_CHANGED_EVENT } from "@/lib/offline-events";
 import {
   getDownloadedLessons,
@@ -340,6 +341,7 @@ export function startAudioController(): () => void {
   });
 
   const unsubscribe = useAudioStore.subscribe(handleStoreChange);
+  const stopListenTracking = startListenTracking();
   document.addEventListener("visibilitychange", handleVisibilityChange);
   window.addEventListener("pagehide", handlePageHide);
   window.addEventListener("online", handleOnline);
@@ -350,6 +352,7 @@ export function startAudioController(): () => void {
 
   stopController = () => {
     unsubscribe();
+    stopListenTracking();
     document.removeEventListener("visibilitychange", handleVisibilityChange);
     window.removeEventListener("pagehide", handlePageHide);
     window.removeEventListener("online", handleOnline);
