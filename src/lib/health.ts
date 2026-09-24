@@ -32,7 +32,8 @@ const REQUIRED_SCHEMA_CHECKS = [
   '/rest/v1/lesson_images?select=id&limit=0',
   '/rest/v1/categories?select=id&limit=0',
   '/rest/v1/snippets?select=id&limit=0',
-  '/rest/v1/playback_progress?select=id&limit=0',
+  '/rest/v1/playback_progress?select=id,user_id&limit=0',
+  '/rest/v1/bookmarks?select=id,user_id,tag,audio_file_id&limit=0',
   '/rest/v1/lessons?select=id,category_id,hebrew_date,parsha,lesson_type,seder_number&limit=0',
 ] as const;
 

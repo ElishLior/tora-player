@@ -11,7 +11,7 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { LessonsClient } from './lessons-client';
 import { Link } from '@/i18n/routing';
 import { AlertTriangle, BookOpen, Plus, Search } from 'lucide-react';
-import { isAdmin } from '@/actions/auth';
+import { isAdmin } from '@/lib/auth/admin';
 import type { LessonWithRelations, Category } from '@/types/database';
 
 type Props = {

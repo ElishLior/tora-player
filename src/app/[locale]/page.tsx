@@ -7,7 +7,7 @@ import { LessonCard } from '@/components/lessons/lesson-card';
 import { EmptyState } from '@/components/shared/empty-state';
 import { Link } from '@/i18n/routing';
 import { BookOpen, Wrench, Sparkles, Music, Scissors, FolderOpen, Plus, ChevronLeft } from 'lucide-react';
-import { isAdmin } from '@/actions/auth';
+import { isAdmin } from '@/lib/auth/admin';
 import { ContinueListeningSection } from '@/components/home/continue-listening-section';
 import type { CategoryWithChildren } from '@/types/database';
 

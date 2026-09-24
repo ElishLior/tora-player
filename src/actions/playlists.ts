@@ -1,16 +1,16 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireServerSupabaseClient } from '@/lib/supabase/server';
+import { createAdminSupabaseClient } from '@/lib/supabase/admin';
 import { createPlaylistSchema } from '@/lib/validators';
-import { isAdmin } from '@/actions/auth';
+import { isAdmin } from '@/lib/auth/admin';
 import type { Playlist } from '@/types/database';
 
 export async function createPlaylist(formData: FormData) {
   if (!(await isAdmin())) {
     return { error: { _form: ['Unauthorized'] } };
   }
-  const supabase = await requireServerSupabaseClient();
+  const supabase = createAdminSupabaseClient();
 
   const raw = {
     name: formData.get('name') as string,
@@ -41,7 +41,7 @@ export async function deletePlaylist(id: string) {
   if (!(await isAdmin())) {
     return { error: 'Unauthorized' };
   }
-  const supabase = await requireServerSupabaseClient();
+  const supabase = createAdminSupabaseClient();
 
   const { error } = await supabase
     .from('playlists')
@@ -60,7 +60,7 @@ export async function addToPlaylist(playlistId: string, lessonId: string) {
   if (!(await isAdmin())) {
     return { error: 'Unauthorized' };
   }
-  const supabase = await requireServerSupabaseClient();
+  const supabase = createAdminSupabaseClient();
 
   // Get the next position
   const { data: existing } = await supabase
@@ -92,7 +92,7 @@ export async function removeFromPlaylist(playlistId: string, lessonId: string) {
   if (!(await isAdmin())) {
     return { error: 'Unauthorized' };
   }
-  const supabase = await requireServerSupabaseClient();
+  const supabase = createAdminSupabaseClient();
 
   const { error } = await supabase
     .from('playlist_lessons')
@@ -112,7 +112,7 @@ export async function reorderPlaylistItems(playlistId: string, itemIds: string[]
   if (!(await isAdmin())) {
     return { error: 'Unauthorized' };
   }
-  const supabase = await requireServerSupabaseClient();
+  const supabase = createAdminSupabaseClient();
 
   // Update positions based on the new order
   const updates = itemIds.map((id, index) =>

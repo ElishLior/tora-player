@@ -1,10 +1,16 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { headers } from 'next/headers';
+import { getTranslations } from 'next-intl/server';
+import { createAdminSupabaseClient } from '@/lib/supabase/admin';
 import { requireServerSupabaseClient } from '@/lib/supabase/server';
+import { createRateLimiter, getClientIp } from '@/lib/rate-limit';
 import { submitSnippetSchema, updateSnippetSubmissionSchema } from '@/lib/validators';
-import { isAdmin } from '@/actions/auth';
+import { isAdmin } from '@/lib/auth/admin';
 import type { SnippetSubmission, SnippetSubmissionWithLesson } from '@/types/database';
+
+const submissionsPerIp = createRateLimiter({ limit: 10, windowMs: 60 * 60 * 1000 });
 
 // ==================== SUBMIT (public) ====================
 
@@ -15,27 +21,45 @@ export async function submitSnippet(data: {
   description?: string | null;
   start_time: number;
   end_time: number;
-}): Promise<{ data?: SnippetSubmission; error?: Record<string, string[]> | { _form: string[] } }> {
+}): Promise<{ success?: true; error?: Record<string, string[]> | { _form: string[] } }> {
   try {
     const parsed = submitSnippetSchema.safeParse(data);
     if (!parsed.success) {
       return { error: parsed.error.flatten().fieldErrors as Record<string, string[]> };
     }
 
-    const supabase = await requireServerSupabaseClient();
-
-    const { data: row, error } = await supabase
-      .from('snippet_submissions')
-      .insert(parsed.data)
-      .select()
-      .single();
-
-    if (error) {
-      return { error: { _form: [error.message] } };
+    const t = await getTranslations('common');
+    if (!submissionsPerIp.consume(getClientIp(await headers()))) {
+      return { error: { _form: [t('rateLimited')] } };
     }
 
-    revalidatePath('/[locale]', 'layout');
-    return { data: row as SnippetSubmission };
+    // The public has no direct access to snippet_submissions (RLS); verify the
+    // target with the visitor's own client (published lessons only), then insert
+    // a pending submission with the service role.
+    const visitor = await requireServerSupabaseClient();
+    const { data: lesson } = await visitor.from('lessons').select('id').eq('id', parsed.data.lesson_id).maybeSingle();
+    const { data: audio } = parsed.data.audio_file_id
+      ? await visitor
+          .from('lesson_audio')
+          .select('id')
+          .eq('id', parsed.data.audio_file_id)
+          .eq('lesson_id', parsed.data.lesson_id)
+          .maybeSingle()
+      : { data: null };
+    if (!lesson || (parsed.data.audio_file_id && !audio)) {
+      return { error: { _form: [t('error')] } };
+    }
+
+    const { error } = await createAdminSupabaseClient()
+      .from('snippet_submissions')
+      .insert({ ...parsed.data, status: 'pending' });
+
+    if (error) {
+      console.error('[snippets] submit failed:', error.message);
+      return { error: { _form: [t('error')] } };
+    }
+
+    return { success: true };
   } catch (err) {
     return { error: { _form: [err instanceof Error ? err.message : 'Failed to submit snippet'] } };
   }
@@ -51,7 +75,7 @@ export async function getSnippetSubmissions(
   }
 
   try {
-    const supabase = await requireServerSupabaseClient();
+    const supabase = createAdminSupabaseClient();
 
     let query = supabase
       .from('snippet_submissions')
@@ -86,7 +110,7 @@ export async function getPendingSnippetCount(): Promise<{ data?: number; error?:
   }
 
   try {
-    const supabase = await requireServerSupabaseClient();
+    const supabase = createAdminSupabaseClient();
 
     const { count, error } = await supabase
       .from('snippet_submissions')
@@ -127,7 +151,7 @@ export async function updateSnippetSubmission(
       return { error: parsed.error.flatten().fieldErrors as Record<string, string[]> };
     }
 
-    const supabase = await requireServerSupabaseClient();
+    const supabase = createAdminSupabaseClient();
 
     // Set reviewed_at when status is explicitly changed to approved or rejected
     const updateData: Record<string, unknown> = { ...parsed.data };
@@ -161,7 +185,7 @@ export async function deleteSnippetSubmission(id: string): Promise<{ success?: b
   }
 
   try {
-    const supabase = await requireServerSupabaseClient();
+    const supabase = createAdminSupabaseClient();
 
     const { error } = await supabase
       .from('snippet_submissions')
