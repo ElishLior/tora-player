@@ -561,5 +561,11 @@
     "notifications": {
       "emailNeedsAccount": "עדכונים במייל על שיעורים חדשים זמינים אחרי התחברות."
     }
+  },
+  "tags": {
+    "label": "תגיות",
+    "placeholder": "הוסיפו תגית ולחצו Enter",
+    "remove": "הסרת התגית {tag}",
+    "full": "עד {max} תגיות"
   }
 }

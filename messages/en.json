@@ -561,5 +561,11 @@
     "notifications": {
       "emailNeedsAccount": "Email updates about new lessons are available after signing in."
     }
+  },
+  "tags": {
+    "label": "Tags",
+    "placeholder": "Add a tag and press Enter",
+    "remove": "Remove tag {tag}",
+    "full": "Up to {max} tags"
   }
 }
