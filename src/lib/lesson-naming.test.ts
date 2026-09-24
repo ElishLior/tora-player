@@ -39,6 +39,19 @@ describe('parseMediaFilename', () => {
     ).toMatchObject({ date: '2026-08-23', label: 'יחוד חיוורתי 2 ההבדל בין החיוורתי' });
   });
 
+  it('reads voice-recorder names with or without an export prefix, not as a sequence number', () => {
+    expect(parseMediaFilename('20260624-030714.mp3')).toMatchObject({
+      source: 'recorder',
+      date: '2026-06-24',
+      time: '03:07:14',
+      sequence: null,
+    });
+    expect(parseMediaFilename('00001561-20260702-030533.mp3')).toMatchObject({
+      date: '2026-07-02',
+      sequence: 1561,
+    });
+  });
+
   it('rejects impossible dates and undated names', () => {
     expect(parseMediaFilename('31.02.2026 שיעור.mp3')).toBeNull();
     expect(parseMediaFilename('שיעור על אהבה.mp3')).toBeNull();

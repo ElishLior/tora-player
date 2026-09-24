@@ -12,7 +12,9 @@ export type MediaFilenameSource =
   /** WhatsApp "Save" on a phone/desktop: WhatsApp Audio 2026-09-01 at 05.00.01.opus */
   | 'whatsapp-save'
   /** Human-named file that carries a date: אליהו 29.01.2026 נושא.mp3, 23-08-2026 יחוד.ogg */
-  | 'named';
+  | 'named'
+  /** Phone voice-recorder file: 20260624-030714.mp3 (optionally behind an export prefix) */
+  | 'recorder';
 
 export interface ParsedMediaFilename {
   kind: MediaKind;
@@ -32,6 +34,7 @@ const IMAGE_EXT = /\.(jpe?g|png|webp|heic|heif|gif)$/i;
 const DOCUMENT_EXT = /\.(pdf|docx?|xlsx?|pptx?)$/i;
 
 const EXPORT_RE = /^(\d{6,})-(AUDIO|PHOTO|VIDEO|STICKER)-(\d{4})-(\d{2})-(\d{2})-(\d{2})-(\d{2})-(\d{2})\./i;
+const RECORDER_RE = /^(?:(\d{8})-)?(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})\./;
 const SAVE_RE = /WhatsApp (?:Audio|Image|Video|Ptt) (\d{4})-(\d{2})-(\d{2}) at (\d{1,2})\.(\d{2})\.(\d{2})/i;
 /** dd.mm.yyyy, dd-mm-yyyy or dd/mm/yyyy anywhere in the name. */
 const DMY_RE = /(?<!\d)(\d{1,2})[./-](\d{1,2})[./-](\d{4})(?!\d)/;
@@ -85,6 +88,21 @@ export function parseMediaFilename(filename: string): ParsedMediaFilename | null
         date,
         time: `${saved[4].padStart(2, '0')}:${saved[5]}:${saved[6]}`,
         sequence: null,
+        label: '',
+      };
+    }
+  }
+
+  const rec = RECORDER_RE.exec(base);
+  if (rec) {
+    const date = isoDate(Number(rec[2]), Number(rec[3]), Number(rec[4]));
+    if (date) {
+      return {
+        kind,
+        source: 'recorder',
+        date,
+        time: `${rec[5]}:${rec[6]}:${rec[7]}`,
+        sequence: rec[1] ? Number(rec[1]) : null,
         label: '',
       };
     }
