@@ -20,7 +20,7 @@ Tora Player is a Hebrew Torah lesson audio player PWA. Treat the product like a 
 - Zustand store plus browser audio lifecycle helpers
 - Hebrew RTL primary, `next-intl`
 - Supabase Auth user accounts (Google + email one-time code) via `@supabase/ssr`; admins are signed-in users listed in `ADMIN_EMAILS` or with `profiles.role = 'admin'` (optional `ADMIN_PASSWORD` + `ADMIN_SESSION_SECRET` fallback). The anon key can only read published content; server writes use the service-role client after `requireAdmin()`/`isAdmin()` (`src/lib/auth/admin.ts`). Bookmarks/progress are local-first and sync per user when signed in.
-- New-lesson notifications: Web Push (VAPID, `public/sw-push.js`) + optional Resend email, sent by `notifyNewLesson()` in `src/lib/notifications/notify.ts`
+- New-lesson notifications: Web Push (VAPID, `public/sw-push.js`) + optional SMTP email (Gmail app password or any provider; same sender as Supabase Auth), sent by `notifyNewLesson()` in `src/lib/notifications/notify.ts`
 
 ## Commands
 

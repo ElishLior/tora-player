@@ -7,7 +7,7 @@ import { loadAllPushSubscriptions, sendPush } from '@/lib/notifications/push';
 
 /**
  * Announces a newly published lesson by Web Push (every subscribed device) and
- * email (opted-in users, when Resend is configured).
+ * email (opted-in users, when SMTP is configured).
  *
  * Idempotent: the lesson is claimed atomically (is_published AND notified_at
  * IS NULL → notified_at = now()), so drafts, repeat publishes, double clicks
