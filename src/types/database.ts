@@ -101,7 +101,6 @@ export interface LessonWithRelations extends Lesson {
   category?: Category | null;
   parts?: Lesson[];
   snippets?: Snippet[];
-  progress?: PlaybackProgress | null;
   bookmarks?: Bookmark[];
   audio_files?: LessonAudio[];
   images?: LessonImage[];
@@ -160,7 +159,9 @@ export interface PlaybackProgress {
   id: string;
   user_id: string;
   lesson_id: string;
-  position: number; // seconds
+  /** Part (lesson_audio id) last heard; null for single-file lessons and older rows. */
+  audio_file_id: string | null;
+  position: number; // seconds, inside that part
   completed: boolean;
   last_played_at: string;
   updated_at: string;

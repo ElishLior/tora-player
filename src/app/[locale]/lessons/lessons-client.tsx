@@ -12,8 +12,8 @@ import {
   getLoadMoreErrorMessage,
 } from '@/lib/lessons/pagination-state';
 import { CheckSquare, X, Save, Loader2, Play } from 'lucide-react';
-import { normalizeAudioUrl } from '@/lib/audio-url';
-import { useAudioStore, type AudioTrack } from '@/stores/audio-store';
+import { getLessonTracks } from '@/lib/lesson-tracks';
+import { playLessons } from '@/lib/play-lesson';
 import type { LessonWithRelations, Category } from '@/types/database';
 
 interface DateGroup {
@@ -60,20 +60,6 @@ function groupByDate(lessons: LessonWithRelations[], locale: string): DateGroup[
   return groups.filter((g) => g.lessons.length > 0);
 }
 
-function toTrack(lesson: LessonWithRelations): AudioTrack {
-  return {
-    id: lesson.id,
-    title: lesson.title,
-    hebrewTitle: lesson.hebrew_title || lesson.title,
-    audioUrl: normalizeAudioUrl(lesson.audio_url) || lesson.audio_url || '',
-    audioUrlFallback: normalizeAudioUrl(lesson.audio_url_fallback) || undefined,
-    duration: lesson.duration,
-    seriesName: lesson.series?.hebrew_name || lesson.series?.name || undefined,
-    date: lesson.date,
-    description: lesson.description || lesson.summary || undefined,
-  };
-}
-
 function buildCategoryTree(categories: Category[]) {
   const parents = categories.filter((c) => !c.parent_id);
   return parents.map((parent) => ({
@@ -97,7 +83,6 @@ export function LessonsClient({
   searchLessons,
 }: LessonsClientProps) {
   const tTags = useTranslations('tagBrowse');
-  const setQueue = useAudioStore((s) => s.setQueue);
   const isSearchMode = !!searchLessons;
 
   // Infinite scroll state (normal mode only)
@@ -246,14 +231,14 @@ export function LessonsClient({
     return null;
   }
 
-  const playable = allLessons.filter((lesson) => lesson.audio_url);
+  const playable = allLessons.map(getLessonTracks).filter((tracks) => tracks.length > 0);
 
   return (
     <>
       {showPlayAll && playable.length > 0 && (
         <button
           type="button"
-          onClick={() => setQueue(playable.map(toTrack), 0)}
+          onClick={() => playLessons(playable)}
           className="me-2 mb-3 inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90"
         >
           <Play className="h-4 w-4" />

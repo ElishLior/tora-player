@@ -12,6 +12,7 @@ const mockedGetDownloadPresignedUrl = vi.mocked(getDownloadPresignedUrl);
 
 describe('audio stream route', () => {
   beforeEach(() => {
+    mockedGetDownloadPresignedUrl.mockReset();
     mockedGetDownloadPresignedUrl.mockResolvedValue('https://r2.example/audio.mp3');
     vi.stubGlobal(
       'fetch',
@@ -31,16 +32,16 @@ describe('audio stream route', () => {
 
   it('forwards range requests and answers 206 with the audio content type', async () => {
     const request = new NextRequest(
-      'http://localhost/api/audio/stream/folder%2Flesson.m4a',
+      'http://localhost/api/audio/stream/audio%2Flesson.m4a',
       { headers: { Range: 'bytes=0-10' } },
     );
 
     const response = await GET(request, {
-      params: Promise.resolve({ fileKey: 'folder%2Flesson.m4a' }),
+      params: Promise.resolve({ fileKey: 'audio%2Flesson.m4a' }),
     });
 
     expect(response.status).toBe(206);
-    expect(mockedGetDownloadPresignedUrl).toHaveBeenCalledWith('folder/lesson.m4a');
+    expect(mockedGetDownloadPresignedUrl).toHaveBeenCalledWith('audio/lesson.m4a');
     expect(fetch).toHaveBeenCalledWith('https://r2.example/audio.mp3', {
       headers: { Range: 'bytes=0-10' },
     });
@@ -51,14 +52,29 @@ describe('audio stream route', () => {
   });
 
   it('returns the full file with 200 when no range is requested', async () => {
-    const request = new NextRequest('http://localhost/api/audio/stream/lesson.opus');
+    const request = new NextRequest('http://localhost/api/audio/stream/audio%2Flesson.opus');
 
     const response = await GET(request, {
-      params: Promise.resolve({ fileKey: 'lesson.opus' }),
+      params: Promise.resolve({ fileKey: 'audio%2Flesson.opus' }),
     });
 
     expect(response.status).toBe(200);
     expect(response.headers.get('Content-Type')).toBe('audio/ogg');
     expect(response.headers.get('Content-Length')).toBe('11');
+  });
+
+  it.each([
+    ['a private note image', 'user-notes/u1/n1/photo.jpg'],
+    ['an upload chunk', '_chunks/upload-1/0'],
+    ['a path escaping the audio folder', 'audio/../user-notes/u1/n1/a.mp3'],
+    ['a non-audio file inside the audio folder', 'audio/lesson.txt'],
+  ])('refuses %s without signing it', async (_label, key) => {
+    const encoded = encodeURIComponent(key);
+    const response = await GET(new NextRequest(`http://localhost/api/audio/stream/${encoded}`), {
+      params: Promise.resolve({ fileKey: encoded }),
+    });
+
+    expect(response.status).toBe(404);
+    expect(mockedGetDownloadPresignedUrl).not.toHaveBeenCalled();
   });
 });

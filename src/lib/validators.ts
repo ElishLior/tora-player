@@ -116,6 +116,8 @@ export const createSeriesSchema = z.object({
 
 export const playbackProgressSchema = z.object({
   lesson_id: uuidLike,
+  /** Part (lesson_audio id) the position is in; null for single-file lessons. */
+  audio_file_id: uuidLike.nullable().default(null),
   /** Seconds; stored rounded to an integer. */
   position: z.number().min(0),
   completed: z.boolean().default(false),
@@ -212,6 +214,7 @@ export const bookmarkSyncSchema = z.object({
 export const progressSyncSchema = validItems(
   z.object({
     lesson_id: uuidLike,
+    audio_file_id: uuidLike.nullable().default(null),
     position: z.number().min(0),
     completed: z.boolean(),
     last_played_at: z.iso.datetime({ offset: true }),

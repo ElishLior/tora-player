@@ -24,9 +24,11 @@ import { AccountSettings } from '@/components/auth/account-settings';
 import { BookmarkGroups } from '@/components/bookmarks/bookmark-groups';
 import { NoteImageStrip } from '@/components/notes/note-image-strip';
 import { PushToggle } from '@/components/notifications/push-toggle';
-import { play, playTrack } from '@/lib/audio-controller';
+import { play } from '@/lib/audio-controller';
 import { formatFileSize } from '@/lib/audio-utils';
-import { createLessonTrack, getLessonAudioAssets, lessonMomentPath } from '@/lib/lesson-tracks';
+import { getLessonTracks, lessonMomentPath } from '@/lib/lesson-tracks';
+import { getListenedFraction, getResumePoint } from '@/lib/lesson-progress';
+import { playLesson } from '@/lib/play-lesson';
 import { OFFLINE_DOWNLOADS_CHANGED_EVENT } from '@/lib/offline-events';
 import { deleteDownloadedLesson, getDownloadedLessons, type OfflineLessonMeta } from '@/lib/offline-storage';
 import { getTrackLessonId } from '@/lib/player-track-actions';
@@ -46,8 +48,6 @@ export interface MeAccount {
 
 const CONTINUE_LIMIT = 10;
 const HISTORY_LIMIT = 20;
-/** Same threshold as the home page: less than this counts as not started. */
-const MIN_RESUME_SECONDS = 30;
 const CONFIRM_MS = 3000;
 
 const CARD = 'rounded-2xl border border-border/50 bg-[hsl(var(--surface-elevated))]';
@@ -125,7 +125,7 @@ export default function MeClient({ locale, account }: { locale: string; account:
       .filter((entry) => entry?.lessonId)
       .sort((a, b) => Date.parse(b.lastPlayed) - Date.parse(a.lastPlayed));
     return {
-      inProgress: entries.filter((entry) => !entry.completed && entry.position > MIN_RESUME_SECONDS).slice(0, CONTINUE_LIMIT),
+      inProgress: entries.filter((entry) => !entry.completed).slice(0, CONTINUE_LIMIT),
       history: entries.slice(0, HISTORY_LIMIT),
     };
   }, [progressMap]);
@@ -155,14 +155,26 @@ export default function MeClient({ locale, account }: { locale: string; account:
     };
   }, [lessonIdsKey, mounted]);
 
-  /** Resumes the loaded track, or starts the lesson's queue at the saved position. */
-  const resume = (lesson: LessonWithRelations, position: number) => {
-    if (currentLessonId === lesson.id) {
-      play();
-      return;
-    }
-    const tracks = getLessonAudioAssets(lesson).map((asset) => createLessonTrack(lesson, asset));
-    if (tracks.length > 0) playTrack(tracks[0], { queue: tracks, queueIndex: 0, startAt: position });
+  /** Lessons left in the middle, with where "resume" continues and how much was heard. */
+  const continueRows = useMemo(
+    () =>
+      inProgress.flatMap((entry) => {
+        const lesson = lessons?.[entry.lessonId];
+        if (!lesson) return [];
+        const tracks = getLessonTracks(lesson);
+        const point = getResumePoint(tracks, entry);
+        if (point.index === 0 && point.position === 0) return [];
+        const total = tracks.reduce((sum, track) => sum + (track.duration || 0), 0);
+        const fraction = getListenedFraction(tracks, entry);
+        return [{ lesson, tracks, point, total, heard: total * fraction, percent: Math.round(fraction * 100) }];
+      }),
+    [inProgress, lessons],
+  );
+
+  /** Resumes the loaded track, or continues the lesson where it was left. */
+  const resume = (lessonId: string, tracks: ReturnType<typeof getLessonTracks>) => {
+    if (currentLessonId === lessonId) play();
+    else playLesson(tracks);
   };
 
   // ---- Notes ----
@@ -254,15 +266,11 @@ export default function MeClient({ locale, account }: { locale: string; account:
       <Section id="continue" icon={PlayCircle} title={t('sections.continue')}>
         {!mounted || (inProgress.length > 0 && lessons === null) ? (
           loading
-        ) : inProgress.filter((entry) => lessons?.[entry.lessonId]).length === 0 ? (
+        ) : continueRows.length === 0 ? (
           <Muted>{t('continue.empty')}</Muted>
         ) : (
           <ul className="space-y-2">
-            {inProgress.map((entry) => {
-              const lesson = lessons?.[entry.lessonId];
-              if (!lesson) return null;
-              const total = lesson.duration || getLessonAudioAssets(lesson)[0]?.duration || 0;
-              const percent = total > 0 ? Math.min(100, Math.round((entry.position / total) * 100)) : 0;
+            {continueRows.map(({ lesson, tracks, point, total, heard, percent }) => {
               const nowPlaying = currentLessonId === lesson.id && isPlaying;
               return (
                 <li key={lesson.id} className={`${CARD} space-y-3 p-4`}>
@@ -283,7 +291,7 @@ export default function MeClient({ locale, account }: { locale: string; account:
                     </div>
                     <button
                       type="button"
-                      onClick={() => resume(lesson, entry.position)}
+                      onClick={() => resume(lesson.id, tracks)}
                       disabled={nowPlaying}
                       className="flex shrink-0 items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:bg-primary/20 disabled:text-primary"
                     >
@@ -296,7 +304,7 @@ export default function MeClient({ locale, account }: { locale: string; account:
                         <>
                           <Play className="h-3.5 w-3.5 fill-current" />
                           {t.rich('continue.resume', {
-                            time: formatDuration(entry.position),
+                            time: formatDuration(heard),
                             bdi: (chunks) => <bdi dir="ltr">{chunks}</bdi>,
                           })}
                         </>
@@ -317,11 +325,10 @@ export default function MeClient({ locale, account }: { locale: string; account:
                       </div>
                       <div className="flex justify-between text-[11px] text-muted-foreground">
                         <bdi dir="ltr" className="tabular-nums">
-                          {formatDuration(entry.position)} / {formatDuration(total)}
+                          {formatDuration(heard)} / {formatDuration(total)}
+                          {tracks.length > 1 && ` · ${point.index + 1}/${tracks.length}`}
                         </bdi>
-                        <span>
-                          {t('continue.remaining', { time: formatDuration(Math.max(0, total - entry.position)) })}
-                        </span>
+                        <span>{t('continue.remaining', { time: formatDuration(Math.max(0, total - heard)) })}</span>
                       </div>
                     </div>
                   )}
@@ -343,8 +350,7 @@ export default function MeClient({ locale, account }: { locale: string; account:
             {history.map((entry) => {
               const lesson = lessons?.[entry.lessonId];
               if (!lesson) return null;
-              const total = lesson.duration || getLessonAudioAssets(lesson)[0]?.duration || 0;
-              const percent = total > 0 ? Math.min(100, Math.round((entry.position / total) * 100)) : null;
+              const percent = entry.completed ? 100 : Math.round(getListenedFraction(getLessonTracks(lesson), entry) * 100);
               return (
                 <li key={lesson.id}>
                   <Link

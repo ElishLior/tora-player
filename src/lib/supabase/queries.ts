@@ -1,5 +1,6 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import type { Lesson, LessonWithRelations, Playlist, PlaylistWithLessons, Series, Category, CategoryWithChildren } from '@/types/database';
+import { LESSON_AUDIO_FILES } from './lesson-selects';
 
 // ==================== LESSONS ====================
 
@@ -7,7 +8,7 @@ import type { Lesson, LessonWithRelations, Playlist, PlaylistWithLessons, Series
 export async function getRecentLessons(supabase: SupabaseClient, limit = 20) {
   const { data, error } = await supabase
     .from('lessons')
-    .select('*, series(*), category:categories(id, hebrew_name)')
+    .select(`*, series(*), category:categories(id, hebrew_name), ${LESSON_AUDIO_FILES}`)
     .eq('is_published', true)
     .or('lesson_type.is.null,lesson_type.neq.short_clip')
     .order('date', { ascending: false })
@@ -56,7 +57,7 @@ export async function getLessonsByDate(supabase: SupabaseClient, startDate: stri
 export async function getLessonsBySeries(supabase: SupabaseClient, seriesId: string) {
   const { data, error } = await supabase
     .from('lessons')
-    .select('*')
+    .select(`*, ${LESSON_AUDIO_FILES}`)
     .eq('series_id', seriesId)
     .eq('is_published', true)
     .order('date', { ascending: false });
@@ -124,7 +125,7 @@ export async function getLessonsByCategory(supabase: SupabaseClient, categoryId:
 
   const { data, error } = await supabase
     .from('lessons')
-    .select('*, series(name, hebrew_name), category:categories(id, hebrew_name)')
+    .select(`*, series(name, hebrew_name), category:categories(id, hebrew_name), ${LESSON_AUDIO_FILES}`)
     .eq('is_published', true)
     .in('category_id', categoryIds)
     .order('date', { ascending: false })
@@ -189,7 +190,7 @@ export async function getAllPlaylists(supabase: SupabaseClient) {
 export async function getPlaylistWithLessons(supabase: SupabaseClient, playlistId: string) {
   const { data, error } = await supabase
     .from('playlists')
-    .select('*, playlist_lessons(*, lesson:lessons(*))')
+    .select(`*, playlist_lessons(*, lesson:lessons(*, ${LESSON_AUDIO_FILES}))`)
     .eq('id', playlistId)
     .single();
 

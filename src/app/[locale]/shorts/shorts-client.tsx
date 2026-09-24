@@ -5,10 +5,11 @@ import { useTranslations } from 'next-intl';
 import { AlertTriangle, Pause, Play, Scissors, Search } from 'lucide-react';
 import { Link } from '@/i18n/routing';
 import { EmptyState } from '@/components/shared/empty-state';
-import { normalizeAudioUrl } from '@/lib/audio-url';
+import { getLessonTracks } from '@/lib/lesson-tracks';
+import { playLessons } from '@/lib/play-lesson';
 import { formatDuration } from '@/lib/utils';
 import { tagPath } from '@/lib/tag-links';
-import { useAudioStore, type AudioTrack } from '@/stores/audio-store';
+import { useAudioStore } from '@/stores/audio-store';
 import type { Category, LessonWithRelations } from '@/types/database';
 
 const GENERAL = 'general';
@@ -46,19 +47,6 @@ function topicOf(lesson: LessonWithRelations, topics: Category[]): string {
   return topics.some((tp) => tp.id === lesson.category_id) ? lesson.category_id! : GENERAL;
 }
 
-function toTrack(lesson: LessonWithRelations): AudioTrack {
-  return {
-    id: lesson.id,
-    title: lesson.title,
-    hebrewTitle: lesson.hebrew_title || lesson.title,
-    audioUrl: normalizeAudioUrl(lesson.audio_url) || lesson.audio_url!,
-    audioUrlFallback: normalizeAudioUrl(lesson.audio_url_fallback) || undefined,
-    duration: lesson.duration,
-    date: lesson.date,
-    description: lesson.description || lesson.summary || undefined,
-  };
-}
-
 export default function ShortsClient({ lessons, topics, loadFailed, initialTag }: ShortsClientProps) {
   const t = useTranslations('shorts');
   const tLessons = useTranslations('lessons');
@@ -71,7 +59,6 @@ export default function ShortsClient({ lessons, topics, loadFailed, initialTag }
   const currentTrack = useAudioStore((s) => s.currentTrack);
   const isPlaying = useAudioStore((s) => s.isPlaying);
   const togglePlay = useAudioStore((s) => s.togglePlay);
-  const setQueue = useAudioStore((s) => s.setQueue);
 
   // Topics that actually have lessons, in category order, "general" last.
   const topicTabs = useMemo(() => {
@@ -99,7 +86,7 @@ export default function ShortsClient({ lessons, topics, loadFailed, initialTag }
           field?.toLowerCase().includes(needle),
         )),
   );
-  const playable = visible.filter((lesson) => lesson.audio_url);
+  const playable = visible.filter((lesson) => lesson.audio_url || lesson.audio_files?.length);
 
   const playFrom = (lesson: LessonWithRelations) => {
     if (currentTrack?.id === lesson.id) {
@@ -107,7 +94,7 @@ export default function ShortsClient({ lessons, topics, loadFailed, initialTag }
       return;
     }
     const start = playable.findIndex((l) => l.id === lesson.id);
-    if (start >= 0) setQueue(playable.map(toTrack), start);
+    if (start >= 0) playLessons(playable.map(getLessonTracks), start);
   };
 
   // Group only when browsing everything: by tag (a short sits under each of its
@@ -192,7 +179,7 @@ export default function ShortsClient({ lessons, topics, loadFailed, initialTag }
         {playable.length > 0 && (
           <button
             type="button"
-            onClick={() => setQueue(playable.map(toTrack), 0)}
+            onClick={() => playLessons(playable.map(getLessonTracks))}
             className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90"
           >
             <Play className="h-4 w-4" />

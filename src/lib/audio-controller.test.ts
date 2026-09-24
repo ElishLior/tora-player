@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAudioStore, type AudioTrack } from "@/stores/audio-store";
+import { useProgressStore } from "@/stores/progress-store";
 import { audioEngine } from "./audio-engine";
 import {
   nextTrackOrSkip,
@@ -8,6 +9,7 @@ import {
   playTrack,
   startAudioController,
 } from "./audio-controller";
+import { playLesson } from "./play-lesson";
 
 // Browser globals the controller and its stores touch at import time.
 const { elements, getOfflineAudioUrl } = vi.hoisted(() => {
@@ -110,6 +112,23 @@ function makeTrack(id: string): AudioTrack {
   };
 }
 
+function makeParts(lessonId: string, count: number): AudioTrack[] {
+  return Array.from({ length: count }, (_, index) => ({
+    ...makeTrack(lessonId),
+    audioFileId: `${lessonId}-part-${index + 1}`,
+    audioUrl: `/api/audio/stream/${lessonId}-${index + 1}.mp3`,
+    partIndex: index,
+    partCount: count,
+  }));
+}
+
+function endCurrentFile() {
+  element().currentTime = element().duration;
+  element().ended = true;
+  element().paused = true;
+  element().emit("ended");
+}
+
 const element = () => elements[0];
 
 function becomePlaying(duration = 3600) {
@@ -133,7 +152,8 @@ describe("audio controller", () => {
   afterEach(() => {
     stop();
     pause();
-    useAudioStore.setState({ currentTrack: null, queue: [], queueIndex: -1 });
+    useAudioStore.setState({ currentTrack: null, queue: [], queueIndex: -1, sleepTimer: null });
+    useProgressStore.setState({ progressMap: {} });
     audioEngine.unload();
   });
 
@@ -197,5 +217,90 @@ describe("audio controller", () => {
     expect(state.isPlaying).toBe(false);
     expect(state.playbackIssue).toBe("blocked");
     element().playResult = Promise.resolve();
+  });
+
+  it("marks a multi-part lesson heard only when its last part ends", () => {
+    const parts = makeParts("lesson", 2);
+    playTrack(parts[0], { queue: parts, queueIndex: 0 });
+    becomePlaying(600);
+
+    endCurrentFile();
+
+    expect(useProgressStore.getState().progressMap.lesson).toMatchObject({
+      audioFileId: "lesson-part-1",
+      completed: false,
+    });
+    expect(useAudioStore.getState().currentTrack?.audioFileId).toBe("lesson-part-2");
+
+    becomePlaying(600);
+    endCurrentFile();
+
+    expect(useProgressStore.getState().progressMap.lesson).toMatchObject({
+      audioFileId: "lesson-part-2",
+      completed: true,
+    });
+  });
+
+  it("continues a lesson in the part and at the position where it was left", () => {
+    useProgressStore.getState().saveProgress({
+      lessonId: "lesson",
+      audioFileId: "lesson-part-2",
+      position: 300,
+      completed: false,
+    });
+
+    playLesson(makeParts("lesson", 3));
+
+    const state = useAudioStore.getState();
+    expect(state.currentTrack?.audioFileId).toBe("lesson-part-2");
+    expect(state.queue).toHaveLength(3);
+    expect(state.currentTime).toBe(300);
+    expect(element().src).toBe("/api/audio/stream/lesson-2.mp3");
+  });
+
+  it("stops at the end of the part when the sleep timer says so", () => {
+    const parts = makeParts("lesson", 2);
+    playTrack(parts[0], { queue: parts, queueIndex: 0 });
+    becomePlaying(600);
+    useAudioStore.getState().setSleepTimer({ kind: "end-of-part" });
+
+    endCurrentFile();
+
+    const state = useAudioStore.getState();
+    expect(state.isPlaying).toBe(false);
+    expect(state.currentTrack?.audioFileId).toBe("lesson-part-1");
+    expect(state.sleepTimer).toBeNull();
+  });
+
+  it("plays through parts but stops at the end of the lesson", () => {
+    const parts = makeParts("lesson", 2);
+    const next = makeTrack("next-lesson");
+    playTrack(parts[0], { queue: [...parts, next], queueIndex: 0 });
+    becomePlaying(600);
+    useAudioStore.getState().setSleepTimer({ kind: "end-of-lesson" });
+
+    endCurrentFile();
+    expect(useAudioStore.getState().currentTrack?.audioFileId).toBe("lesson-part-2");
+
+    becomePlaying(600);
+    endCurrentFile();
+    expect(useAudioStore.getState().isPlaying).toBe(false);
+    expect(useAudioStore.getState().currentTrack?.id).toBe("lesson");
+  });
+
+  it("pauses when a minutes sleep timer runs out during playback", () => {
+    playTrack(makeTrack("a"));
+    becomePlaying();
+    const now = Date.now();
+    useAudioStore.getState().setSleepTimer({ kind: "minutes", endsAt: now + 15 * 60_000 });
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now + 15 * 60_000 + 1);
+
+    element().currentTime = 950;
+    element().emit("timeupdate");
+    clock.mockRestore();
+
+    expect(useAudioStore.getState().isPlaying).toBe(false);
+    expect(element().paused).toBe(true);
+    expect(useAudioStore.getState().sleepTimer).toBeNull();
   });
 });

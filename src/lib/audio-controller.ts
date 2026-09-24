@@ -3,6 +3,7 @@
 import { audioEngine, type AudioEngineStatus } from "@/lib/audio-engine";
 import { getPlaybackReaction, getRetryDelayMs } from "@/lib/audio-lifecycle";
 import { planTrackPlayback, resolveTrackSource } from "@/lib/audio-resume";
+import { isLastPart, isNearPartEnd } from "@/lib/lesson-progress";
 import { startListenTracking } from "@/lib/listen-tracker";
 import { OFFLINE_DOWNLOADS_CHANGED_EVENT } from "@/lib/offline-events";
 import {
@@ -37,6 +38,8 @@ const SERVER_PROGRESS_INTERVAL_MS = 30_000;
 const RECOVERY_PROVEN_SECONDS = 10;
 // WebKit can leave the first IndexedDB open of a session hanging; stream instead.
 const OFFLINE_LOOKUP_TIMEOUT_MS = 3_000;
+// A minutes sleep timer fades the volume out over its last seconds.
+const SLEEP_FADE_SECONDS = 10;
 
 const getState = useAudioStore.getState;
 
@@ -156,6 +159,7 @@ function saveServerProgress(track: AudioTrack, position: number, completed: bool
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       lesson_id: getTrackLessonId(track),
+      audio_file_id: track.audioFileId ?? null,
       position: Math.round(position),
       completed,
     }),
@@ -169,6 +173,25 @@ function saveServerProgress(track: AudioTrack, position: number, completed: bool
     });
 }
 
+/**
+ * Saves where the listener is in a lesson: the part and the position in it.
+ * Reaching the end of the last part marks the lesson heard; any earlier
+ * position (e.g. listening again) clears it.
+ */
+function recordProgress(
+  track: AudioTrack,
+  position: number,
+  completed = isLastPart(track) && isNearPartEnd(position, audioEngine.getDuration()),
+) {
+  useProgressStore.getState().saveProgress({
+    lessonId: getTrackLessonId(track),
+    audioFileId: track.audioFileId,
+    position,
+    completed,
+  });
+  return completed;
+}
+
 /** Persists the position of the loaded track (resume after reload + progress). */
 function checkpoint(options: { server?: boolean } = {}) {
   const state = getState();
@@ -179,19 +202,40 @@ function checkpoint(options: { server?: boolean } = {}) {
   const position = audioEngine.getCurrentTime();
   lastCheckpointAt = Date.now();
   state.setResumePosition(position);
-  useProgressStore.getState().updateProgress(getTrackLessonId(track), position);
+  const completed = recordProgress(track, position);
   if (options.server || lastCheckpointAt - lastServerSaveAt >= SERVER_PROGRESS_INTERVAL_MS) {
-    saveServerProgress(track, position, false);
+    saveServerProgress(track, position, completed);
   }
 }
 
 function finishTrack(track: AudioTrack) {
   const state = getState();
-  useProgressStore.getState().markComplete(getTrackLessonId(track));
-  saveServerProgress(track, audioEngine.getDuration(), true);
+  const position = audioEngine.getDuration();
+  // A finished earlier part leaves progress at its end, so resuming opens the next part.
+  const completed = recordProgress(track, position, isLastPart(track));
+  saveServerProgress(track, position, completed);
   state.setResumePosition(0);
-  if (state.queue[state.queueIndex + 1]) state.nextTrack();
+
+  const { sleepTimer } = state;
+  const sleepNow =
+    sleepTimer?.kind === "end-of-part" || (sleepTimer?.kind === "end-of-lesson" && isLastPart(track));
+  if (sleepNow) state.setSleepTimer(null);
+  if (!sleepNow && state.queue[state.queueIndex + 1]) state.nextTrack();
   else state.pause();
+}
+
+/** Counts down a minutes sleep timer while audio plays, fading out over its last seconds. */
+function applySleepTimer() {
+  const { sleepTimer, volume, setSleepTimer } = getState();
+  if (sleepTimer?.kind !== "minutes") return;
+  const remaining = (sleepTimer.endsAt - Date.now()) / 1000;
+  if (remaining > 0) {
+    audioEngine.setVolume(remaining < SLEEP_FADE_SECONDS ? (volume * remaining) / SLEEP_FADE_SECONDS : volume);
+    return;
+  }
+  setSleepTimer(null);
+  pause();
+  audioEngine.setVolume(volume);
 }
 
 function clearRetry() {
@@ -235,6 +279,8 @@ function handleStatusChange(status: AudioEngineStatus) {
   if (status === "playing") {
     playedTrackKey = key;
     if (state.playbackIssue) state.setPlaybackIssue(null);
+    // Playing again after a minutes timer ran out (while paused) starts fresh.
+    if (state.sleepTimer?.kind === "minutes" && state.sleepTimer.endsAt <= Date.now()) state.setSleepTimer(null);
     prefetchNextOfflineSource();
   } else if (status === "paused" || status === "error") {
     checkpoint({ server: true });
@@ -277,18 +323,20 @@ function handleTimeUpdate(time: number) {
     recovery.attempts = 0;
   }
   if (Date.now() - lastCheckpointAt >= CHECKPOINT_INTERVAL_MS) checkpoint();
+  applySleepTimer();
 }
 
 function handleStoreChange(state: AudioPlayerState, previous: AudioPlayerState) {
   if (state.playbackSpeed !== previous.playbackSpeed) audioEngine.setRate(state.playbackSpeed);
-  if (state.volume !== previous.volume) audioEngine.setVolume(state.volume);
+  // A changed or cancelled sleep timer ends any fade in progress.
+  if (state.volume !== previous.volume || state.sleepTimer !== previous.sleepTimer) {
+    audioEngine.setVolume(state.volume);
+  }
 
   if (getTrackKey(state.currentTrack) !== getTrackKey(previous.currentTrack)) {
     // Remember where the previous track was left before the element switches.
     if (previous.currentTrack && playedTrackKey === getTrackKey(previous.currentTrack)) {
-      useProgressStore
-        .getState()
-        .updateProgress(getTrackLessonId(previous.currentTrack), audioEngine.getCurrentTime());
+      recordProgress(previous.currentTrack, audioEngine.getCurrentTime());
     }
     clearRetry();
     syncPlayback();
@@ -388,10 +436,12 @@ export function togglePlay() {
 export function seekTo(time: number) {
   const state = getState();
   if (!state.currentTrack) return;
-  const duration = audioEngine.getDuration() || state.duration;
+  // Until the element holds this track it still reports the previous one's duration.
+  const onTrack = isEngineOnCurrentTrack();
+  const duration = (onTrack && audioEngine.getDuration()) || state.duration;
   const target = Math.max(0, duration > 0 ? Math.min(time, duration) : time);
   // Before the element holds this track, the store position becomes its start position.
-  if (isEngineOnCurrentTrack()) audioEngine.seek(target);
+  if (onTrack) audioEngine.seek(target);
   state.setCurrentTime(target);
   state.setResumePosition(target);
 }

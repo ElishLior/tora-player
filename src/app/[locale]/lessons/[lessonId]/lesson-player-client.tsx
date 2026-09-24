@@ -31,6 +31,7 @@ import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { SeekBar } from '@/components/player/seek-bar';
 import { SpeedControl } from '@/components/player/speed-control';
 import { PlayPauseIcon, SkipButton } from '@/components/player/player-controls';
+import { SleepTimerControl } from '@/components/player/sleep-timer';
 import { BookmarkDialog } from '@/components/bookmarks/bookmark-dialog';
 import { BookmarkChips, BookmarkMarkers } from '@/components/bookmarks/lesson-bookmarks';
 import { NoteImageStrip } from '@/components/notes/note-image-strip';
@@ -38,7 +39,11 @@ import { handleCastClick } from '@/lib/cast-utils';
 import { buildAudioDownloadFilename, getAudioDownloadUrl } from '@/lib/audio-download';
 import type { LessonWithRelations, LessonImage } from '@/types/database';
 import { normalizeAudioUrl } from '@/lib/audio-url';
-import { createLessonTrack, getLessonAudioAssets, getSortedAudioFiles, type LessonAudioAsset } from '@/lib/lesson-tracks';
+import { getLessonAudioAssets, getLessonTracks, getSortedAudioFiles, isMomentInPart, type LessonAudioAsset } from '@/lib/lesson-tracks';
+import { getResumePoint } from '@/lib/lesson-progress';
+import { playLesson } from '@/lib/play-lesson';
+import { useHydrated } from '@/hooks/use-hydrated';
+import { useProgressStore } from '@/stores/progress-store';
 import { saveAudioFilesOffline, getDownloadedLesson } from '@/lib/offline-storage';
 import {
   OFFLINE_DOWNLOADS_CHANGED_EVENT,
@@ -47,7 +52,7 @@ import {
 import { handleDeviceDownloadClick } from '@/lib/device-download';
 import { MAX_NOTE_IMAGES, MAX_NOTE_LENGTH } from '@/lib/note-rules';
 import { prepareNoteImage } from '@/lib/note-image-resize';
-import { useBookmarksStore } from '@/stores/bookmarks-store';
+import { useBookmarksStore, type LocalBookmark } from '@/stores/bookmarks-store';
 import { useNotesStore, type LocalNote } from '@/stores/notes-store';
 import { submitSnippet } from '@/actions/snippets';
 import { updateLessonTags } from '@/actions/lessons';
@@ -354,28 +359,36 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
   const isCurrentLesson = currentLessonId === lesson.id;
   const sortedAudioFiles = useMemo(() => getSortedAudioFiles(lesson), [lesson]);
   const lessonAudioAssets = useMemo(() => getLessonAudioAssets(lesson), [lesson]);
+  const lessonTracks = useMemo(() => getLessonTracks(lesson), [lesson]);
   const primaryAudioAsset = lessonAudioAssets[0] || null;
-
-  const createTrackFromAsset = useCallback((asset: LessonAudioAsset) => createLessonTrack(lesson, asset), [lesson]);
 
   // All parts of the lesson form the queue, so a multi-part lesson plays through
   // and car "next"/"previous" move between its parts.
   const playAsset = useCallback(
     (index: number, startAt?: number) => {
-      const tracks = lessonAudioAssets.map(createTrackFromAsset);
-      if (!tracks[index]) return;
-      playTrack(tracks[index], { queue: tracks, queueIndex: index, startAt });
+      if (!lessonTracks[index]) return;
+      playTrack(lessonTracks[index], { queue: lessonTracks, queueIndex: index, startAt });
     },
-    [createTrackFromAsset, lessonAudioAssets, playTrack],
+    [lessonTracks, playTrack],
   );
 
-  /** Jump to a position of the lesson's main file, starting the lesson if another one plays. */
+  // Where "play" continues when another lesson (or none) is loaded.
+  const hydrated = useHydrated();
+  const savedProgress = useProgressStore((s) => s.progressMap[lesson.id]);
+  const resumePoint = useMemo(
+    () => getResumePoint(lessonTracks, hydrated ? savedProgress : undefined),
+    [lessonTracks, hydrated, savedProgress],
+  );
+  // The part the seek bar shows: the one playing, else the one "play" resumes.
+  const shownPartIndex = isCurrentLesson ? (currentTrack?.partIndex ?? 0) : resumePoint.index;
+
+  /** Jump to a position of the shown part, starting the lesson if another one plays. */
   const seekLesson = useCallback(
     (position: number) => {
       if (isCurrentLesson) seekTo(position);
-      else playAsset(0, position);
+      else playAsset(shownPartIndex, position);
     },
-    [isCurrentLesson, playAsset, seekTo],
+    [isCurrentLesson, playAsset, seekTo, shownPartIndex],
   );
 
   // ── Deep links: ?start=&end= (shared clip) and ?t=[&file=<audioFileId>] (bookmark, note) ──
@@ -419,7 +432,7 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
 
   const handlePlay = () => {
     if (isCurrentLesson) togglePlay();
-    else playAsset(0);
+    else playLesson(lessonTracks);
   };
 
   // Audio file list helpers
@@ -710,18 +723,32 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
     if ((await removeNoteImage(noteId, imageId)).error) setNoteMessage(tNotes('errors.failed'));
   };
 
-  /** Plays the note's audio file from its position (the main file for notes without one). */
-  const seekNote = (note: LocalNote) => {
-    if (note.position === null) return;
-    const index = Math.max(0, lessonAudioAssets.findIndex((asset) => asset.audioFileId === note.audioFileId));
+  /** Plays a saved moment's part from its position (the main part for moments without one). */
+  const seekMoment = (audioFileId: string | null | undefined, position: number) => {
+    const index = Math.max(0, lessonTracks.findIndex((track) => isMomentInPart(audioFileId, track)));
     const asset = lessonAudioAssets[index];
     if (!asset) return;
-    if (isFileActive(asset)) seekTo(note.position);
-    else playAsset(index, note.position);
+    if (isFileActive(asset)) seekTo(position);
+    else playAsset(index, position);
   };
 
-  const displayTime = isCurrentLesson ? currentTime : 0;
-  const displayDuration = isCurrentLesson ? duration : lesson.duration;
+  const seekNote = (note: LocalNote) => {
+    if (note.position !== null) seekMoment(note.audioFileId, note.position);
+  };
+  const seekBookmark = (bookmark: LocalBookmark) => seekMoment(bookmark.audioFileId, bookmark.position);
+  const shownPart = lessonTracks[shownPartIndex];
+  const shownPartBookmarks = shownPart
+    ? lessonBookmarks.filter((bookmark) => isMomentInPart(bookmark.audioFileId, shownPart))
+    : [];
+
+  const displayTime = isCurrentLesson ? currentTime : resumePoint.position;
+  const displayDuration = isCurrentLesson ? duration : shownPart?.duration || lesson.duration;
+  const resumeHint =
+    !isCurrentLesson && (resumePoint.index > 0 || resumePoint.position > 0)
+      ? lessonTracks.length > 1
+        ? t('resumePart', { number: resumePoint.index + 1, time: formatDur(resumePoint.position) || '0:00' })
+        : t('resumeAt', { time: formatDur(resumePoint.position) })
+      : null;
   const lessonSaveProgress = dlProgress.__lesson || 0;
   const primaryDownloadFilename = primaryAudioAsset ? getAudioAssetFilename(lesson, primaryAudioAsset) : '';
   const primaryDownloadUrl = primaryAudioAsset
@@ -744,12 +771,12 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
       )}
 
       <div className="rounded-xl bg-[hsl(var(--surface-elevated))] p-5 space-y-4">
-        <BookmarkChips bookmarks={lessonBookmarks} onSeek={seekLesson} />
+        <BookmarkChips bookmarks={lessonBookmarks} onSeek={seekBookmark} />
 
         {/* Seek bar with bookmark markers; seeking another lesson's bar starts this one */}
         <div className="relative">
           <SeekBar currentTime={displayTime} duration={displayDuration} onSeek={seekLesson} />
-          <BookmarkMarkers bookmarks={lessonBookmarks} duration={displayDuration} onSeek={seekLesson} />
+          <BookmarkMarkers bookmarks={shownPartBookmarks} duration={displayDuration} onSeek={seekBookmark} />
         </div>
 
         {isCurrentLesson && playbackIssue && (
@@ -791,6 +818,8 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
           <div className="w-12" aria-hidden />
         </div>
 
+        {resumeHint && <p className="text-center text-xs text-muted-foreground">{resumeHint}</p>}
+
         {/* Secondary actions row */}
         <div className="flex items-center justify-center gap-5 pt-1 flex-wrap">
           {/* Bookmark */}
@@ -810,6 +839,11 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
             </div>
             <span className="text-[10px]">{t('bookmark')}</span>
           </button>
+
+          {/* Sleep timer (applies to whatever is playing) */}
+          {isCurrentLesson && (
+            <SleepTimerControl className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors" />
+          )}
 
           {/* Mark snippet — always enabled, not dependent on player state */}
           <button
@@ -1287,6 +1321,7 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
         <BookmarkDialog
           onClose={() => setBookmarkPosition(null)}
           lessonId={lesson.id}
+          audioFileId={isCurrentLesson ? currentTrack?.audioFileId : undefined}
           position={bookmarkPosition}
         />
       )}

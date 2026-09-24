@@ -71,34 +71,40 @@ describe('progress sync', () => {
         { lessonId: 'missing', position: 7, lastPlayed: at(2), completed: true },
       ],
       [
-        { lesson_id: 'newer', position: 10, completed: false, last_played_at: at(10) },
-        { lesson_id: 'older', position: 80, completed: false, last_played_at: at(20) },
+        { lesson_id: 'newer', audio_file_id: null, position: 10, completed: false, last_played_at: at(10) },
+        { lesson_id: 'older', audio_file_id: null, position: 80, completed: false, last_played_at: at(20) },
       ],
     );
     expect(upload.map((entry) => entry.lessonId)).toEqual(['newer', 'missing']);
   });
 
-  it('applies account progress that was played more recently than the device copy', () => {
+  it('applies account progress (including its part) that was played more recently than the device copy', () => {
     const merged = applyServerProgress(
       {
         keep: { lessonId: 'keep', position: 50, lastPlayed: at(30), completed: false },
         replace: { lessonId: 'replace', position: 5, lastPlayed: at(1), completed: false },
       },
       [
-        { lesson_id: 'keep', position: 10, completed: true, last_played_at: at(10) },
-        { lesson_id: 'replace', position: 80, completed: true, last_played_at: at(20) },
-        { lesson_id: 'new', position: 3, completed: false, last_played_at: at(5) },
+        { lesson_id: 'keep', audio_file_id: null, position: 10, completed: true, last_played_at: at(10) },
+        { lesson_id: 'replace', audio_file_id: 'part-2', position: 80, completed: false, last_played_at: at(20) },
+        { lesson_id: 'new', audio_file_id: null, position: 3, completed: false, last_played_at: at(5) },
       ],
     );
     expect(merged.keep.position).toBe(50);
-    expect(merged.replace).toEqual({ lessonId: 'replace', position: 80, lastPlayed: at(20), completed: true });
+    expect(merged.replace).toEqual({
+      lessonId: 'replace',
+      audioFileId: 'part-2',
+      position: 80,
+      lastPlayed: at(20),
+      completed: false,
+    });
     expect(merged.new.position).toBe(3);
   });
 
   it('treats unparseable device timestamps as oldest', () => {
     const upload = pickProgressToUpload(
       [{ lessonId: 'x', position: 1, lastPlayed: 'garbage', completed: false }],
-      [{ lesson_id: 'x', position: 2, completed: false, last_played_at: at(0) }],
+      [{ lesson_id: 'x', audio_file_id: null, position: 2, completed: false, last_played_at: at(0) }],
     );
     expect(upload).toEqual([]);
   });

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAudioContentType } from '@/lib/audio-download';
+import { getAudioContentType, getAudioExtension } from '@/lib/audio-download';
 import { getDownloadPresignedUrl } from '@/lib/r2';
 
 export const runtime = 'nodejs';
@@ -18,15 +18,23 @@ export const maxDuration = 300;
  *
  * Saving a file to the device or for offline use goes through
  * /api/audio/download instead, which redirects to R2 directly.
+ *
+ * Only lesson audio objects (`audio/…` with an audio extension) are served,
+ * never chunks, images, private note files or arbitrary bucket keys. Keys are
+ * never overwritten (a re-upload gets a new key), so responses are immutable.
  */
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ fileKey: string }> }
 ) {
-  try {
-    const { fileKey } = await params;
-    const decodedKey = decodeURIComponent(fileKey);
+  const { fileKey } = await params;
+  const decodedKey = decodeURIComponent(fileKey);
 
+  if (!decodedKey.startsWith('audio/') || decodedKey.includes('..') || !getAudioExtension(decodedKey)) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
+  try {
     const signedUrl = await getDownloadPresignedUrl(decodedKey);
 
     const fetchHeaders: HeadersInit = {};
@@ -47,7 +55,7 @@ export async function GET(
     const responseHeaders = new Headers();
     responseHeaders.set('Content-Type', getAudioContentType(decodedKey));
     responseHeaders.set('Accept-Ranges', 'bytes');
-    responseHeaders.set('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+    responseHeaders.set('Cache-Control', 'public, max-age=31536000, immutable');
     responseHeaders.set('X-Content-Type-Options', 'nosniff');
 
     for (const header of ['Content-Length', 'Content-Range', 'ETag']) {
