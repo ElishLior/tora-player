@@ -88,6 +88,7 @@ How playback is wired (keep it this way):
 - Play/pause icons use `getTransportState()` (real element state), not the `isPlaying` intent.
 - Skip semantics are fixed: "back" = -15s (`RotateCcw`), "forward" = +30s (`RotateCw`), via `SkipButton` in `src/components/player/player-controls.tsx`. Render back → play → forward in DOM order and let `dir="rtl"` place them; never swap handlers or icons for RTL.
 - Car/headset next/previous go to the queue neighbour, else skip inside the lesson.
+- Listen statistics: `src/lib/listen-tracker.ts` (started by the controller) only observes the store and reports to `POST /api/listen` → `listen_events` (migration 015, service role only): first event after 30s of real playback, heartbeats ≤ 1/min, `sendBeacon` flush on pause/pagehide. Pure rules live in `src/lib/listen-tracking.ts`. `/admin/stats` and `/admin/users` read it through the `admin_*` SQL functions.
 
 Important files:
 
