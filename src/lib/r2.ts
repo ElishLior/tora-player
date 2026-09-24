@@ -25,16 +25,7 @@ const r2Client = new S3Client({
 
 const BUCKET = getR2BucketName(process.env);
 
-1: import { Home, BookOpen, Scissors, ListMusic, Bookmark, Download } from 'lucide-react';
-2: const navItems = [
-  { href: '', label: 'home', icon: Home },
-  { href: '/lessons', label: 'lessons', icon: BookOpen },
-  { href: '/shorts', label: 'shorts', icon: Scissors },
-  { href: '/bookmarks', label: 'bookmarks', icon: Bookmark },
-  { href: '/playlists', label: 'playlists', icon: ListMusic },
-  { href: '/offline', label: 'downloads', icon: Download },
-] as const;
-3: interface DownloadPresignOptions {
+interface DownloadPresignOptions {
   /** Seconds the URL stays valid (only checked when a request starts). */
   expiresIn?: number;
   /** Overrides the Content-Disposition R2 returns (e.g. an attachment filename). */

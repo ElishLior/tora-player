@@ -1,35 +1,13 @@
 'use client';
 
-1: import { Home, BookOpen, Scissors, ListMusic, Bookmark, Download } from 'lucide-react';
-2: const navItems = [
-  { href: '', label: 'home', icon: Home },
-  { href: '/lessons', label: 'lessons', icon: BookOpen },
-  { href: '/shorts', label: 'shorts', icon: Scissors },
-  { href: '/bookmarks', label: 'bookmarks', icon: Bookmark },
-  { href: '/playlists', label: 'playlists', icon: ListMusic },
-  { href: '/offline', label: 'downloads', icon: Download },
-] as const;
-3: interface DownloadPresignOptions {
-  /** Seconds the URL stays valid (only checked when a request starts). */
-  expiresIn?: number;
-  /** Overrides the Content-Disposition R2 returns (e.g. an attachment filename). */
-  contentDisposition?: string;
-  /** Overrides the Content-Type R2 returns. */
-  contentType?: string;
-}
-
-export async function getDownloadPresignedUrl(
-  key: string,
-  { expiresIn = 7200, contentDisposition, contentType }: DownloadPresignOptions = {},
-) {
+import { Home, BookOpen, Scissors, ListMusic, Bookmark, Download } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useAudioStore } from '@/stores/audio-store';
 import { cn } from '@/lib/utils';
 
-1: import { Home, BookOpen, Scissors, ListMusic, Bookmark, Download } from 'lucide-react';
-2: const navItems = [
+const navItems = [
   { href: '', label: 'home', icon: Home },
   { href: '/lessons', label: 'lessons', icon: BookOpen },
   { href: '/shorts', label: 'shorts', icon: Scissors },
@@ -37,19 +15,6 @@ import { cn } from '@/lib/utils';
   { href: '/playlists', label: 'playlists', icon: ListMusic },
   { href: '/offline', label: 'downloads', icon: Download },
 ] as const;
-3: interface DownloadPresignOptions {
-  /** Seconds the URL stays valid (only checked when a request starts). */
-  expiresIn?: number;
-  /** Overrides the Content-Disposition R2 returns (e.g. an attachment filename). */
-  contentDisposition?: string;
-  /** Overrides the Content-Type R2 returns. */
-  contentType?: string;
-}
-
-export async function getDownloadPresignedUrl(
-  key: string,
-  { expiresIn = 7200, contentDisposition, contentType }: DownloadPresignOptions = {},
-) {
 
 export function BottomNav({ locale }: { locale: string }) {
   const pathname = usePathname();
