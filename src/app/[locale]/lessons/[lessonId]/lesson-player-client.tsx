@@ -22,7 +22,9 @@ import {
   Loader2,
   Bookmark,
   FileDown,
+  ImagePlus,
 } from 'lucide-react';
+import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
@@ -31,18 +33,22 @@ import { SpeedControl } from '@/components/player/speed-control';
 import { PlayPauseIcon, SkipButton } from '@/components/player/player-controls';
 import { BookmarkDialog } from '@/components/bookmarks/bookmark-dialog';
 import { BookmarkChips, BookmarkMarkers } from '@/components/bookmarks/lesson-bookmarks';
+import { NoteImageStrip } from '@/components/notes/note-image-strip';
 import { handleCastClick } from '@/lib/cast-utils';
 import { buildAudioDownloadFilename, getAudioDownloadUrl } from '@/lib/audio-download';
-import type { LessonWithRelations, LessonAudio, LessonImage } from '@/types/database';
+import type { LessonWithRelations, LessonImage } from '@/types/database';
 import { normalizeAudioUrl } from '@/lib/audio-url';
-import { getNotes, addNote, updateNote, deleteNote, type LocalNote } from '@/lib/local-notes';
-import { saveAudioFilesOffline, getDownloadedLesson, getOfflineKey } from '@/lib/offline-storage';
+import { createLessonTrack, getLessonAudioAssets, getSortedAudioFiles, type LessonAudioAsset } from '@/lib/lesson-tracks';
+import { saveAudioFilesOffline, getDownloadedLesson } from '@/lib/offline-storage';
 import {
   OFFLINE_DOWNLOADS_CHANGED_EVENT,
   isOfflineDownloadsChangedEvent,
 } from '@/lib/offline-events';
 import { handleDeviceDownloadClick } from '@/lib/device-download';
+import { MAX_NOTE_IMAGES, MAX_NOTE_LENGTH } from '@/lib/note-rules';
+import { prepareNoteImage } from '@/lib/note-image-resize';
 import { useBookmarksStore } from '@/stores/bookmarks-store';
+import { useNotesStore, type LocalNote } from '@/stores/notes-store';
 import { submitSnippet } from '@/actions/snippets';
 
 function formatDur(seconds: number): string {
@@ -53,66 +59,6 @@ function formatDur(seconds: number): string {
 }
 
 type DownloadState = 'idle' | 'downloading' | 'downloaded' | 'error';
-
-interface LessonAudioAsset {
-  audioFileId?: string;
-  fileKey?: string;
-  audioUrl: string;
-  title: string;
-  originalName?: string | null;
-  audioType?: string | null;
-  duration: number;
-  fileSize?: number;
-  sortOrder: number;
-  offlineKey: string;
-}
-
-function getSortedAudioFiles(lesson: LessonWithRelations): LessonAudio[] {
-  return [...(lesson.audio_files || [])].sort((a, b) => {
-    const order = a.sort_order - b.sort_order;
-    if (order !== 0) return order;
-    return a.id.localeCompare(b.id);
-  });
-}
-
-function getLessonAudioAssets(lesson: LessonWithRelations): LessonAudioAsset[] {
-  const sortedAudioFiles = getSortedAudioFiles(lesson);
-  if (sortedAudioFiles.length > 0) {
-    return sortedAudioFiles.map((audio, index) => {
-      const audioUrl = normalizeAudioUrl(audio.audio_url) || audio.audio_url;
-      return {
-        audioFileId: audio.id,
-        fileKey: audio.file_key,
-        audioUrl,
-        title: audio.original_name || `חלק ${index + 1}`,
-        originalName: audio.original_name,
-        audioType: audio.audio_type,
-        duration: audio.duration || 0,
-        fileSize: audio.file_size,
-        sortOrder: audio.sort_order ?? index,
-        offlineKey: getOfflineKey(lesson.id, {
-          audioFileId: audio.id,
-          fileKey: audio.file_key,
-          audioUrl,
-        }),
-      };
-    });
-  }
-
-  const audioUrl = normalizeAudioUrl(lesson.audio_url) || lesson.audio_url;
-  if (!audioUrl) return [];
-
-  return [
-    {
-      audioUrl,
-      title: lesson.hebrew_title || lesson.title,
-      duration: lesson.duration,
-      fileSize: lesson.file_size,
-      sortOrder: 0,
-      offlineKey: getOfflineKey(lesson.id, { audioUrl }),
-    },
-  ];
-}
 
 function getAudioAssetFilename(lesson: LessonWithRelations, asset: LessonAudioAsset, index = 0): string {
   const baseTitle = asset.originalName || lesson.hebrew_title || lesson.title || asset.title || 'lesson';
@@ -406,25 +352,7 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
   const lessonAudioAssets = useMemo(() => getLessonAudioAssets(lesson), [lesson]);
   const primaryAudioAsset = lessonAudioAssets[0] || null;
 
-  const createTrackFromAsset = useCallback(
-    (asset: LessonAudioAsset) => ({
-      id: lesson.id,
-      lessonId: lesson.id,
-      audioFileId: asset.audioFileId,
-      fileKey: asset.fileKey,
-      offlineKey: asset.offlineKey,
-      title: lesson.title,
-      hebrewTitle: lesson.hebrew_title || lesson.title,
-      audioUrl: asset.audioUrl,
-      audioUrlFallback: normalizeAudioUrl(lesson.audio_url_fallback) || undefined,
-      duration: asset.duration || lesson.duration,
-      seriesName: lesson.series?.hebrew_name || lesson.series?.name || undefined,
-      date: lesson.date,
-      description: lesson.description || lesson.summary || undefined,
-      originalName: asset.originalName || asset.title,
-    }),
-    [lesson],
-  );
+  const createTrackFromAsset = useCallback((asset: LessonAudioAsset) => createLessonTrack(lesson, asset), [lesson]);
 
   // All parts of the lesson form the queue, so a multi-part lesson plays through
   // and car "next"/"previous" move between its parts.
@@ -446,10 +374,11 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
     [isCurrentLesson, playAsset, seekTo],
   );
 
-  // ── Deep links: ?start=&end= (shared clip) and ?t= (bookmark) ──
+  // ── Deep links: ?start=&end= (shared clip) and ?t=[&file=<audioFileId>] (bookmark, note) ──
   const clipStartParam = searchParams.get('start');
   const clipEndParam = searchParams.get('end');
   const timeParam = searchParams.get('t');
+  const fileParam = searchParams.get('file');
   const clipStart = clipStartParam ? parseFloat(clipStartParam) : null;
   const clipEnd = clipEndParam ? parseFloat(clipEndParam) : null;
   const deepLinkTime = clipStart ?? (timeParam ? parseFloat(timeParam) : null);
@@ -461,13 +390,15 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
     if (deepLinkHandledRef.current || deepLinkTime === null || !Number.isFinite(deepLinkTime)) return;
     if (!primaryAudioAsset) return;
     deepLinkHandledRef.current = true;
-    // Links point into the main file. If the browser refuses to autoplay, the
-    // player waits at this position with the play button showing.
-    if (isCurrentLesson && isFileActive(primaryAudioAsset)) {
+    // Links point into the main file unless they name another part. If the
+    // browser refuses to autoplay, the player waits at this position with the
+    // play button showing.
+    const index = Math.max(0, fileParam ? lessonAudioAssets.findIndex((asset) => asset.audioFileId === fileParam) : 0);
+    if (isCurrentLesson && isFileActive(lessonAudioAssets[index])) {
       seekTo(deepLinkTime);
       play();
     } else {
-      playAsset(0, deepLinkTime);
+      playAsset(index, deepLinkTime);
     }
     // Runs once per page visit; isFileActive reads the current track.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -656,55 +587,133 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
   );
   const bookmarkCount = lessonBookmarks.length;
 
-  // ---- Notes state ----
-  const [notes, setNotes] = useState<LocalNote[]>([]);
+  // ---- Notes: local-first, mirrored to the account when signed in ----
+  const tNotes = useTranslations('library.notes');
+  const allNotes = useNotesStore((s) => s.notes);
+  const notesSignedIn = useNotesStore((s) => s.accountUserId !== null);
+  const addNote = useNotesStore((s) => s.addNote);
+  const updateNote = useNotesStore((s) => s.updateNote);
+  const removeNote = useNotesStore((s) => s.removeNote);
+  const addNoteImage = useNotesStore((s) => s.addImage);
+  const removeNoteImage = useNotesStore((s) => s.removeImage);
+  // Notes come from localStorage: render them only after hydration.
+  const [notesHydrated, setNotesHydrated] = useState(false);
+  useEffect(() => setNotesHydrated(true), []);
+  const lessonNotes = useMemo(
+    () =>
+      notesHydrated
+        ? allNotes
+            .filter((note) => note.lessonId === lesson.id)
+            .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+        : [],
+    [allNotes, lesson.id, notesHydrated],
+  );
   const [notesOpen, setNotesOpen] = useState(false);
   const [newNoteText, setNewNoteText] = useState('');
-  const [attachTimestamp, setAttachTimestamp] = useState(false);
+  const [attachTimestamp, setAttachTimestamp] = useState(true);
+  const [pendingImages, setPendingImages] = useState<File[]>([]);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editingNoteText, setEditingNoteText] = useState('');
+  const [confirmDeleteNoteId, setConfirmDeleteNoteId] = useState<string | null>(null);
+  const [uploadingNoteId, setUploadingNoteId] = useState<string | null>(null);
+  const [noteMessage, setNoteMessage] = useState<string | null>(null);
+  const noteImageInputRef = useRef<HTMLInputElement>(null);
+  /** 'new' = the composer, otherwise the id of the note receiving the picked images. */
+  const noteImageTargetRef = useRef<string>('new');
 
-  // Load notes from localStorage
-  useEffect(() => {
-    setNotes(getNotes(lesson.id));
-  }, [lesson.id]);
+  const pendingPreviews = useMemo(() => pendingImages.map((file) => URL.createObjectURL(file)), [pendingImages]);
+  useEffect(() => () => pendingPreviews.forEach((url) => URL.revokeObjectURL(url)), [pendingPreviews]);
 
-  const refreshNotes = useCallback(() => {
-    setNotes(getNotes(lesson.id));
-  }, [lesson.id]);
-
-  const handleAddNote = () => {
-    const text = newNoteText.trim();
-    if (!text) return;
-    const ts = attachTimestamp && isCurrentLesson ? currentTime : undefined;
-    addNote(lesson.id, text, ts);
-    setNewNoteText('');
-    setAttachTimestamp(false);
-    refreshNotes();
-  };
-
-  const handleDeleteNote = (noteId: string) => {
-    deleteNote(lesson.id, noteId);
-    refreshNotes();
-  };
-
-  const handleStartEdit = (note: LocalNote) => {
-    setEditingNoteId(note.id);
-    setEditingNoteText(note.text);
-  };
-
-  const handleSaveEdit = () => {
-    if (editingNoteId && editingNoteText.trim()) {
-      updateNote(lesson.id, editingNoteId, editingNoteText.trim());
-      setEditingNoteId(null);
-      setEditingNoteText('');
-      refreshNotes();
+  const uploadNoteImages = async (noteId: string, files: File[]) => {
+    const attached = useNotesStore.getState().notes.find((note) => note.id === noteId)?.images.length ?? 0;
+    const room = Math.max(0, MAX_NOTE_IMAGES - attached);
+    if (files.length > room) setNoteMessage(tNotes('errors.too_many', { max: MAX_NOTE_IMAGES }));
+    setUploadingNoteId(noteId);
+    try {
+      for (const file of files.slice(0, room)) {
+        const prepared = await prepareNoteImage(file);
+        const result = 'error' in prepared ? prepared : await addNoteImage(noteId, prepared);
+        if (!result.error) continue;
+        setNoteMessage(tNotes(`errors.${result.error}`, { max: MAX_NOTE_IMAGES }));
+        // A bad file skips only itself; account/network problems stop the batch.
+        if (result.error !== 'too_large' && result.error !== 'unsupported' && result.error !== 'empty') break;
+      }
+    } finally {
+      setUploadingNoteId(null);
     }
   };
 
-  const handleCancelEdit = () => {
+  const pickNoteImages = (target: string) => {
+    noteImageTargetRef.current = target;
+    noteImageInputRef.current?.click();
+  };
+
+  const handleNoteImagesPicked = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = '';
+    if (files.length === 0) return;
+    setNoteMessage(null);
+    const target = noteImageTargetRef.current;
+    if (target !== 'new') {
+      void uploadNoteImages(target, files);
+      return;
+    }
+    const combined = [...pendingImages, ...files];
+    if (combined.length > MAX_NOTE_IMAGES) setNoteMessage(tNotes('errors.too_many', { max: MAX_NOTE_IMAGES }));
+    setPendingImages(combined.slice(0, MAX_NOTE_IMAGES));
+  };
+
+  const handleAddNote = async () => {
+    const body = newNoteText.trim();
+    if (!body) return;
+    const withTime = attachTimestamp && isCurrentLesson;
+    const saving = addNote({
+      lessonId: lesson.id,
+      body,
+      position: withTime ? currentTime : null,
+      audioFileId: withTime ? currentAudioFileId : null,
+      lessonTitle: lesson.hebrew_title || lesson.title,
+    });
+    const files = pendingImages;
+    setNewNoteText('');
+    setPendingImages([]);
+    setNoteMessage(null);
+    const { note, error } = await saving;
+    if (error) setNoteMessage(tNotes('errors.syncFailed'));
+    else if (files.length > 0) await uploadNoteImages(note.id, files);
+  };
+
+  const handleSaveEdit = async () => {
+    const body = editingNoteText.trim();
+    if (!editingNoteId || !body) return;
+    const id = editingNoteId;
     setEditingNoteId(null);
     setEditingNoteText('');
+    if ((await updateNote(id, body)).error) setNoteMessage(tNotes('errors.syncFailed'));
+  };
+
+  const handleDeleteNote = async (noteId: string) => {
+    if (confirmDeleteNoteId !== noteId) {
+      setConfirmDeleteNoteId(noteId);
+      setTimeout(() => setConfirmDeleteNoteId((current) => (current === noteId ? null : current)), 3000);
+      return;
+    }
+    setConfirmDeleteNoteId(null);
+    if ((await removeNote(noteId)).error) setNoteMessage(tNotes('errors.syncFailed'));
+  };
+
+  const handleRemoveNoteImage = async (noteId: string, imageId: string) => {
+    if ((await removeNoteImage(noteId, imageId)).error) setNoteMessage(tNotes('errors.failed'));
+  };
+
+  /** Plays the note's audio file from its position (the main file for notes without one). */
+  const seekNote = (note: LocalNote) => {
+    if (note.position === null) return;
+    const index = Math.max(0, lessonAudioAssets.findIndex((asset) => asset.audioFileId === note.audioFileId));
+    const asset = lessonAudioAssets[index];
+    if (!asset) return;
+    if (isFileActive(asset)) seekTo(note.position);
+    else playAsset(index, note.position);
   };
 
   const displayTime = isCurrentLesson ? currentTime : 0;
@@ -1017,21 +1026,22 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
       {/* Image gallery */}
       {images && images.length > 0 && <ImageGallerySection images={images} locale={locale} lessonTitle={lesson.title} />}
 
-      {/* ==================== Notes Section (inlined — local-first) ==================== */}
-      <div className="rounded-xl bg-[hsl(var(--surface-elevated))]" dir={locale === 'he' ? 'rtl' : 'ltr'}>
-        {/* Collapsible header */}
+      {/* ==================== Notes (inlined: one client component per page) ==================== */}
+      <section className="rounded-xl bg-[hsl(var(--surface-elevated))]" aria-labelledby="lesson-notes-title">
         <button
+          type="button"
           onClick={() => setNotesOpen(!notesOpen)}
+          aria-expanded={notesOpen}
           className="w-full flex items-center justify-between p-4 text-start"
         >
           <div className="flex items-center gap-2">
             <StickyNote className="h-4 w-4 text-primary" />
-            <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">
-              {locale === 'he' ? 'הערות אישיות' : 'Personal Notes'}
+            <h2 id="lesson-notes-title" className="text-sm font-bold text-muted-foreground uppercase tracking-wider">
+              {tNotes('title')}
             </h2>
-            {notes.length > 0 && (
+            {lessonNotes.length > 0 && (
               <span className="bg-primary/15 text-primary text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-                {notes.length}
+                {lessonNotes.length}
               </span>
             )}
           </div>
@@ -1042,130 +1052,232 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
 
         {notesOpen && (
           <div className="px-4 pb-4 space-y-3">
-            {/* New note input */}
+            <input
+              ref={noteImageInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"
+              multiple
+              hidden
+              onChange={handleNoteImagesPicked}
+            />
+
+            {/* Composer */}
             <div className="space-y-2">
               <textarea
                 value={newNoteText}
                 onChange={(e) => setNewNoteText(e.target.value)}
-                placeholder={locale === 'he' ? 'כתוב הערה...' : 'Write a note...'}
+                placeholder={tNotes('placeholder')}
+                aria-label={tNotes('placeholder')}
+                maxLength={MAX_NOTE_LENGTH}
                 className="w-full rounded-lg bg-[hsl(0,0%,10%)] border border-[hsl(0,0%,20%)] px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 resize-none"
                 rows={2}
-                dir={locale === 'he' ? 'rtl' : 'ltr'}
+                dir="auto"
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                    handleAddNote();
-                  }
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void handleAddNote();
                 }}
               />
-              <div className="flex items-center justify-between gap-3">
-                <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={attachTimestamp}
-                    onChange={(e) => setAttachTimestamp(e.target.checked)}
-                    className="rounded border-[hsl(0,0%,30%)] bg-[hsl(0,0%,10%)] text-primary focus:ring-primary/40"
-                  />
-                  <Clock className="h-3 w-3" />
-                  {locale === 'he' ? 'צרף זמן נוכחי' : 'Attach current time'}
-                  {attachTimestamp && isCurrentLesson && (
-                    <bdi className="text-primary font-mono font-bold">{formatDur(currentTime)}</bdi>
+
+              {pendingImages.length > 0 && (
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  {pendingPreviews.map((url, index) => (
+                    <div key={url} className="relative shrink-0">
+                      {/* eslint-disable-next-line @next/next/no-img-element -- local preview (blob URL) */}
+                      <img
+                        src={url}
+                        alt={tNotes('image', { index: index + 1 })}
+                        className="h-14 w-14 rounded-lg object-cover bg-[hsl(var(--surface-highlight))]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setPendingImages((files) => files.filter((_, i) => i !== index))}
+                        className="absolute -top-1.5 -end-1.5 rounded-full bg-background p-0.5 text-muted-foreground shadow ring-1 ring-border hover:text-red-400"
+                        aria-label={tNotes('removeImage')}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={attachTimestamp && isCurrentLesson}
+                    disabled={!isCurrentLesson}
+                    onClick={() => setAttachTimestamp(!attachTimestamp)}
+                    className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs transition-colors disabled:opacity-40 ${
+                      attachTimestamp && isCurrentLesson
+                        ? 'bg-primary/15 text-primary'
+                        : 'bg-[hsl(var(--surface-highlight))] text-muted-foreground'
+                    }`}
+                    title={isCurrentLesson ? undefined : tNotes('timeNeedsPlayback')}
+                  >
+                    <Clock className="h-3 w-3" />
+                    {tNotes('attachTime')}
+                    {attachTimestamp && isCurrentLesson && (
+                      <bdi dir="ltr" className="font-mono font-bold tabular-nums">
+                        {formatDur(currentTime) || '0:00'}
+                      </bdi>
+                    )}
+                  </button>
+
+                  {notesSignedIn ? (
+                    <button
+                      type="button"
+                      onClick={() => pickNoteImages('new')}
+                      disabled={pendingImages.length >= MAX_NOTE_IMAGES}
+                      className="flex items-center gap-1.5 rounded-full bg-[hsl(var(--surface-highlight))] px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-40"
+                    >
+                      <ImagePlus className="h-3.5 w-3.5" />
+                      {tNotes('addImages')}
+                    </button>
+                  ) : (
+                    <Link
+                      href={`/${locale}/auth/sign-in?next=${encodeURIComponent(`/${locale}/lessons/${lesson.id}`)}`}
+                      className="flex items-center gap-1.5 rounded-full bg-[hsl(var(--surface-highlight))] px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      <ImagePlus className="h-3.5 w-3.5" />
+                      {tNotes('imagesSignIn')}
+                    </Link>
                   )}
-                </label>
+                </div>
+
                 <button
-                  onClick={handleAddNote}
+                  type="button"
+                  onClick={() => void handleAddNote()}
                   disabled={!newNoteText.trim()}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
                   <Plus className="h-3.5 w-3.5" />
-                  {locale === 'he' ? 'הוסף' : 'Add'}
+                  {tNotes('add')}
                 </button>
               </div>
             </div>
 
-            {/* Notes list */}
-            {notes.length > 0 && (
-              <div className="space-y-2 pt-1">
-                {[...notes].reverse().map((note) => (
-                  <div key={note.id} className="rounded-lg bg-[hsl(0,0%,10%)] p-3 group">
+            {noteMessage && (
+              <p role="alert" className="rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+                {noteMessage}
+              </p>
+            )}
+
+            {/* Notes list, newest first */}
+            {lessonNotes.length > 0 ? (
+              <ul className="space-y-2 pt-1">
+                {lessonNotes.map((note) => (
+                  <li key={note.id} className="rounded-lg bg-[hsl(0,0%,10%)] p-3 space-y-2 group">
                     {editingNoteId === note.id ? (
-                      /* Editing mode */
                       <div className="space-y-2">
                         <textarea
                           value={editingNoteText}
                           onChange={(e) => setEditingNoteText(e.target.value)}
+                          aria-label={tNotes('edit')}
+                          maxLength={MAX_NOTE_LENGTH}
                           className="w-full rounded-lg bg-[hsl(0,0%,8%)] border border-primary/40 px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 resize-none"
-                          rows={2}
-                          dir={locale === 'he' ? 'rtl' : 'ltr'}
+                          rows={3}
+                          dir="auto"
                           autoFocus
                         />
                         <div className="flex gap-2 justify-end">
                           <button
-                            onClick={handleCancelEdit}
+                            type="button"
+                            onClick={() => {
+                              setEditingNoteId(null);
+                              setEditingNoteText('');
+                            }}
                             className="px-2.5 py-1 rounded-md text-xs text-muted-foreground hover:text-foreground transition-colors"
                           >
-                            {locale === 'he' ? 'ביטול' : 'Cancel'}
+                            {tNotes('cancel')}
                           </button>
                           <button
-                            onClick={handleSaveEdit}
-                            className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-colors"
+                            type="button"
+                            onClick={() => void handleSaveEdit()}
+                            disabled={!editingNoteText.trim()}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 disabled:opacity-40 transition-colors"
                           >
                             <Check className="h-3 w-3" />
-                            {locale === 'he' ? 'שמור' : 'Save'}
+                            {tNotes('save')}
                           </button>
                         </div>
                       </div>
                     ) : (
-                      /* Display mode */
-                      <>
-                        <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{note.text}</p>
-                        <div className="flex items-center justify-between mt-2">
-                          <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                            {note.timestamp !== undefined && (
-                              <button
-                                type="button"
-                                onClick={() => seekLesson(note.timestamp!)}
-                                className="flex items-center gap-1 text-primary hover:text-primary/80 font-mono font-bold"
-                              >
-                                <Clock className="h-3 w-3" />
-                                <bdi>{formatDur(note.timestamp)}</bdi>
-                              </button>
-                            )}
-                            <span>
-                              {new Date(note.createdAt).toLocaleDateString(locale === 'he' ? 'he-IL' : 'en-US')}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-within:opacity-100">
-                            <button
-                              onClick={() => handleStartEdit(note)}
-                              className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--surface-highlight))] transition-colors"
-                              aria-label={locale === 'he' ? 'ערוך' : 'Edit'}
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteNote(note.id)}
-                              className="p-1 rounded text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                              aria-label={locale === 'he' ? 'מחק' : 'Delete'}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      </>
+                      <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap break-words" dir="auto">
+                        {note.body}
+                      </p>
                     )}
-                  </div>
-                ))}
-              </div>
-            )}
 
-            {notes.length === 0 && (
-              <p className="text-xs text-muted-foreground text-center py-3">
-                {locale === 'he' ? 'אין הערות עדיין. כתוב הערה ראשונה!' : 'No notes yet. Write your first note!'}
-              </p>
+                    <NoteImageStrip
+                      images={note.images}
+                      uploading={uploadingNoteId === note.id}
+                      onRemove={
+                        editingNoteId === note.id ? (imageId) => void handleRemoveNoteImage(note.id, imageId) : undefined
+                      }
+                    />
+
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                        {note.position !== null && (
+                          <button
+                            type="button"
+                            onClick={() => seekNote(note)}
+                            className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-primary hover:bg-primary/20 font-mono font-bold"
+                            aria-label={tNotes('playFrom', { time: formatDur(note.position) || '0:00' })}
+                          >
+                            <Play className="h-2.5 w-2.5 fill-current" />
+                            <bdi dir="ltr">{formatDur(note.position) || '0:00'}</bdi>
+                          </button>
+                        )}
+                        <span>{new Date(note.createdAt).toLocaleDateString(locale === 'he' ? 'he-IL' : 'en-US')}</span>
+                      </div>
+                      <div className="flex items-center gap-1 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-within:opacity-100">
+                        {notesSignedIn && note.images.length < MAX_NOTE_IMAGES && (
+                          <button
+                            type="button"
+                            onClick={() => pickNoteImages(note.id)}
+                            disabled={uploadingNoteId !== null}
+                            className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--surface-highlight))] transition-colors disabled:opacity-40"
+                            aria-label={tNotes('addImages')}
+                          >
+                            <ImagePlus className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingNoteId(note.id);
+                            setEditingNoteText(note.body);
+                          }}
+                          className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--surface-highlight))] transition-colors"
+                          aria-label={tNotes('edit')}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleDeleteNote(note.id)}
+                          className={`flex items-center gap-1 p-1 rounded transition-colors ${
+                            confirmDeleteNoteId === note.id
+                              ? 'bg-red-500/15 text-red-400'
+                              : 'text-muted-foreground hover:text-red-400 hover:bg-red-500/10'
+                          }`}
+                          aria-label={confirmDeleteNoteId === note.id ? tNotes('confirmDelete') : tNotes('delete')}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          {confirmDeleteNoteId === note.id && <span className="text-[10px]">{tNotes('confirmDelete')}</span>}
+                        </button>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-muted-foreground text-center py-3">{tNotes('empty')}</p>
             )}
           </div>
         )}
-      </div>
+      </section>
 
       {bookmarkPosition !== null && (
         <BookmarkDialog

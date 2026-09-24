@@ -2,21 +2,21 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { Shield, UserRound } from 'lucide-react';
 import { getViewer, type Viewer } from '@/actions/account';
 import { syncAccountData } from '@/lib/account/sync';
 
 /**
- * Header account entry: sign-in icon for guests, initial avatar linking to the
- * account page for signed-in users, plus the admin shortcut for admins.
- * Also links this device's bookmarks/progress to the signed-in account.
+ * Header account entry: opens the personal library (/me) for everyone — an
+ * initial avatar for signed-in users, a person icon for guests — plus the
+ * admin shortcut for admins. Also links this device's bookmarks, progress and
+ * notes to the signed-in account.
  */
 export function AccountButton() {
   const locale = useLocale();
-  const pathname = usePathname();
   const t = useTranslations('auth');
+  const tLibrary = useTranslations('library');
   const [viewer, setViewer] = useState<Viewer | null>(null);
 
   useEffect(() => {
@@ -51,29 +51,20 @@ export function AccountButton() {
         </Link>
       )}
 
-      {user ? (
-        <Link
-          href={`/${locale}/auth/account`}
-          aria-label={t('account.title')}
-          title={user.email ?? undefined}
-          className="rounded-full p-1.5 transition-colors hover:bg-primary/10"
-        >
+      <Link
+        href={`/${locale}/me`}
+        aria-label={tLibrary('title')}
+        title={user?.email ?? tLibrary('title')}
+        className={`rounded-full transition-colors hover:bg-primary/10 ${user ? 'p-1.5' : 'p-2 text-muted-foreground hover:text-foreground'}`}
+      >
+        {user ? (
           <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">
             {initial ? <bdi>{initial}</bdi> : <UserRound className="h-3.5 w-3.5" />}
           </span>
-        </Link>
-      ) : (
-        <Link
-          href={`/${locale}/auth/sign-in?next=${encodeURIComponent(pathname)}`}
-          aria-label={t('signIn.title')}
-          title={t('signIn.title')}
-          className={`rounded-full p-2 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-foreground ${
-            viewer ? '' : 'invisible'
-          }`}
-        >
+        ) : (
           <UserRound className="h-4 w-4" />
-        </Link>
-      )}
+        )}
+      </Link>
     </>
   );
 }

@@ -18,6 +18,7 @@ const offlinePath = (locale) => `/${locale}/offline`;
 // Pages that must never be stored: sign-in, admin screens and the upload flow.
 const UNCACHEABLE_PAGE_PREFIXES = LOCALES.flatMap((locale) => [
   `/${locale}/auth`,
+  `/${locale}/me`,
   `/${locale}/admin`,
   `/${locale}/lessons/upload`,
 ]);

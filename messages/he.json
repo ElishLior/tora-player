@@ -1,4 +1,125 @@
 {
+  "adminStats": {
+    "title": "סטטיסטיקות",
+    "subtitle": "האזנות, משתמשים ותוכן",
+    "cardDescription": "האזנות, מאזינים, הרשמות ושיעורים מובילים",
+    "back": "חזרה ללוח הבקרה",
+    "period": "{days} ימים",
+    "periodLabel": "תקופה",
+    "trackingNote": "האזנה נספרת אחרי 30 שניות של ניגון בפועל. זמנים לפי שעון ישראל.",
+    "kpi": {
+      "listens": "האזנות",
+      "listeners": "מאזינים ייחודיים",
+      "listenersHint": "{count} מחוברים לחשבון",
+      "hours": "שעות האזנה",
+      "signups": "הרשמות חדשות",
+      "signupsHint": "{count} משתמשים בסך הכול",
+      "push": "מנויי התראות",
+      "pushHint": "+{count} בתקופה",
+      "lessons": "שיעורים",
+      "lessonsHint": "{count} מפורסמים"
+    },
+    "active": {
+      "title": "מאזינים פעילים",
+      "day": "24 שעות",
+      "week": "7 ימים",
+      "month": "30 ימים"
+    },
+    "charts": {
+      "listens": "האזנות ליום",
+      "signups": "הרשמות ליום",
+      "push": "מנויי התראות חדשים ליום",
+      "listensTooltip": "{date}: {listens} האזנות, {listeners} מאזינים",
+      "countTooltip": "{date}: {count}",
+      "total": "סה״כ {count}"
+    },
+    "top": {
+      "byListens": "השיעורים המושמעים ביותר",
+      "byMinutes": "הכי הרבה זמן האזנה",
+      "listens": "{count} האזנות",
+      "minutes": "{count} דק׳",
+      "listeners": "{count} מאזינים",
+      "empty": "אין עדיין האזנות בתקופה זו"
+    },
+    "recentSignups": {
+      "title": "נרשמו לאחרונה",
+      "empty": "אין עדיין משתמשים רשומים",
+      "noEmail": "ללא אימייל"
+    },
+    "content": {
+      "title": "תוכן ושימוש",
+      "audioFiles": "קבצי שמע",
+      "images": "תמונות",
+      "series": "סדרות",
+      "bookmarks": "סימניות",
+      "emailOptIn": "מקבלי אימייל",
+      "completion": "{completed} מתוך {tracked} שיעורים שהתחילו משתמשים מחוברים הושלמו"
+    },
+    "error": "טעינת הסטטיסטיקות נכשלה: {message}"
+  },
+  "adminUsers": {
+    "title": "משתמשים",
+    "subtitle": "חשבונות, פעילות והרשאות",
+    "cardDescription": "רשימת המשתמשים, פעילות האזנה והרשאות מנהל",
+    "back": "חזרה ללוח הבקרה",
+    "searchPlaceholder": "חיפוש לפי אימייל או שם",
+    "search": "חיפוש",
+    "count": "{total, plural, one {משתמש אחד} other {# משתמשים}}",
+    "sortLabel": "מיון",
+    "sort": {
+      "created": "תאריך הצטרפות",
+      "lastSignIn": "כניסה אחרונה",
+      "lastListen": "האזנה אחרונה",
+      "listened": "זמן האזנה",
+      "email": "אימייל"
+    },
+    "dir": {
+      "asc": "סדר עולה",
+      "desc": "סדר יורד"
+    },
+    "columns": {
+      "user": "משתמש",
+      "joined": "הצטרפות",
+      "lastSignIn": "כניסה אחרונה",
+      "lastListen": "האזנה אחרונה",
+      "listened": "זמן האזנה",
+      "email": "אימייל",
+      "push": "התראות",
+      "role": "תפקיד"
+    },
+    "never": "—",
+    "minutes": "{count} דק׳",
+    "listens": "{count} האזנות",
+    "pushDevices": "{count, plural, =0 {אין} one {מכשיר אחד} other {# מכשירים}}",
+    "role": {
+      "admin": "מנהל",
+      "user": "משתמש",
+      "envAdmin": "מנהל (ADMIN_EMAILS)",
+      "you": "את/ה"
+    },
+    "actions": {
+      "makeAdmin": "הפיכה למנהל",
+      "removeAdmin": "הסרת הרשאת מנהל",
+      "emailOn": "אימייל פעיל",
+      "emailOff": "אימייל כבוי",
+      "toggleEmail": "הפעלה או כיבוי של אימייל על שיעורים חדשים",
+      "confirmMakeAdmin": "לתת הרשאות מנהל ל-{name}?",
+      "confirmRemoveAdmin": "להסיר את הרשאות המנהל של {name}?"
+    },
+    "errors": {
+      "unauthorized": "נדרשת הרשאת מנהל.",
+      "invalid": "בקשה לא תקינה.",
+      "cannot_demote_self": "אי אפשר להסיר את הרשאת המנהל של עצמך.",
+      "failed": "השמירה נכשלה. נסו שוב."
+    },
+    "pagination": {
+      "previous": "הקודם",
+      "next": "הבא",
+      "page": "עמוד {page} מתוך {pageCount}"
+    },
+    "loadFailed": "טעינת המשתמשים נכשלה.",
+    "empty": "לא נמצאו משתמשים"
+  },
   "common": {
     "appName": "נגן תורה",
     "offline": "אופליין",
@@ -357,6 +478,88 @@
         "not_subscribed": "המכשיר הזה אינו רשום להתראות. הפעילו התראות ונסו שוב.",
         "failed": "השליחה נכשלה. בדקו את לוגי השרת."
       }
+    }
+  },
+  "library": {
+    "title": "הספרייה שלי",
+    "subtitle": "ההאזנות, הסימניות וההערות שלך במקום אחד",
+    "greeting": "שלום, <bdi>{name}</bdi>",
+    "sectionsNav": "מעבר בין חלקי הספרייה",
+    "sections": {
+      "continue": "המשך האזנה",
+      "history": "היסטוריית האזנה",
+      "bookmarks": "סימניות",
+      "notes": "ההערות שלי",
+      "downloads": "הורדות",
+      "notifications": "התראות",
+      "account": "חשבון"
+    },
+    "signInCta": {
+      "title": "התחברו כדי לשמור הכול בחשבון",
+      "body": "כרגע הסימניות, ההערות וההתקדמות נשמרות רק במכשיר הזה. אחרי ההתחברות הן יעברו לחשבון ויהיו זמינות בכל מכשיר, ותוכלו לצרף תמונות להערות.",
+      "button": "התחברות"
+    },
+    "loading": "טוען…",
+    "lessonFallback": "שיעור",
+    "continue": {
+      "resume": "המשך מ-<bdi>{time}</bdi>",
+      "playing": "מתנגן עכשיו",
+      "remaining": "נותרו {time}",
+      "empty": "אין שיעורים באמצע. שיעור שהתחלתם לשמוע יופיע כאן."
+    },
+    "history": {
+      "completed": "הושלם",
+      "percent": "{percent}% הושמעו",
+      "empty": "עדיין לא האזנתם לשיעורים.",
+      "lastPlayed": "הושמע לאחרונה {date}"
+    },
+    "bookmarks": {
+      "empty": "אין סימניות עדיין. לחצו על כפתור הסימניה בנגן כדי לשמור רגעים חשובים.",
+      "viewAll": "לכל הסימניות"
+    },
+    "notes": {
+      "title": "הערות אישיות",
+      "placeholder": "כתבו הערה…",
+      "add": "הוספה",
+      "save": "שמירה",
+      "cancel": "ביטול",
+      "edit": "עריכה",
+      "delete": "מחיקה",
+      "confirmDelete": "למחוק?",
+      "attachTime": "בזמן הנוכחי",
+      "timeNeedsPlayback": "הפעילו את השיעור כדי לצרף את זמן ההאזנה",
+      "playFrom": "השמעה מ-{time}",
+      "empty": "אין הערות עדיין. כתבו הערה ראשונה!",
+      "emptyLibrary": "עדיין אין הערות. אפשר לכתוב הערה בדף של כל שיעור.",
+      "search": "חיפוש בהערות",
+      "noResults": "לא נמצאו הערות",
+      "count": "{count, plural, one {הערה אחת} other {# הערות}}",
+      "addImages": "הוספת תמונות",
+      "imagesSignIn": "התחברו כדי לצרף תמונות",
+      "uploading": "מעלה תמונה…",
+      "image": "תמונה {index}",
+      "removeImage": "הסרת התמונה",
+      "closeImage": "סגירה",
+      "previousImage": "התמונה הקודמת",
+      "nextImage": "התמונה הבאה",
+      "errors": {
+        "too_many": "אפשר לצרף עד {max} תמונות להערה",
+        "too_large": "התמונה גדולה מדי (עד 8MB)",
+        "unsupported": "סוג קובץ לא נתמך. אפשר JPG, PNG, WebP או HEIC",
+        "empty": "הקובץ ריק",
+        "auth_required": "צריך להתחבר כדי לצרף תמונות",
+        "failed": "העלאת התמונה נכשלה, נסו שוב",
+        "syncFailed": "נשמר במכשיר, אבל הסנכרון לחשבון נכשל. ננסה שוב בפעם הבאה."
+      }
+    },
+    "downloads": {
+      "summary": "{count, plural, one {שיעור אחד} other {# שיעורים}} · {size}",
+      "remove": "הסרה מהמכשיר",
+      "openOffline": "לספריית האופליין",
+      "empty": "אין שיעורים שמורים במכשיר. אפשר לשמור שיעור להאזנה בלי אינטרנט מדף השיעור."
+    },
+    "notifications": {
+      "emailNeedsAccount": "עדכונים במייל על שיעורים חדשים זמינים אחרי התחברות."
     }
   }
 }
