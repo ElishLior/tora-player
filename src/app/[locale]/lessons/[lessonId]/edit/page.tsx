@@ -22,13 +22,22 @@ import {
   deleteImage,
   updateAudioType,
 } from '@/actions/lessons';
-import { useUpload, uploadImageFile, type FileWithMeta } from '@/hooks/use-upload';
+import { ImageUnreadableError, useUpload, uploadImageFile, type FileWithMeta } from '@/hooks/use-upload';
 import { UploadZone, type SelectedFile } from '@/components/upload/upload-zone';
 import type { LessonAudio, LessonImage, CategoryWithChildren } from '@/types/database';
 import { getCategories } from '@/actions/categories';
 import { generateLessonMetadata } from '@/lib/hebrew-date';
 
-type MetadataSuggestion = ReturnType<typeof generateLessonMetadata>;
+interface MetadataSuggestion {
+  title: string;
+  hebrewTitle: string;
+  hebrewDate: string;
+  hebrewDay: string;
+  parsha: string | null;
+  teacher: string;
+  location: string;
+  lessonType: string;
+}
 
 /** Next free sort_order after the existing rows (rows may have gaps after deletes). */
 function nextSortOrder(rows: Array<{ sort_order: number }>): number {
@@ -38,6 +47,7 @@ function nextSortOrder(rows: Array<{ sort_order: number }>): number {
 export default function EditLessonPage() {
   const t = useTranslations('lessons');
   const tCommon = useTranslations('common');
+  const tUpload = useTranslations('upload');
   const router = useRouter();
   const params = useParams();
   const lessonId = params.lessonId as string;
@@ -203,7 +213,8 @@ export default function EditLessonPage() {
             URL.revokeObjectURL(url);
           } catch (err) {
             failed.push(newImageFiles[i]);
-            errors.push(`${file.name}: ${err instanceof Error ? err.message : String(err)}`);
+            const reason = err instanceof ImageUnreadableError ? tUpload('imageUnreadable') : err instanceof Error ? err.message : String(err);
+            errors.push(`\u2068${file.name}\u2069: \u2068${reason}\u2069`);
           }
         }
         setNewImageFiles(failed);
@@ -211,7 +222,7 @@ export default function EditLessonPage() {
         if (refreshed.data) setImages(refreshed.data);
         setUploadingImages(false);
         if (errors.length > 0) {
-          setFormError(`השיעור נשמר, אבל העלאת תמונות נכשלה:\n${errors.join('\n')}`);
+          setFormError(`${tUpload('imagesFailed')}\n${errors.join('\n')}`);
           return;
         }
       }
@@ -344,7 +355,9 @@ export default function EditLessonPage() {
       }
 
       if (result.failed.length > 0) {
-        setFormError(`העלאת קבצי שמע נכשלה:\n${result.failed.map((f) => `${f.fileName}: ${f.error}`).join('\n')}`);
+        setFormError(
+          `${tUpload('audioFailed')}\n${result.failed.map((f) => `\u2068${f.fileName}\u2069: \u2068${f.error}\u2069`).join('\n')}`,
+        );
         return;
       }
 
@@ -911,7 +924,7 @@ export default function EditLessonPage() {
                       <Check className="h-3.5 w-3.5 text-green-400" />
                     )}
                     {fp.status === 'error' && (
-                      <span className="text-destructive truncate max-w-[50%]" title={fp.error}>{fp.error || 'שגיאה'}</span>
+                      <span className="text-destructive truncate max-w-[50%]" title={fp.error}><bdi>{fp.error || tCommon('error')}</bdi></span>
                     )}
                   </div>
                 ))}

@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { Link } from '@/i18n/routing';
 import { createDraftLesson, findDuplicateAudio, publishUploadedLesson } from '@/actions/upload';
-import { uploadAudioFile, uploadImageFile } from '@/hooks/use-upload';
+import { ImageUnreadableError, uploadAudioFile, uploadImageFile } from '@/hooks/use-upload';
 import { extractAudioMetadata, formatFileSize } from '@/lib/audio-utils';
 import { shouldTranscode } from '@/lib/audio-transcode';
 import { generateLessonMetadata } from '@/lib/hebrew-date';
@@ -182,7 +182,7 @@ export default function DailyUploadClient({ categories }: { categories: Category
     if (!lessonId) {
       const created = await createDraftLesson(lessonFieldsForDraft(draft, run.description));
       if (!created.data) {
-        patchRun(key, { phase: 'failed', error: t('createFailed', { error: created.error }) });
+        patchRun(key, { phase: 'failed', error: t('createFailed', { error: `\u2068${created.error}\u2069` }) });
         return;
       }
       lessonId = created.data.id;
@@ -217,7 +217,10 @@ export default function DailyUploadClient({ categories }: { categories: Category
         patchFile(job.id, { status: 'done', progress: 100 });
       } catch (err) {
         failures++;
-        patchFile(job.id, { status: 'error', error: err instanceof Error ? err.message : String(err) });
+        patchFile(job.id, {
+          status: 'error',
+          error: err instanceof ImageUnreadableError ? t('imageUnreadable') : err instanceof Error ? err.message : String(err),
+        });
       }
     }
 
@@ -227,7 +230,7 @@ export default function DailyUploadClient({ categories }: { categories: Category
     }
     const published = await publishUploadedLesson(lessonId);
     if (!published.data) {
-      patchRun(key, { phase: 'failed', error: t('publishFailed', { error: published.error }) });
+      patchRun(key, { phase: 'failed', error: t('publishFailed', { error: `\u2068${published.error}\u2069` }) });
       return;
     }
     patchRun(key, { phase: 'published', error: null });
@@ -267,7 +270,7 @@ export default function DailyUploadClient({ categories }: { categories: Category
           aria-label={t('back')}
           className="rounded-full p-2 text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--surface-highlight))] transition-colors"
         >
-          <ArrowRight className="h-5 w-5 rtl:rotate-0 ltr:rotate-180" />
+          <ArrowRight className="h-5 w-5 ltr:rotate-180" />
         </Link>
         <div>
           <h1 className="text-xl font-bold">{t('title')}</h1>
@@ -304,7 +307,7 @@ export default function DailyUploadClient({ categories }: { categories: Category
           <Upload className="h-6 w-6 mb-2 text-muted-foreground" />
         )}
         <p className="text-sm font-medium">{analyzing ? t('analyzing') : t('dropHere')}</p>
-        <p className="text-xs text-muted-foreground mt-1" dir="ltr">{t('dropHint')}</p>
+        <p className="text-xs text-muted-foreground mt-1">{t('dropHint')}</p>
       </div>
 
       <label className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
@@ -320,7 +323,7 @@ export default function DailyUploadClient({ categories }: { categories: Category
       {unsupported.length > 0 && (
         <p className="flex items-start gap-1.5 text-xs text-amber-500">
           <AlertTriangle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
-          <span>{t('unsupported', { names: unsupported.join(', ') })}</span>
+          <span>{t('unsupported', { names: unsupported.map((n) => `\u2068${n}\u2069`).join(', ') })}</span>
         </p>
       )}
 
@@ -440,7 +443,7 @@ function DraftCard({ draft, run, files, categories, onChange, onDescription, onU
           <span className="text-xs font-bold text-muted-foreground">{t('lessonTitle')}</span>
           <input
             type="text"
-            dir="rtl"
+            dir="auto"
             value={draft.title}
             disabled={locked}
             onChange={(e) => onChange((d) => ({ ...d, title: e.target.value, titleEdited: true }))}
@@ -450,7 +453,6 @@ function DraftCard({ draft, run, files, categories, onChange, onDescription, onU
         <label className="space-y-1">
           <span className="text-xs font-bold text-muted-foreground">{t('category')}</span>
           <select
-            dir="rtl"
             value={draft.categoryId}
             disabled={locked}
             onChange={(e) => onChange((d) => ({ ...d, categoryId: e.target.value }))}
@@ -474,7 +476,7 @@ function DraftCard({ draft, run, files, categories, onChange, onDescription, onU
           <span className="text-xs font-bold text-muted-foreground">{t('description')}</span>
           <input
             type="text"
-            dir="rtl"
+            dir="auto"
             value={run.description}
             disabled={locked}
             onChange={(e) => onDescription(e.target.value)}
@@ -505,9 +507,9 @@ function DraftCard({ draft, run, files, categories, onChange, onDescription, onU
                   />
                   <FileAudio className="h-4 w-4 flex-shrink-0 text-primary" />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm" dir="ltr">{part.name}</p>
+                    <p className="truncate text-sm text-start" dir="auto">{part.name}</p>
                     <p className="text-[11px] text-muted-foreground">
-                      {part.durationSec ? formatDuration(part.durationSec) : '—'} · {formatFileSize(part.size)}
+                      <bdi>{part.durationSec ? formatDuration(part.durationSec) : '—'}</bdi> · <bdi>{formatFileSize(part.size)}</bdi>
                     </p>
                   </div>
                   <select
@@ -515,7 +517,6 @@ function DraftCard({ draft, run, files, categories, onChange, onDescription, onU
                     disabled={locked || !part.include}
                     onChange={(e) => editPart(part.fileId, { audioType: e.target.value || null })}
                     className="rounded-md bg-[hsl(var(--surface-elevated))] px-2 py-1 text-xs border-0"
-                    dir="rtl"
                   >
                     <option value="">{t('noType')}</option>
                     {PART_TYPE_OPTIONS.map((type) => (
@@ -567,7 +568,7 @@ function DraftCard({ draft, run, files, categories, onChange, onDescription, onU
                     {!locked ? (
                       <>
                         <button type="button" aria-label={t('moveUp')} disabled={index === 0} onClick={() => moveImage(index, -1)} className="disabled:opacity-30">
-                          <ChevronRight className="h-3.5 w-3.5" />
+                          <ChevronRight className="h-3.5 w-3.5 ltr:rotate-180" />
                         </button>
                         <button
                           type="button"
@@ -577,7 +578,7 @@ function DraftCard({ draft, run, files, categories, onChange, onDescription, onU
                           <X className="h-3.5 w-3.5" />
                         </button>
                         <button type="button" aria-label={t('moveDown')} disabled={index === draft.imageIds.length - 1} onClick={() => moveImage(index, 1)} className="disabled:opacity-30">
-                          <ChevronLeft className="h-3.5 w-3.5" />
+                          <ChevronLeft className="h-3.5 w-3.5 ltr:rotate-180" />
                         </button>
                       </>
                     ) : (
@@ -586,7 +587,7 @@ function DraftCard({ draft, run, files, categories, onChange, onDescription, onU
                   </div>
                   {entry?.status === 'error' && (
                     <p className="absolute inset-x-0 top-0 rounded-t-lg bg-destructive/90 px-1 text-[10px] text-destructive-foreground line-clamp-2" title={entry.error ?? ''}>
-                      {entry.error}
+                      <bdi>{entry.error}</bdi>
                     </p>
                   )}
                 </div>
@@ -655,7 +656,7 @@ function FileStatusIcon({ entry }: { entry: FileEntry | undefined }) {
 
 function FileProgress({ entry }: { entry: FileEntry | undefined }) {
   if (!entry) return null;
-  if (entry.status === 'error') return <p className="text-[11px] text-destructive">{entry.error}</p>;
+  if (entry.status === 'error') return <p className="text-[11px] text-destructive"><bdi>{entry.error}</bdi></p>;
   if (entry.status !== 'uploading') return null;
   return (
     <div className="h-1 overflow-hidden rounded-full bg-[hsl(0,0%,24%)]">

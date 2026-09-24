@@ -3,6 +3,10 @@
  * Handles Hebrew text, dates, part numbers, and generates lesson names.
  */
 
+import { generateLessonMetadata } from '@/lib/hebrew-date';
+import { parseMediaFilename } from '@/lib/lesson-naming';
+import { jerusalemToday } from '@/lib/upload-drafts';
+
 export interface ParsedWhatsAppMessage {
   title: string;
   hebrewTitle: string;
@@ -43,8 +47,8 @@ export function parseWhatsAppText(text: string): ParsedWhatsAppMessage {
   // Generate Hebrew title
   const hebrewTitle = generateHebrewTitle(lines, seriesHint, date, partNumber);
 
-  // Generate English title (transliterated or date-based)
-  const title = generateTitle(hebrewTitle, date, partNumber);
+  // Canonical date-based title ("יום X - <hebrew date>")
+  const title = generateTitle(date, partNumber);
 
   // Use remaining text as description
   const description = lines.join('\n');
@@ -60,21 +64,11 @@ export function parseWhatsAppText(text: string): ParsedWhatsAppMessage {
 }
 
 function extractDate(text: string): string {
-  // Try DD/MM/YYYY pattern first
-  const ddmmyyyy = text.match(/(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4})/);
-  if (ddmmyyyy) {
-    const [, day, month, year] = ddmmyyyy;
-    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-  }
-
-  // Try YYYY-MM-DD
-  const yyyymmdd = text.match(/(\d{4})-(\d{2})-(\d{2})/);
-  if (yyyymmdd) {
-    return yyyymmdd[0];
-  }
-
-  // Default to today
-  return new Date().toISOString().split('T')[0];
+  // Same validated dd.mm.yyyy / yyyy-mm-dd rules as media filenames. Slashes and
+  // newlines are normalized so the text reads as one filename (the extension
+  // only satisfies the parser). Falls back to today in Israel.
+  const asFilename = `${text.replace(/[\r\n]+/g, ' ').replace(/[\\/]/g, '.')}.txt`;
+  return parseMediaFilename(asFilename)?.date ?? jerusalemToday();
 }
 
 function extractPartNumber(text: string): number | null {
@@ -139,24 +133,15 @@ function generateHebrewTitle(
   // Fallback: construct from series and date
   const parts: string[] = [];
   if (seriesHint) parts.push(seriesHint);
-  parts.push(formatHebrewDate(date));
+  parts.push(generateLessonMetadata(date).hebrewDate);
   if (partNumber) parts.push(`חלק ${numberToHebrewLetter(partNumber)}'`);
 
-  return parts.join(' - ') || `שיעור ${formatHebrewDate(date)}`;
+  return parts.join(' - ');
 }
 
-function generateTitle(hebrewTitle: string, date: string, partNumber: number | null): string {
-  // Use date-based English title
-  const dateObj = new Date(date + 'T00:00:00');
-  const formatted = dateObj.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-  let title = `Lesson - ${formatted}`;
-  if (partNumber) title += ` (Part ${partNumber})`;
-  return title;
-}
-
-function formatHebrewDate(dateStr: string): string {
-  const dateObj = new Date(dateStr + 'T00:00:00');
-  return dateObj.toLocaleDateString('he-IL', { day: 'numeric', month: 'long', year: 'numeric' });
+function generateTitle(date: string, partNumber: number | null): string {
+  const { title } = generateLessonMetadata(date);
+  return partNumber ? `${title} - חלק ${numberToHebrewLetter(partNumber)}'` : title;
 }
 
 function numberToHebrewLetter(num: number): string {

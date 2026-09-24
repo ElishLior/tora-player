@@ -171,7 +171,10 @@
     "openLesson": "Open lesson",
     "editLesson": "Edit",
     "leaveWarning": "Upload in progress — leave anyway?",
-    "back": "Back"
+    "back": "Back",
+    "imageUnreadable": "The browser can't read this image — convert it to JPEG and try again",
+    "imagesFailed": "The lesson was saved, but some images failed to upload:",
+    "audioFailed": "Some audio files failed to upload:"
   },
   "bookmarks": {
     "title": "Bookmarks",

@@ -103,6 +103,13 @@ export async function uploadAudioFile(file: File, options: AudioUploadOptions): 
   return result.publicUrl as string;
 }
 
+/** The browser could not decode/re-encode a photo (e.g. HEIC outside Safari). UI shows `upload.imageUnreadable`. */
+export class ImageUnreadableError extends Error {
+  constructor(fileName: string) {
+    super(`Cannot read image ${fileName}`);
+  }
+}
+
 /**
  * Re-encode photos the server won't accept as-is: HEIC/HEIF (not displayable
  * outside Safari) and anything over the request size limit. Uses the
@@ -116,7 +123,7 @@ async function prepareImage(file: File): Promise<File> {
   try {
     bitmap = await createImageBitmap(file);
   } catch {
-    throw new Error('הדפדפן לא מצליח לקרוא את התמונה — המר ל-JPEG ונסה שוב');
+    throw new ImageUnreadableError(file.name);
   }
   const scale = Math.min(1, MAX_IMAGE_EDGE / Math.max(bitmap.width, bitmap.height));
   const canvas = document.createElement('canvas');
@@ -127,7 +134,7 @@ async function prepareImage(file: File): Promise<File> {
   const encoded = Promise.withResolvers<Blob | null>();
   canvas.toBlob(encoded.resolve, 'image/jpeg', 0.85);
   const blob = await encoded.promise;
-  if (!blob) throw new Error('המרת התמונה נכשלה');
+  if (!blob) throw new ImageUnreadableError(file.name);
   return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
 }
 
