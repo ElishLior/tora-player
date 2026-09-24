@@ -56,6 +56,8 @@ export interface Lesson {
   seder_number: number | null;
   // New field from migration 005
   category_id: string | null;
+  // Free topic tags (migration 016), normalized by src/lib/tags.ts
+  tags: string[];
   created_at: string;
   updated_at: string;
 }
