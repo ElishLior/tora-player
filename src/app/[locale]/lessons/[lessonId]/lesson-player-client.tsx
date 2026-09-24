@@ -50,6 +50,10 @@ import { prepareNoteImage } from '@/lib/note-image-resize';
 import { useBookmarksStore } from '@/stores/bookmarks-store';
 import { useNotesStore, type LocalNote } from '@/stores/notes-store';
 import { submitSnippet } from '@/actions/snippets';
+import { updateLessonTags } from '@/actions/lessons';
+import { TagInput } from '@/components/tags/tag-input';
+import { normalizeTags } from '@/lib/tags';
+import { tagPath } from '@/lib/tag-links';
 
 function formatDur(seconds: number): string {
   if (!seconds || seconds <= 0) return '';
@@ -1412,5 +1416,113 @@ function ImageGallerySection({
         </div>
       )}
     </div>
+  );
+}
+
+interface LessonTagsProps {
+  lessonId: string;
+  tags: string[];
+  admin: boolean;
+}
+
+/**
+ * Topic tags under the lesson title; each opens its tag page. Admins edit them
+ * inline: the new tags show immediately and roll back if saving fails.
+ */
+export function LessonTags({ lessonId, tags: initialTags, admin }: LessonTagsProps) {
+  const t = useTranslations('tagBrowse');
+  const locale = useLocale();
+  const [tags, setTags] = useState(initialTags);
+  const [draft, setDraft] = useState<string[] | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!error) return;
+    const timer = setTimeout(() => setError(null), 4000);
+    return () => clearTimeout(timer);
+  }, [error]);
+
+  if (!admin && tags.length === 0) return null;
+
+  const save = async () => {
+    if (!draft) return;
+    const previous = tags;
+    const next = normalizeTags(draft);
+    setTags(next);
+    setDraft(null);
+    setSaving(true);
+    try {
+      const result = await updateLessonTags(lessonId, next);
+      if ('error' in result) throw new Error(result.error);
+      setTags(result.tags);
+    } catch {
+      setTags(previous);
+      setError(t('saveFailed'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (draft) {
+    return (
+      <div className="space-y-2">
+        <TagInput value={draft} onChange={setDraft} label={t('lessonTags')} />
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={save}
+            className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90"
+          >
+            <Check className="h-3.5 w-3.5" />
+            {t('save')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setDraft(null)}
+            className="rounded-full bg-[hsl(var(--surface-elevated))] px-4 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
+          >
+            {t('cancel')}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <ul className="flex flex-wrap items-center gap-1.5" aria-label={t('lessonTags')}>
+        {tags.map((tag) => (
+          <li key={tag}>
+            <Link
+              href={`/${locale}${tagPath(tag)}`}
+              className="inline-flex min-h-7 items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
+            >
+              <bdi>#{tag}</bdi>
+            </Link>
+          </li>
+        ))}
+        {admin && (
+          <li>
+            <button
+              type="button"
+              onClick={() => setDraft(tags)}
+              disabled={saving}
+              className="inline-flex min-h-7 items-center gap-1 rounded-full border border-dashed border-border px-2.5 py-0.5 text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-60"
+            >
+              {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : tags.length > 0 ? <Pencil className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
+              {saving ? t('saving') : tags.length > 0 ? t('editTags') : t('addTags')}
+            </button>
+          </li>
+        )}
+      </ul>
+      {error && (
+        <div className="fixed inset-x-0 bottom-24 z-50 flex justify-center px-4">
+          <p role="alert" className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm font-medium text-red-400 shadow-lg backdrop-blur">
+            {error}
+          </p>
+        </div>
+      )}
+    </>
   );
 }

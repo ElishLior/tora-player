@@ -10,30 +10,34 @@ import {
 import { EmptyState } from '@/components/shared/empty-state';
 import { LessonsClient } from './lessons-client';
 import { Link } from '@/i18n/routing';
-import { AlertTriangle, BookOpen, Plus, Search } from 'lucide-react';
+import { AlertTriangle, BookOpen, Plus, Search, X } from 'lucide-react';
 import { isAdmin } from '@/lib/auth/admin';
+import { lessonsHref, tagFromSearchParam, tagPath, type TagCount } from '@/lib/tag-links';
 import type { LessonWithRelations, Category } from '@/types/database';
 
 type Props = {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ q?: string; type?: string; cat?: string }>;
+  searchParams: Promise<{ q?: string; type?: string; cat?: string; tag?: string | string[] }>;
 };
 
-function buildRetryHref(filters: { q?: string; audioTypeFilter?: string; categoryFilter?: string }) {
-  const params = new URLSearchParams();
-  if (filters.q) params.set('q', filters.q);
-  if (filters.audioTypeFilter) params.set('type', filters.audioTypeFilter);
-  if (filters.categoryFilter) params.set('cat', filters.categoryFilter);
-  const query = params.toString();
-  return query ? `/lessons?${query}` : '/lessons';
-}
+/** Tag chips shown in the filter row before "more". */
+const TOP_TAG_CHIPS = 8;
+
+const chipClass = (active: boolean) =>
+  `rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors ${
+    active
+      ? 'bg-primary text-primary-foreground'
+      : 'bg-[hsl(var(--surface-elevated))] text-muted-foreground hover:text-foreground'
+  }`;
 
 export default async function LessonsPage({ params, searchParams }: Props) {
   const { locale } = await params;
-  const { q, type: audioTypeFilter, cat: categoryFilter } = await searchParams;
+  const { q, type: audioTypeFilter, cat: categoryFilter, tag: tagParam } = await searchParams;
+  const tagFilter = tagFromSearchParam(tagParam);
   setRequestLocale(locale);
   const t = await getTranslations('lessons');
   const commonT = await getTranslations('common');
+  const tagT = await getTranslations('tagBrowse');
 
   const supabase = await createServerSupabaseClient();
   const admin = await isAdmin();
@@ -42,19 +46,22 @@ export default async function LessonsPage({ params, searchParams }: Props) {
   let hasMore = false;
   let isSearchMode = false;
   let allCategories: Category[] = [];
+  let matchedTags: string[] = [];
   let loadError: { code: LessonListFailureCode; message: string } | null = null;
 
   const lessonListResult = await loadInitialLessonList(
     supabase ? createSupabaseLessonListReader(supabase) : null,
-    { q, audioTypeFilter, categoryFilter },
+    { q, audioTypeFilter, categoryFilter, tagFilter },
   );
 
   allCategories = lessonListResult.allCategories;
+  const tagCounts: TagCount[] = lessonListResult.tagCounts;
 
   if (lessonListResult.ok) {
     lessons = lessonListResult.lessons;
     hasMore = lessonListResult.hasMore;
     isSearchMode = lessonListResult.isSearchMode;
+    matchedTags = lessonListResult.matchedTags;
   } else {
     console.error('Failed to load lessons page:', {
       code: lessonListResult.code,
@@ -71,6 +78,10 @@ export default async function LessonsPage({ params, searchParams }: Props) {
   const leafCategories = lessonsParent
     ? allCategories.filter(c => c.parent_id === lessonsParent.id)
     : [];
+
+  // Most used tags, with the active tag always visible.
+  const tagChips = tagCounts.slice(0, TOP_TAG_CHIPS).map((row) => row.tag);
+  if (tagFilter && !tagChips.includes(tagFilter)) tagChips.unshift(tagFilter);
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -90,6 +101,7 @@ export default async function LessonsPage({ params, searchParams }: Props) {
 
       {/* Search */}
       <form className="relative">
+        {tagFilter && <input type="hidden" name="tag" value={tagFilter} />}
         <Search className="absolute start-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <input
           name="q"
@@ -108,46 +120,78 @@ export default async function LessonsPage({ params, searchParams }: Props) {
           { value: 'עץ חיים', label: 'עץ חיים' },
         ].map((tab) => {
           const isActive = !categoryFilter && (audioTypeFilter || '') === tab.value;
-          const p = new URLSearchParams();
-          if (q) p.set('q', q);
-          if (tab.value) p.set('type', tab.value);
-          const href = p.toString() ? `?${p.toString()}` : '?';
           return (
-            <a
+            <Link
               key={`type-${tab.value}`}
-              href={href}
-              className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors ${
-                isActive
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-[hsl(var(--surface-elevated))] text-muted-foreground hover:text-foreground'
-              }`}
+              href={lessonsHref({ q, type: tab.value, tag: tagFilter })}
+              className={chipClass(isActive)}
             >
               {tab.label}
-            </a>
+            </Link>
           );
         })}
 
         {/* Category filter tabs */}
         {leafCategories.map((cat) => {
           const isActive = categoryFilter === cat.id;
-          const p = new URLSearchParams();
-          if (q) p.set('q', q);
-          p.set('cat', cat.id);
           return (
-            <a
+            <Link
               key={`cat-${cat.id}`}
-              href={`?${p.toString()}`}
-              className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors ${
-                isActive
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-[hsl(var(--surface-elevated))] text-muted-foreground hover:text-foreground'
-              }`}
+              href={lessonsHref({ q, cat: cat.id, tag: tagFilter })}
+              className={chipClass(isActive)}
             >
               {cat.hebrew_name}
-            </a>
+            </Link>
           );
         })}
       </div>
+
+      {/* Tag filter: most used tags; the active one toggles off */}
+      {tagChips.length > 0 && (
+        <nav aria-label={tagT('filterLabel')} className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none] md:mx-0 md:overflow-visible md:px-0">
+          <ul className="flex w-max gap-2 pb-1 md:w-auto md:flex-wrap">
+            {tagChips.map((tag) => {
+              const isActive = tag === tagFilter;
+              return (
+                <li key={tag}>
+                  <Link
+                    href={lessonsHref({ q, type: audioTypeFilter, cat: categoryFilter, tag: isActive ? undefined : tag })}
+                    aria-current={isActive ? 'true' : undefined}
+                    aria-label={isActive ? tagT('clearTag', { tag }) : undefined}
+                    className={`inline-flex items-center gap-1 whitespace-nowrap ${chipClass(isActive)}`}
+                  >
+                    <bdi>#{tag}</bdi>
+                    {isActive && <X className="h-3 w-3" aria-hidden />}
+                  </Link>
+                </li>
+              );
+            })}
+            {tagCounts.length > TOP_TAG_CHIPS && (
+              <li>
+                <Link href="/tags" className={`inline-flex whitespace-nowrap ${chipClass(false)}`}>
+                  {tagT('more')}
+                </Link>
+              </li>
+            )}
+          </ul>
+        </nav>
+      )}
+
+      {/* Search mode: tags matching the query */}
+      {isSearchMode && matchedTags.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground">{tagT('matchingTags')}</span>
+          {matchedTags.slice(0, TOP_TAG_CHIPS).map((tag) => (
+            <Link
+              key={tag}
+              href={tagPath(tag)}
+              className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary hover:bg-primary/20"
+            >
+              <bdi>#{tag}</bdi>
+            </Link>
+          ))}
+        </div>
+      )}
 
       {/* Lesson content */}
       {loadError ? (
@@ -157,7 +201,7 @@ export default async function LessonsPage({ params, searchParams }: Props) {
           description={t('loadErrorDescription')}
           action={
             <Link
-              href={buildRetryHref({ q, audioTypeFilter, categoryFilter })}
+              href={lessonsHref({ q, type: audioTypeFilter, cat: categoryFilter, tag: tagFilter })}
               className="rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90"
             >
               {commonT('retry')}
@@ -167,6 +211,7 @@ export default async function LessonsPage({ params, searchParams }: Props) {
       ) : lessons.length > 0 ? (
         isSearchMode ? (
           <LessonsClient
+            key={lessonsHref({ q, type: audioTypeFilter, cat: categoryFilter, tag: tagFilter })}
             initialLessons={[]}
             initialHasMore={false}
             locale={locale}
@@ -176,11 +221,13 @@ export default async function LessonsPage({ params, searchParams }: Props) {
           />
         ) : (
           <LessonsClient
+            key={lessonsHref({ type: audioTypeFilter, cat: categoryFilter, tag: tagFilter })}
             initialLessons={lessons}
             initialHasMore={hasMore}
             locale={locale}
             audioTypeFilter={audioTypeFilter}
             categoryFilter={categoryFilter}
+            tagFilter={tagFilter}
             admin={admin}
             categories={allCategories}
           />

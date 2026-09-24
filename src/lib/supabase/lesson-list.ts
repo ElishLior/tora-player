@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Category, LessonWithRelations } from '@/types/database';
+import { matchTags, type TagCount } from '@/lib/tag-links';
 import { getAllCategories } from './queries';
 
 export const DEFAULT_LESSON_PAGE_SIZE = 20;
@@ -13,12 +14,17 @@ export type LessonListResult =
       hasMore: boolean;
       isSearchMode: boolean;
       allCategories: Category[];
+      /** Every tag on a published lesson, most used first. */
+      tagCounts: TagCount[];
+      /** Search mode: tags whose text matches the query (their lessons are in the results). */
+      matchedTags: string[];
     }
   | {
       ok: false;
       code: LessonListFailureCode;
       message: string;
       allCategories: Category[];
+      tagCounts: TagCount[];
     };
 
 export type PaginatedLessonListResult =
@@ -36,13 +42,21 @@ export type PaginatedLessonListResult =
 export interface LessonQueryFilters {
   lessonIds?: string[];
   categoryIds?: string[];
+  /** Only lessons carrying this (normalized) tag. */
+  tag?: string;
 }
 
 export interface LessonListReader {
   getAllCategories(): Promise<Category[]>;
   getAudioLessonIds(audioType: string): Promise<string[]>;
   getChildCategoryIds(categoryId: string): Promise<string[]>;
-  searchLessons(query: string, filters: LessonQueryFilters): Promise<LessonWithRelations[]>;
+  getTagCounts(): Promise<TagCount[]>;
+  /** Text matches plus lessons carrying any of `matchedTags`, newest first. */
+  searchLessons(
+    query: string,
+    filters: LessonQueryFilters,
+    matchedTags: string[],
+  ): Promise<LessonWithRelations[]>;
   getLessonsPage(
     offset: number,
     pageSize: number,
@@ -54,6 +68,7 @@ export interface InitialLessonListParams {
   q?: string;
   audioTypeFilter?: string;
   categoryFilter?: string;
+  tagFilter?: string;
   pageSize?: number;
 }
 
@@ -62,6 +77,7 @@ export interface PaginatedLessonListParams {
   limit: number;
   audioTypeFilter?: string;
   categoryFilter?: string;
+  tagFilter?: string;
 }
 
 function classifyLessonListError(error: unknown): LessonListFailureCode {
@@ -107,12 +123,14 @@ function getErrorMessage(error: unknown) {
 function failure(
   error: unknown,
   allCategories: Category[] = [],
+  tagCounts: TagCount[] = [],
 ): Extract<LessonListResult, { ok: false }> {
   return {
     ok: false,
     code: classifyLessonListError(error),
     message: getErrorMessage(error),
     allCategories,
+    tagCounts,
   };
 }
 
@@ -126,8 +144,8 @@ function paginatedFailure(error: unknown): Extract<PaginatedLessonListResult, { 
 
 async function getFilters(
   reader: LessonListReader,
-  params: Pick<InitialLessonListParams, 'audioTypeFilter' | 'categoryFilter'>,
-) {
+  params: Pick<InitialLessonListParams, 'audioTypeFilter' | 'categoryFilter' | 'tagFilter'>,
+): Promise<LessonQueryFilters> {
   let lessonIds: string[] | undefined;
   let categoryIds: string[] | undefined;
 
@@ -142,7 +160,7 @@ async function getFilters(
     ];
   }
 
-  return { lessonIds, categoryIds };
+  return { lessonIds, categoryIds, tag: params.tagFilter || undefined };
 }
 
 export async function loadInitialLessonList(
@@ -155,14 +173,17 @@ export async function loadInitialLessonList(
       code: 'unconfigured',
       message: 'Supabase is not configured.',
       allCategories: [],
+      tagCounts: [],
     };
   }
 
   let allCategories: Category[] = [];
+  let tagCounts: TagCount[] = [];
 
   try {
-    allCategories = await reader.getAllCategories();
+    [allCategories, tagCounts] = await Promise.all([reader.getAllCategories(), reader.getTagCounts()]);
     const filters = await getFilters(reader, params);
+    const matchedTags = params.q ? matchTags(tagCounts, params.q) : [];
 
     if (filters.lessonIds?.length === 0) {
       return {
@@ -171,17 +192,21 @@ export async function loadInitialLessonList(
         hasMore: false,
         isSearchMode: Boolean(params.q),
         allCategories,
+        tagCounts,
+        matchedTags,
       };
     }
 
     if (params.q) {
-      const lessons = await reader.searchLessons(params.q, filters);
+      const lessons = await reader.searchLessons(params.q, filters, matchedTags);
       return {
         ok: true,
         lessons,
         hasMore: false,
         isSearchMode: true,
         allCategories,
+        tagCounts,
+        matchedTags,
       };
     }
 
@@ -195,9 +220,11 @@ export async function loadInitialLessonList(
       hasMore,
       isSearchMode: false,
       allCategories,
+      tagCounts,
+      matchedTags,
     };
   } catch (error) {
-    return failure(error, allCategories);
+    return failure(error, allCategories, tagCounts);
   }
 }
 
@@ -242,9 +269,51 @@ function throwIfError<T>(result: { data: T | null; error: unknown }) {
   return result.data;
 }
 
+const LESSON_LIST_SELECT = '*, series(name, hebrew_name), category:categories(id, hebrew_name)';
+export const SEARCH_RESULT_LIMIT = 50;
+
+/** The subset of the PostgREST filter builder the list filters use. */
+export interface LessonFilterableQuery<Q> {
+  in(column: string, values: readonly string[]): Q;
+  contains(column: string, value: readonly string[]): Q;
+}
+
+/** Applies the list filters; the tag uses array containment (`tags @> {tag}`, GIN-indexed). */
+export function applyLessonFilters<Q extends LessonFilterableQuery<Q>>(
+  query: Q,
+  filters: LessonQueryFilters,
+): Q {
+  let next = query;
+  if (filters.lessonIds) next = next.in('id', filters.lessonIds);
+  if (filters.categoryIds) next = next.in('category_id', filters.categoryIds);
+  if (filters.tag) next = next.contains('tags', [filters.tag]);
+  return next;
+}
+
+/** Union of two newest-first result lists without duplicates, newest first, capped. */
+export function mergeSearchResults(
+  a: LessonWithRelations[],
+  b: LessonWithRelations[],
+  limit = SEARCH_RESULT_LIMIT,
+): LessonWithRelations[] {
+  const byId = new Map<string, LessonWithRelations>();
+  for (const lesson of [...a, ...b]) if (!byId.has(lesson.id)) byId.set(lesson.id, lesson);
+  return [...byId.values()]
+    .sort((x, y) => (x.date < y.date ? 1 : x.date > y.date ? -1 : 0))
+    .slice(0, limit);
+}
+
+/** Tag cloud data from `lesson_tag_counts()` (published lessons only), most used first. */
+export async function fetchTagCounts(supabase: SupabaseClient): Promise<TagCount[]> {
+  const data = throwIfError(await supabase.rpc('lesson_tag_counts'));
+  return ((data ?? []) as TagCount[]).map((row) => ({ tag: row.tag, lesson_count: Number(row.lesson_count) }));
+}
+
 export function createSupabaseLessonListReader(supabase: SupabaseClient): LessonListReader {
   return {
     getAllCategories: () => getAllCategories(supabase),
+
+    getTagCounts: () => fetchTagCounts(supabase),
 
     async getAudioLessonIds(audioType) {
       const result = await supabase
@@ -264,32 +333,34 @@ export function createSupabaseLessonListReader(supabase: SupabaseClient): Lesson
       return (data || []).map((row: { id: string }) => row.id);
     },
 
-    async searchLessons(queryText, filters) {
-      const escaped = queryText.replace(/[%_\\]/g, '\\$&');
-      let query = supabase
-        .from('lessons')
-        .select('*, series(name, hebrew_name), category:categories(id, hebrew_name)')
-        .eq('is_published', true)
-        .or(`title.ilike.%${escaped}%,hebrew_title.ilike.%${escaped}%,description.ilike.%${escaped}%`)
+    async searchLessons(queryText, filters, matchedTags) {
+      const published = () => supabase.from('lessons').select(LESSON_LIST_SELECT).eq('is_published', true);
+      // LIKE-escape, then turn or() syntax characters into single-character wildcards.
+      const pattern = `%${queryText.replace(/[%_\\]/g, '\\$&').replace(/[,()"]/g, '_')}%`;
+      const textQuery = applyLessonFilters(
+        published().or(`title.ilike.${pattern},hebrew_title.ilike.${pattern},description.ilike.${pattern}`),
+        filters,
+      )
         .order('date', { ascending: false })
-        .limit(50);
+        .limit(SEARCH_RESULT_LIMIT);
+      const tagQuery =
+        matchedTags.length > 0
+          ? applyLessonFilters(published().overlaps('tags', matchedTags), filters)
+              .order('date', { ascending: false })
+              .limit(SEARCH_RESULT_LIMIT)
+          : null;
 
-      if (filters.lessonIds) query = query.in('id', filters.lessonIds);
-      if (filters.categoryIds) query = query.in('category_id', filters.categoryIds);
-
-      const result = await query;
-      return (throwIfError(result) || []) as LessonWithRelations[];
+      const [textResult, tagResult] = await Promise.all([textQuery, tagQuery]);
+      const textLessons = (throwIfError(textResult) || []) as LessonWithRelations[];
+      const tagLessons = tagResult ? ((throwIfError(tagResult) || []) as LessonWithRelations[]) : [];
+      return mergeSearchResults(textLessons, tagLessons);
     },
 
     async getLessonsPage(offset, pageSize, filters) {
-      let query = supabase
-        .from('lessons')
-        .select('*, series(name, hebrew_name), category:categories(id, hebrew_name)')
-        .eq('is_published', true)
-        .order('date', { ascending: false });
-
-      if (filters.lessonIds) query = query.in('id', filters.lessonIds);
-      if (filters.categoryIds) query = query.in('category_id', filters.categoryIds);
+      const query = applyLessonFilters(
+        supabase.from('lessons').select(LESSON_LIST_SELECT).eq('is_published', true),
+        filters,
+      ).order('date', { ascending: false });
 
       const result = await query.range(offset, offset + pageSize);
       return (throwIfError(result) || []) as LessonWithRelations[];

@@ -622,6 +622,33 @@
       "emailNeedsAccount": "עדכונים במייל על שיעורים חדשים זמינים אחרי התחברות."
     }
   },
+  "tagBrowse": {
+    "lessonTags": "תגיות השיעור",
+    "editTags": "עריכת תגיות",
+    "addTags": "הוספת תגיות",
+    "save": "שמירה",
+    "cancel": "ביטול",
+    "saving": "שומר…",
+    "saveFailed": "שמירת התגיות נכשלה. נסו שוב.",
+    "indexTitle": "תגיות",
+    "indexSubtitle": "נושאי השיעורים, לפי מספר השיעורים",
+    "searchPlaceholder": "חיפוש תגית...",
+    "empty": "עדיין אין תגיות",
+    "noMatches": "לא נמצאו תגיות",
+    "loadFailed": "לא ניתן לטעון את התגיות כרגע",
+    "lessonCount": "{count, plural, =1 {שיעור אחד} other {# שיעורים}}",
+    "allTags": "כל התגיות",
+    "tagEmpty": "אין שיעורים עם התגית הזו",
+    "playAll": "נגן הכל",
+    "filterLabel": "סינון לפי תגית",
+    "clearTag": "הסרת הסינון #{tag}",
+    "more": "עוד",
+    "matchingTags": "תגיות תואמות",
+    "untagged": "ללא תגית",
+    "groupBy": "קיבוץ",
+    "groupByTag": "לפי תגית",
+    "groupByCategory": "לפי קטגוריה"
+  },
   "tags": {
     "label": "תגיות",
     "placeholder": "הוסיפו תגית ולחצו Enter",

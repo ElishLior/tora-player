@@ -8,7 +8,7 @@ import { Link } from '@/i18n/routing';
 import { ArrowRight, Calendar, Clock, Edit, MapPin, User, BookOpen, Hash } from 'lucide-react';
 import { isAdmin } from '@/lib/auth/admin';
 import { ShareButton } from '@/components/shared/share-button';
-import { LessonPlayerClient } from './lesson-player-client';
+import { LessonPlayerClient, LessonTags } from './lesson-player-client';
 
 type Props = {
   params: Promise<{ locale: string; lessonId: string }>;
@@ -65,6 +65,7 @@ export default async function LessonDetailPage({ params }: Props) {
         <h1 className="text-xl font-bold" dir="rtl">
           {lesson.hebrew_title || lesson.title}
         </h1>
+        <LessonTags lessonId={lesson.id} tags={lesson.tags ?? []} admin={admin} />
         {lesson.series && (
           <Link
             href={`/lessons?series=${lesson.series.id}`}
