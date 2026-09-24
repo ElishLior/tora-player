@@ -53,7 +53,7 @@ export async function sendNewLessonEmails(lesson: { id: string; title: string })
     const t = createTranslator({ locale: 'he', messages: heMessages, namespace: 'notifications.email' });
     const appUrl = process.env.NEXT_PUBLIC_APP_URL!.replace(/\/$/, '');
     const lessonUrl = `${appUrl}/he/lessons/${lesson.id}`;
-    const accountUrl = `${appUrl}/he/auth/account`;
+    const accountUrl = `${appUrl}/he/me#notifications`;
     const title = escapeHtml(lesson.title);
     const html = `<!doctype html>
 <html lang="he" dir="rtl">

@@ -479,5 +479,87 @@
         "failed": "Sending failed. Check the server logs."
       }
     }
+  },
+  "library": {
+    "title": "My library",
+    "subtitle": "Your listening, bookmarks and notes in one place",
+    "greeting": "Hello, <bdi>{name}</bdi>",
+    "sectionsNav": "Library sections",
+    "sections": {
+      "continue": "Continue listening",
+      "history": "Listening history",
+      "bookmarks": "Bookmarks",
+      "notes": "My notes",
+      "downloads": "Downloads",
+      "notifications": "Notifications",
+      "account": "Account"
+    },
+    "signInCta": {
+      "title": "Sign in to keep everything in your account",
+      "body": "Right now your bookmarks, notes and progress are saved on this device only. After signing in they move to your account, sync across devices, and you can attach images to notes.",
+      "button": "Sign in"
+    },
+    "loading": "Loading…",
+    "lessonFallback": "Lesson",
+    "continue": {
+      "resume": "Resume from <bdi>{time}</bdi>",
+      "playing": "Playing now",
+      "remaining": "{time} left",
+      "empty": "Nothing in progress. Lessons you start listening to show up here."
+    },
+    "history": {
+      "completed": "Completed",
+      "percent": "{percent}% played",
+      "empty": "You haven't listened to any lessons yet.",
+      "lastPlayed": "Last played {date}"
+    },
+    "bookmarks": {
+      "empty": "No bookmarks yet. Tap the bookmark button in the player to save important moments.",
+      "viewAll": "All bookmarks"
+    },
+    "notes": {
+      "title": "Personal notes",
+      "placeholder": "Write a note…",
+      "add": "Add",
+      "save": "Save",
+      "cancel": "Cancel",
+      "edit": "Edit",
+      "delete": "Delete",
+      "confirmDelete": "Delete?",
+      "attachTime": "At current time",
+      "timeNeedsPlayback": "Play the lesson to attach the listening time",
+      "playFrom": "Play from {time}",
+      "empty": "No notes yet. Write your first note!",
+      "emptyLibrary": "No notes yet. You can write a note on any lesson page.",
+      "search": "Search notes",
+      "noResults": "No matching notes",
+      "count": "{count, plural, one {# note} other {# notes}}",
+      "addImages": "Add images",
+      "imagesSignIn": "Sign in to attach images",
+      "uploading": "Uploading image…",
+      "image": "Image {index}",
+      "removeImage": "Remove image",
+      "closeImage": "Close",
+      "previousImage": "Previous image",
+      "nextImage": "Next image",
+      "errors": {
+        "too_many": "A note can have up to {max} images",
+        "too_large": "The image is too large (8 MB max)",
+        "unsupported": "Unsupported file. Use JPG, PNG, WebP or HEIC",
+        "empty": "The file is empty",
+        "auth_required": "Sign in to attach images",
+        "failed": "Uploading the image failed, please try again",
+        "syncFailed": "Saved on this device, but syncing to your account failed. We'll retry next time."
+      }
+    },
+    "downloads": {
+      "summary": "{count, plural, one {# lesson} other {# lessons}} · {size}",
+      "remove": "Remove from device",
+      "openOffline": "Open offline library",
+      "empty": "No lessons saved on this device. Save a lesson for offline listening from its page."
+    },
+    "notifications": {
+      "emailNeedsAccount": "Email updates about new lessons are available after signing in."
+    }
   }
 }

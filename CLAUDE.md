@@ -19,7 +19,8 @@ Tora Player is a Hebrew Torah lesson audio player PWA. Treat the product like a 
 - Images streamed through `/api/images/stream/[fileKey]`
 - Zustand store plus browser audio lifecycle helpers
 - Hebrew RTL primary, `next-intl`
-- Supabase Auth user accounts (Google + email one-time code) via `@supabase/ssr`; admins are signed-in users listed in `ADMIN_EMAILS` or with `profiles.role = 'admin'` (optional `ADMIN_PASSWORD` + `ADMIN_SESSION_SECRET` fallback). The anon key can only read published content; server writes use the service-role client after `requireAdmin()`/`isAdmin()` (`src/lib/auth/admin.ts`). Bookmarks/progress are local-first and sync per user when signed in.
+- Supabase Auth user accounts (Google + email one-time code) via `@supabase/ssr`; admins are signed-in users listed in `ADMIN_EMAILS` or with `profiles.role = 'admin'` (optional `ADMIN_PASSWORD` + `ADMIN_SESSION_SECRET` fallback). The anon key can only read published content; server writes use the service-role client after `requireAdmin()`/`isAdmin()` (`src/lib/auth/admin.ts`). Bookmarks/progress/personal notes are local-first and sync per user when signed in (`src/lib/account/sync.ts`, merge rules in `src/lib/account/merge.ts`).
+- Personal library at `/[locale]/me` (listening, bookmarks, notes, downloads, notifications, account; `/auth/account` redirects there). Note images are signed-in only, private R2 objects under `user-notes/<user_id>/<note_id>/`, uploaded via `POST /api/notes/images` and served to their owner only by `/api/notes/images/[imageId]` (302 to a short-lived presigned URL).
 - New-lesson notifications: Web Push (VAPID, `public/sw-push.js`) + optional SMTP email (Gmail app password or any provider; same sender as Supabase Auth), sent by `notifyNewLesson()` in `src/lib/notifications/notify.ts`
 
 ## Commands
