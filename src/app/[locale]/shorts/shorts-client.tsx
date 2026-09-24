@@ -7,15 +7,38 @@ import { Link } from '@/i18n/routing';
 import { EmptyState } from '@/components/shared/empty-state';
 import { normalizeAudioUrl } from '@/lib/audio-url';
 import { formatDuration } from '@/lib/utils';
+import { tagPath } from '@/lib/tag-links';
 import { useAudioStore, type AudioTrack } from '@/stores/audio-store';
 import type { Category, LessonWithRelations } from '@/types/database';
 
 const GENERAL = 'general';
+const UNTAGGED = 'untagged';
+
+type GroupBy = 'tag' | 'category';
 
 interface ShortsClientProps {
   lessons: LessonWithRelations[];
   topics: Category[];
   loadFailed: boolean;
+  /** From `?tag=`; already normalized. */
+  initialTag?: string;
+}
+
+/** Tags used by the shorts, most used first (ties alphabetical). */
+function countTags(lessons: LessonWithRelations[]): string[] {
+  const counts = new Map<string, number>();
+  for (const lesson of lessons) for (const tag of lesson.tags ?? []) counts.set(tag, (counts.get(tag) ?? 0) + 1);
+  return [...counts.entries()]
+    .sort(([a, x], [b, y]) => y - x || a.localeCompare(b, 'he'))
+    .map(([tag]) => tag);
+}
+
+/** Keep `?tag=` in the address bar in sync without a navigation. */
+function syncTagParam(tag: string | null) {
+  const url = new URL(window.location.href);
+  if (tag) url.searchParams.set('tag', tag);
+  else url.searchParams.delete('tag');
+  window.history.replaceState(window.history.state, '', url);
 }
 
 /** Topic id of a short: its קצרים sub-category, or "general". */
@@ -36,11 +59,15 @@ function toTrack(lesson: LessonWithRelations): AudioTrack {
   };
 }
 
-export default function ShortsClient({ lessons, topics, loadFailed }: ShortsClientProps) {
+export default function ShortsClient({ lessons, topics, loadFailed, initialTag }: ShortsClientProps) {
   const t = useTranslations('shorts');
   const tLessons = useTranslations('lessons');
+  const tTags = useTranslations('tagBrowse');
   const [query, setQuery] = useState('');
   const [topic, setTopic] = useState<string | null>(null);
+  const [tag, setTagState] = useState<string | null>(initialTag ?? null);
+  const tagTabs = useMemo(() => countTags(lessons), [lessons]);
+  const [groupBy, setGroupBy] = useState<GroupBy>(tagTabs.length > 0 ? 'tag' : 'category');
   const currentTrack = useAudioStore((s) => s.currentTrack);
   const isPlaying = useAudioStore((s) => s.isPlaying);
   const togglePlay = useAudioStore((s) => s.togglePlay);
@@ -54,12 +81,21 @@ export default function ShortsClient({ lessons, topics, loadFailed }: ShortsClie
     return tabs;
   }, [lessons, topics, t]);
 
-  const needle = query.trim().toLowerCase();
+  // An unknown ?tag= stays visible so it can be cleared.
+  const tagChips = tag && !tagTabs.includes(tag) ? [tag, ...tagTabs] : tagTabs;
+
+  const setTag = (next: string | null) => {
+    setTagState(next);
+    syncTagParam(next);
+  };
+
+  const needle = query.trim().replace(/^#+/, '').toLowerCase();
   const visible = lessons.filter(
     (lesson) =>
       (!topic || topicOf(lesson, topics) === topic) &&
+      (!tag || (lesson.tags ?? []).includes(tag)) &&
       (!needle ||
-        [lesson.title, lesson.hebrew_title, lesson.description, lesson.summary].some((field) =>
+        [lesson.title, lesson.hebrew_title, lesson.description, lesson.summary, ...(lesson.tags ?? [])].some((field) =>
           field?.toLowerCase().includes(needle),
         )),
   );
@@ -74,11 +110,28 @@ export default function ShortsClient({ lessons, topics, loadFailed }: ShortsClie
     if (start >= 0) setQueue(playable.map(toTrack), start);
   };
 
-  // Group by topic only when browsing everything with more than one topic.
-  const groups =
-    !topic && !needle && topicTabs.length > 1
-      ? topicTabs.map((tab) => ({ ...tab, lessons: visible.filter((l) => topicOf(l, topics) === tab.id) }))
-      : [{ id: 'all', label: null as string | null, lessons: visible }];
+  // Group only when browsing everything: by tag (a short sits under each of its
+  // tags) or by קצרים sub-category when there is more than one.
+  const browsingAll = !topic && !tag && !needle;
+  const canGroupByCategory = topicTabs.length > 1;
+  const canGroupByTag = tagTabs.length > 0;
+  const activeGroupBy: GroupBy | null =
+    groupBy === 'tag' && canGroupByTag ? 'tag' : canGroupByCategory ? 'category' : canGroupByTag ? 'tag' : null;
+
+  type Group = { id: string; label: string | null; tag?: string; lessons: LessonWithRelations[] };
+  let groups: Group[] = [{ id: 'all', label: null, lessons: visible }];
+  if (browsingAll && activeGroupBy === 'category') {
+    groups = topicTabs.map((tab) => ({ ...tab, lessons: visible.filter((l) => topicOf(l, topics) === tab.id) }));
+  } else if (browsingAll && activeGroupBy === 'tag') {
+    groups = tagTabs.map((tg) => ({
+      id: `tag-${tg}`,
+      label: `#${tg}`,
+      tag: tg,
+      lessons: visible.filter((l) => (l.tags ?? []).includes(tg)),
+    }));
+    const untagged = visible.filter((l) => !l.tags?.length);
+    if (untagged.length > 0) groups.push({ id: UNTAGGED, label: tTags('untagged'), lessons: untagged });
+  }
 
   const renderRow = (lesson: LessonWithRelations) => {
     const isCurrent = currentTrack?.id === lesson.id;
@@ -110,6 +163,15 @@ export default function ShortsClient({ lessons, topics, loadFailed }: ShortsClie
               </>
             )}
           </p>
+          {(lesson.tags?.length ?? 0) > 0 && (
+            <p className="truncate text-xs text-primary/80">
+              {lesson.tags.map((tg) => (
+                <bdi key={tg} className="me-1.5">
+                  #{tg}
+                </bdi>
+              ))}
+            </p>
+          )}
         </Link>
       </li>
     );
@@ -169,6 +231,56 @@ export default function ShortsClient({ lessons, topics, loadFailed }: ShortsClie
         </div>
       )}
 
+      {tagChips.length > 0 && (
+        <nav
+          aria-label={tTags('filterLabel')}
+          className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none] md:mx-0 md:overflow-visible md:px-0"
+        >
+          <ul className="flex w-max gap-2 pb-1 md:w-auto md:flex-wrap">
+            {tagChips.map((tg) => {
+              const active = tag === tg;
+              return (
+                <li key={tg}>
+                  <button
+                    type="button"
+                    onClick={() => setTag(active ? null : tg)}
+                    aria-pressed={active}
+                    className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                      active
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-primary/30 text-primary hover:bg-primary/10'
+                    }`}
+                  >
+                    <bdi>#{tg}</bdi>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+      )}
+
+      {browsingAll && canGroupByCategory && canGroupByTag && visible.length > 0 && (
+        <div role="group" aria-label={tTags('groupBy')} className="flex items-center gap-1 text-xs">
+          <span className="text-muted-foreground">{tTags('groupBy')}:</span>
+          {(['tag', 'category'] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setGroupBy(mode)}
+              aria-pressed={activeGroupBy === mode}
+              className={`rounded-full px-2.5 py-1 transition-colors ${
+                activeGroupBy === mode
+                  ? 'bg-[hsl(var(--surface-highlight))] font-bold text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {mode === 'tag' ? tTags('groupByTag') : tTags('groupByCategory')}
+            </button>
+          ))}
+        </div>
+      )}
+
       {loadFailed ? (
         <EmptyState icon={AlertTriangle} title={tLessons('loadErrorTitle')} description={tLessons('loadErrorDescription')} />
       ) : visible.length === 0 ? (
@@ -176,7 +288,15 @@ export default function ShortsClient({ lessons, topics, loadFailed }: ShortsClie
       ) : (
         groups.map((group) => (
           <section key={group.id} className="space-y-1">
-            {group.label && <h2 className="px-1 text-sm font-bold text-muted-foreground">{group.label}</h2>}
+            {group.tag ? (
+              <h2 className="px-1 text-sm font-bold">
+                <Link href={tagPath(group.tag)} className="text-primary hover:underline">
+                  <bdi>{group.label}</bdi>
+                </Link>
+              </h2>
+            ) : (
+              group.label && <h2 className="px-1 text-sm font-bold text-muted-foreground">{group.label}</h2>
+            )}
             <ul className="space-y-0.5">{group.lessons.map(renderRow)}</ul>
           </section>
         ))

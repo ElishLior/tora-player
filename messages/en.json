@@ -562,6 +562,33 @@
       "emailNeedsAccount": "Email updates about new lessons are available after signing in."
     }
   },
+  "tagBrowse": {
+    "lessonTags": "Lesson tags",
+    "editTags": "Edit tags",
+    "addTags": "Add tags",
+    "save": "Save",
+    "cancel": "Cancel",
+    "saving": "Saving…",
+    "saveFailed": "Couldn't save the tags. Please try again.",
+    "indexTitle": "Tags",
+    "indexSubtitle": "Lesson topics, by number of lessons",
+    "searchPlaceholder": "Search tags...",
+    "empty": "No tags yet",
+    "noMatches": "No matching tags",
+    "loadFailed": "Tags can't be loaded right now",
+    "lessonCount": "{count, plural, =1 {1 lesson} other {# lessons}}",
+    "allTags": "All tags",
+    "tagEmpty": "No lessons with this tag",
+    "playAll": "Play all",
+    "filterLabel": "Filter by tag",
+    "clearTag": "Clear filter #{tag}",
+    "more": "More",
+    "matchingTags": "Matching tags",
+    "untagged": "Untagged",
+    "groupBy": "Group",
+    "groupByTag": "By tag",
+    "groupByCategory": "By category"
+  },
   "tags": {
     "label": "Tags",
     "placeholder": "Add a tag and press Enter",

@@ -3,7 +3,8 @@
 import { revalidatePath } from 'next/cache';
 import { requireServerSupabaseClient } from '@/lib/supabase/server';
 import { createAdminSupabaseClient } from '@/lib/supabase/admin';
-import { isAdmin } from '@/lib/auth/admin';
+import { isAdmin, requireAdmin } from '@/lib/auth/admin';
+import { normalizeTags } from '@/lib/tags';
 import { notifyNewLesson } from '@/lib/notifications/notify';
 import { createLessonSchema, updateLessonSchema } from '@/lib/validators';
 import type { Lesson, LessonWithRelations, LessonAudio, LessonImage } from '@/types/database';
@@ -84,9 +85,16 @@ export async function updateLesson(id: string, formData: FormData) {
     return { error: parsed.error.flatten().fieldErrors };
   }
 
+  // `tags` travels as a JSON string array; absent means "leave unchanged".
+  const tagsField = formData.get('tags');
+  const tags = tagsField === null ? undefined : parseTagList(tagsField);
+  if (tags === null) {
+    return { error: { _form: ['Invalid tags'] } };
+  }
+
   const { data, error } = await supabase
     .from('lessons')
-    .update(parsed.data)
+    .update(tags === undefined ? parsed.data : { ...parsed.data, tags })
     .eq('id', id)
     .select()
     .single();
@@ -100,6 +108,41 @@ export async function updateLesson(id: string, formData: FormData) {
 
   revalidatePath('/[locale]', 'layout');
   return { data: data as Lesson };
+}
+
+/** Normalized tags from a JSON string array, or null when the payload is malformed. */
+function parseTagList(field: FormDataEntryValue): string[] | null {
+  if (typeof field !== 'string') return null;
+  try {
+    const value: unknown = JSON.parse(field);
+    if (!Array.isArray(value) || !value.every((tag) => typeof tag === 'string')) return null;
+    return normalizeTags(value);
+  } catch {
+    return null;
+  }
+}
+
+/** Replace a lesson's tags (lesson page inline editor). Returns the stored tags. */
+export async function updateLessonTags(
+  id: string,
+  tags: string[],
+): Promise<{ tags: string[] } | { error: string }> {
+  await requireAdmin();
+  if (!Array.isArray(tags) || !tags.every((tag) => typeof tag === 'string')) {
+    return { error: 'Invalid tags' };
+  }
+
+  const { data, error } = await createAdminSupabaseClient()
+    .from('lessons')
+    .update({ tags: normalizeTags(tags) })
+    .eq('id', id)
+    .select('tags')
+    .single();
+
+  if (error) return { error: error.message };
+
+  revalidatePath('/[locale]', 'layout');
+  return { tags: (data as { tags: string[] }).tags };
 }
 
 export async function deleteLesson(id: string) {
