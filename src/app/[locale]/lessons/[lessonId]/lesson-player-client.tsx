@@ -115,7 +115,7 @@ function getLessonAudioAssets(lesson: LessonWithRelations): LessonAudioAsset[] {
 }
 
 function getAudioAssetFilename(lesson: LessonWithRelations, asset: LessonAudioAsset, index = 0): string {
-  const baseTitle = asset.originalName || asset.title || lesson.hebrew_title || lesson.title || 'lesson';
+  const baseTitle = asset.originalName || lesson.hebrew_title || lesson.title || asset.title || 'lesson';
   const suffix = asset.audioType ? ` - ${asset.audioType}` : index > 0 ? ` - ${index + 1}` : '';
   return buildAudioDownloadFilename(`${baseTitle}${suffix}`, asset.audioUrl);
 }
@@ -827,7 +827,6 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
               lessonSaveState === 'downloaded' || lessonSaveState === 'downloading' || lessonAudioAssets.length === 0
             }
             className={`flex flex-col items-center gap-1.5 transition-colors disabled:cursor-not-allowed ${lessonSaveState === 'downloaded' ? 'text-green-400' : lessonSaveState === 'downloading' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
-            aria-label={locale === 'he' ? 'שמור להאזנה לא מקוונת' : 'Save for offline listening'}
           >
             {lessonSaveState === 'downloading' ? (
               <Loader2 className="h-5 w-5 animate-spin" />
