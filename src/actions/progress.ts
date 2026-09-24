@@ -1,62 +1,66 @@
 'use server';
 
-import { requireServerSupabaseClient } from '@/lib/supabase/server';
-import { playbackProgressSchema } from '@/lib/validators';
-import type { PlaybackProgress } from '@/types/database';
+import { filterVisibleIds, getSignedInClient } from '@/lib/account/server';
+import { pickProgressToUpload, type ServerProgress } from '@/lib/account/merge';
+import { progressSyncSchema } from '@/lib/validators';
 
-export async function updateProgress(data: {
-  lesson_id: string;
-  position: number;
-  completed?: boolean;
-}) {
-  const supabase = await requireServerSupabaseClient();
+/**
+ * Uploads device progress entries that are newer than the account's copy
+ * (last-played wins) and returns the account's progress for every lesson.
+ * Live updates while listening go through PUT /api/progress.
+ */
+export async function syncProgress(
+  entries: ServerProgress[],
+): Promise<{ data: ServerProgress[] } | { error: string }> {
+  const parsed = progressSyncSchema.safeParse(entries);
+  if (!parsed.success) return { error: 'invalid_progress' };
 
-  const parsed = playbackProgressSchema.safeParse({
-    ...data,
-    completed: data.completed ?? false,
-  });
-  if (!parsed.success) {
-    return { error: parsed.error.flatten().fieldErrors };
-  }
+  const session = await getSignedInClient();
+  if (!session) return { error: 'auth_required' };
+  const { supabase, userId } = session;
 
-  const { data: progress, error } = await supabase
-    .from('playback_progress')
-    .upsert(
-      {
-        lesson_id: parsed.data.lesson_id,
-        position: parsed.data.position,
-        completed: parsed.data.completed,
-        last_played_at: new Date().toISOString(),
-      },
-      { onConflict: 'lesson_id' }
-    )
-    .select()
-    .single();
+  try {
+    const { data: existing, error: readError } = await supabase
+      .from('playback_progress')
+      .select('lesson_id, position, completed, last_played_at');
+    if (readError) throw new Error(readError.message);
 
-  if (error) {
-    return { error: { _form: [error.message] } };
-  }
-
-  return { data: progress as PlaybackProgress };
-}
-
-export async function markAsCompleted(lessonId: string) {
-  const supabase = await requireServerSupabaseClient();
-
-  const { error } = await supabase
-    .from('playback_progress')
-    .upsert(
-      {
-        lesson_id: lessonId,
-        completed: true,
-        last_played_at: new Date().toISOString(),
-      },
-      { onConflict: 'lesson_id' }
+    const newer = pickProgressToUpload(
+      parsed.data.map((row) => ({
+        lessonId: row.lesson_id,
+        position: row.position,
+        completed: row.completed,
+        lastPlayed: row.last_played_at,
+      })),
+      existing ?? [],
     );
 
-  if (error) {
-    return { error: error.message };
-  }
+    if (newer.length > 0) {
+      const lessonIds = await filterVisibleIds(supabase, 'lessons', newer.map((entry) => entry.lessonId));
+      const rows = newer
+        .filter((entry) => lessonIds.has(entry.lessonId))
+        .map((entry) => ({
+          user_id: userId,
+          lesson_id: entry.lessonId,
+          position: Math.round(entry.position),
+          completed: entry.completed,
+          last_played_at: entry.lastPlayed,
+        }));
+      if (rows.length > 0) {
+        const { error } = await supabase
+          .from('playback_progress')
+          .upsert(rows, { onConflict: 'user_id,lesson_id' });
+        if (error) throw new Error(error.message);
+      }
+    }
 
-  return { success: true };
+    const { data, error } = await supabase
+      .from('playback_progress')
+      .select('lesson_id, position, completed, last_played_at');
+    if (error) throw new Error(error.message);
+    return { data: data ?? [] };
+  } catch (err) {
+    console.error('[progress] sync failed:', err);
+    return { error: err instanceof Error ? err.message : 'sync_failed' };
+  }
 }

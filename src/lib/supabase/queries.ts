@@ -1,5 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
-import type { Lesson, LessonWithRelations, Playlist, PlaylistWithLessons, Series, Bookmark, PlaybackProgress, Category, CategoryWithChildren } from '@/types/database';
+import type { Lesson, LessonWithRelations, Playlist, PlaylistWithLessons, Series, Category, CategoryWithChildren } from '@/types/database';
 
 // ==================== LESSONS ====================
 
@@ -36,14 +36,6 @@ export async function getLessonById(supabase: SupabaseClient, id: string) {
       .order('part_number', { ascending: true });
     data.parts = parts || [];
   }
-
-  // Get playback progress
-  const { data: progress } = await supabase
-    .from('playback_progress')
-    .select('*')
-    .eq('lesson_id', id)
-    .single();
-  data.progress = progress;
 
   return data as LessonWithRelations;
 }
@@ -209,75 +201,4 @@ export async function getPlaylistWithLessons(supabase: SupabaseClient, playlistI
   }
 
   return data as PlaylistWithLessons;
-}
-
-// ==================== BOOKMARKS ====================
-
-export async function getBookmarksByLesson(supabase: SupabaseClient, lessonId: string) {
-  const { data, error } = await supabase
-    .from('bookmarks')
-    .select('*')
-    .eq('lesson_id', lessonId)
-    .order('position', { ascending: true });
-
-  if (error) throw error;
-  return data as Bookmark[];
-}
-
-export async function getAllBookmarks(supabase: SupabaseClient) {
-  const { data, error } = await supabase
-    .from('bookmarks')
-    .select('*, lesson:lessons(id, title, hebrew_title)')
-    .order('created_at', { ascending: false });
-
-  if (error) throw error;
-  return data as Bookmark[];
-}
-
-// ==================== PLAYBACK PROGRESS ====================
-
-export async function getPlaybackProgress(supabase: SupabaseClient, lessonId: string) {
-  const { data } = await supabase
-    .from('playback_progress')
-    .select('*')
-    .eq('lesson_id', lessonId)
-    .single();
-
-  return data as PlaybackProgress | null;
-}
-
-export async function getRecentProgress(supabase: SupabaseClient, limit = 10) {
-  const { data, error } = await supabase
-    .from('playback_progress')
-    .select('*, lesson:lessons(id, title, hebrew_title, date, duration, audio_url, series(name, hebrew_name))')
-    .eq('completed', false)
-    .order('last_played_at', { ascending: false })
-    .limit(limit);
-
-  if (error) throw error;
-  return data as (PlaybackProgress & { lesson: LessonWithRelations })[];
-}
-
-export async function upsertPlaybackProgress(
-  supabase: SupabaseClient,
-  lessonId: string,
-  position: number,
-  completed = false
-) {
-  const { data, error } = await supabase
-    .from('playback_progress')
-    .upsert(
-      {
-        lesson_id: lessonId,
-        position,
-        completed,
-        last_played_at: new Date().toISOString(),
-      },
-      { onConflict: 'lesson_id' }
-    )
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data as PlaybackProgress;
 }

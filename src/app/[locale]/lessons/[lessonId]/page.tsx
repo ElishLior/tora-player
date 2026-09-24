@@ -6,7 +6,7 @@ import { notFound } from 'next/navigation';
 import { formatDuration } from '@/lib/utils';
 import { Link } from '@/i18n/routing';
 import { ArrowRight, Calendar, Clock, Edit, MapPin, User, BookOpen, Hash } from 'lucide-react';
-import { isAdmin } from '@/actions/auth';
+import { isAdmin } from '@/lib/auth/admin';
 import { ShareButton } from '@/components/shared/share-button';
 import { LessonPlayerClient } from './lesson-player-client';
 

@@ -4,7 +4,7 @@ import { getAllSeries } from '@/lib/supabase/queries';
 import { Link } from '@/i18n/routing';
 import { EmptyState } from '@/components/shared/empty-state';
 import { ChevronLeft, Library, Plus, Scissors } from 'lucide-react';
-import { isAdmin } from '@/actions/auth';
+import { isAdmin } from '@/lib/auth/admin';
 import type { Series } from '@/types/database';
 
 type Props = { params: Promise<{ locale: string }> };

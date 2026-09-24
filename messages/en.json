@@ -24,7 +24,8 @@
     "noResults": "No results found",
     "error": "Error",
     "retry": "Retry",
-    "back": "Back"
+    "back": "Back",
+    "rateLimited": "Too many attempts. Try again in a few minutes."
   },
   "home": {
     "title": "Tora Player",
@@ -181,7 +182,8 @@
     "addBookmark": "Add Bookmark",
     "bookmarkLabel": "Label",
     "noBookmarks": "No bookmarks yet",
-    "jumpTo": "Jump to"
+    "jumpTo": "Jump to",
+    "syncFailed": "Saved on this device, but syncing to your account failed. We'll retry next time the app opens."
   },
   "offline": {
     "title": "Downloads",
@@ -221,5 +223,118 @@
     "playlists": "Playlists",
     "downloads": "Downloads",
     "label": "Main navigation"
+  },
+  "auth": {
+    "adminArea": "Admin area",
+    "signIn": {
+      "title": "Sign in",
+      "subtitle": "Keep bookmarks and listening progress on all your devices, and get notified when a new lesson is published.",
+      "google": "Continue with Google",
+      "or": "or",
+      "emailLabel": "Email address",
+      "sendCode": "Email me a sign-in code",
+      "codeSentTo": "We sent a sign-in code to:",
+      "codeLabel": "Code from the email",
+      "verify": "Sign in",
+      "resend": "Send a new code",
+      "changeEmail": "Change email",
+      "linkHint": "You can also tap the link in the email. If the app is installed on an iPhone home screen, type the code instead: the link opens in Safari, not in the app."
+    },
+    "account": {
+      "title": "My account",
+      "signedInAs": "Signed in as",
+      "displayName": "Display name",
+      "displayNamePlaceholder": "What should we call you?",
+      "save": "Save",
+      "saved": "Saved",
+      "syncNote": "Your bookmarks and listening progress are saved to your account and synced across your devices.",
+      "notificationsTitle": "New lesson notifications",
+      "emailToggle": "Email me when a new lesson is published",
+      "pushToggle": "Notifications on this device",
+      "adminTitle": "Admin",
+      "adminDashboard": "Dashboard",
+      "adminNotifications": "Test notifications",
+      "signOut": "Sign out"
+    },
+    "adminLogin": {
+      "title": "Admin login",
+      "subtitle": "Sign in with the admin account to continue",
+      "accountButton": "Sign in with Google or email",
+      "notAdmin": "The signed-in account is not an admin:",
+      "switchAccount": "Sign in with another account",
+      "passwordTitle": "Or use the admin password",
+      "passwordLabel": "Password",
+      "passwordPlaceholder": "Enter password...",
+      "login": "Log in",
+      "showPassword": "Show password",
+      "hidePassword": "Hide password"
+    },
+    "errors": {
+      "invalid_email": "That email address is not valid.",
+      "invalid_code": "That code is not valid.",
+      "rate_limited": "Too many attempts. Try again in a few minutes.",
+      "unavailable": "Sign-in is unavailable right now.",
+      "send_failed": "Sending the email failed. Try again shortly.",
+      "code_rejected": "The code is wrong or expired. Request a new one.",
+      "google_unavailable": "Google sign-in is unavailable right now.",
+      "password_disabled": "Password login is disabled. Sign in with Google or email.",
+      "wrong_password": "Wrong password.",
+      "provider": "Sign-in was cancelled or failed. Try again.",
+      "invalid_link": "That link is not valid. Request a new code.",
+      "expired": "The link expired or was opened in another browser. Type the code from the email or request a new one.",
+      "invalid": "Invalid data.",
+      "auth_required": "Please sign in again.",
+      "save_failed": "Saving failed. Try again.",
+      "generic": "Something went wrong. Try again."
+    }
+  },
+  "notifications": {
+    "bell": {
+      "turnOn": "Turn on new lesson notifications",
+      "turnOff": "Turn off new lesson notifications"
+    },
+    "on": "Notifications are on for this device",
+    "off": "Notifications are off for this device",
+    "iosInstall": "On iPhone and iPad, notifications only work from the installed app: in Safari tap Share, choose \"Add to Home Screen\", open the app from the home screen and turn notifications on there (iOS 16.4 or later).",
+    "denied": "Notifications are blocked in this browser. Allow notifications for this site in the browser settings and try again.",
+    "unavailable": "This browser does not support notifications.",
+    "errors": {
+      "failed": "Turning on notifications failed. Try again.",
+      "swTimeout": "The app is still loading. Refresh the page and try again."
+    },
+    "push": {
+      "newLessonTitle": "New lesson published",
+      "testTitle": "Test notification",
+      "testBody": "Notifications work on this device."
+    },
+    "email": {
+      "appName": "Tora Player",
+      "subject": "New lesson: {title}",
+      "heading": "A new lesson was published",
+      "cta": "Listen to the lesson",
+      "footer": "You received this email because you asked for new lesson updates.",
+      "manage": "Manage notifications"
+    },
+    "admin": {
+      "title": "Notifications",
+      "subtitle": "Notification status and test send",
+      "back": "Back to dashboard",
+      "pushStatus": "Push notifications",
+      "emailStatus": "Email notifications",
+      "configured": "Configured",
+      "notConfigured": "Not configured",
+      "subscribers": "Subscribed devices",
+      "linkedSubscribers": "Linked to an account",
+      "emailRecipients": "Email recipients",
+      "thisDevice": "This device",
+      "sendTest": "Send a test notification to this device",
+      "testSent": "Test notification sent.",
+      "testErrors": {
+        "unauthorized": "Admin access required.",
+        "not_configured": "VAPID keys are not configured on the server.",
+        "not_subscribed": "This device is not subscribed. Turn notifications on and try again.",
+        "failed": "Sending failed. Check the server logs."
+      }
+    }
   }
 }

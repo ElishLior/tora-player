@@ -1,9 +1,10 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { createAdminSupabaseClient } from '@/lib/supabase/admin';
 import { requireServerSupabaseClient } from '@/lib/supabase/server';
 import { createCategorySchema, updateCategorySchema } from '@/lib/validators';
-import { isAdmin } from '@/actions/auth';
+import { isAdmin } from '@/lib/auth/admin';
 import type { Category, CategoryWithChildren } from '@/types/database';
 
 // ==================== READ ====================
@@ -46,7 +47,7 @@ export async function createCategory(formData: FormData) {
   }
 
   try {
-    const supabase = await requireServerSupabaseClient();
+    const supabase = createAdminSupabaseClient();
 
     const raw = {
       hebrew_name: formData.get('hebrew_name') as string,
@@ -87,7 +88,7 @@ export async function updateCategory(id: string, formData: FormData) {
   }
 
   try {
-    const supabase = await requireServerSupabaseClient();
+    const supabase = createAdminSupabaseClient();
 
     const raw: Record<string, unknown> = {};
     const fields = ['hebrew_name', 'name', 'description', 'icon', 'parent_id', 'sort_order'];
@@ -134,7 +135,7 @@ export async function deleteCategory(id: string) {
   }
 
   try {
-    const supabase = await requireServerSupabaseClient();
+    const supabase = createAdminSupabaseClient();
 
     // First, unlink all lessons that reference this category
     const { error: unlinkError } = await supabase
@@ -171,7 +172,7 @@ export async function reorderCategories(categoryIds: string[]) {
   }
 
   try {
-    const supabase = await requireServerSupabaseClient();
+    const supabase = createAdminSupabaseClient();
 
     // Update sort_order for each category based on its position in the array
     const updates = categoryIds.map((id, index) =>
