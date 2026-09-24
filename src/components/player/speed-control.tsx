@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 
 const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 
@@ -11,6 +12,7 @@ interface SpeedControlProps {
 
 export function SpeedControl({ speed, onSpeedChange }: SpeedControlProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const t = useTranslations('player');
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -36,7 +38,7 @@ export function SpeedControl({ speed, onSpeedChange }: SpeedControlProps) {
             ? 'border-primary text-primary'
             : 'border-[hsl(0,0%,30%)] text-muted-foreground hover:text-foreground hover:border-foreground'
         }`}
-        aria-label={`Playback speed: ${speed}x`}
+        aria-label={`${t('speed')}: ${speed}x`}
       >
         {speed}x
       </button>

@@ -4,6 +4,7 @@ import { Share2, Copy, Clock, Link2, X, Check } from 'lucide-react';
 import { getLessonShareUrl, shareLesson, copyToClipboard } from '@/lib/share';
 import { useState, useRef, useEffect } from 'react';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
+import { useTranslations } from 'next-intl';
 
 interface ShareButtonProps {
   lessonId: string;
@@ -29,6 +30,7 @@ function parseTime(str: string): number | null {
 
 export function ShareButton({ lessonId, title, seriesName, className = '' }: ShareButtonProps) {
   const [open, setOpen] = useState(false);
+  const tCommon = useTranslations('common');
   const [includeTimestamp, setIncludeTimestamp] = useState(false);
   const [timestampStr, setTimestampStr] = useState('0:00');
   const [copied, setCopied] = useState(false);
@@ -131,7 +133,7 @@ export function ShareButton({ lessonId, title, seriesName, className = '' }: Sha
       <button
         onClick={handleOpen}
         className={`rounded-full p-2 text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--surface-highlight))] transition-colors ${className}`}
-        aria-label="Share"
+        aria-label={tCommon('share')}
       >
         <Share2 className="h-5 w-5" />
       </button>

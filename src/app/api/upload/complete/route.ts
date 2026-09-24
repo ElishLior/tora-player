@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
         lesson_id: lessonId,
         file_key: fileKey,
         audio_url: getPublicAudioUrl(fileKey),
-        original_name: originalName ?? fileName,
+        source_filename: originalName ?? fileName,
         file_size: actualSize,
         duration,
         codec: format.codec,

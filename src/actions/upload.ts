@@ -58,7 +58,7 @@ export async function findDuplicateAudio(
   const dates = [...new Set(parsed.data.map((c) => c.date))];
   const { data, error } = await createAdminSupabaseClient()
     .from('lesson_audio')
-    .select('file_size, original_name, lessons!inner(title, date)')
+    .select('file_size, source_filename, lessons!inner(title, date)')
     .in('lessons.date', dates);
   if (error) return { error: error.message };
 
@@ -66,7 +66,7 @@ export async function findDuplicateAudio(
     const lessons = Array.isArray(row.lessons) ? row.lessons : [row.lessons];
     return lessons.map((lesson: { title: string; date: string }) => ({
       size: Number(row.file_size),
-      name: row.original_name as string | null,
+      name: row.source_filename as string | null,
       title: lesson.title,
       date: lesson.date,
     }));

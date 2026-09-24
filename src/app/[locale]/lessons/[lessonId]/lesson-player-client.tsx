@@ -1016,7 +1016,7 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
       )}
 
       {/* Image gallery */}
-      {images && images.length > 0 && <ImageGallerySection images={images} locale={locale} />}
+      {images && images.length > 0 && <ImageGallerySection images={images} locale={locale} lessonTitle={lesson.title} />}
 
       {/* ==================== Notes Section (inlined — local-first) ==================== */}
       <div className="rounded-xl bg-[hsl(var(--surface-elevated))]" dir={locale === 'he' ? 'rtl' : 'ltr'}>
@@ -1196,7 +1196,15 @@ function getImageStreamUrl(fileKey: string) {
   return `/api/images/stream/${encodedKey}`;
 }
 
-function ImageGallerySection({ images, locale }: { images: LessonImage[]; locale: string }) {
+function ImageGallerySection({
+  images,
+  locale,
+  lessonTitle,
+}: {
+  images: LessonImage[];
+  locale: string;
+  lessonTitle: string;
+}) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const sorted = [...images].sort((a, b) => a.sort_order - b.sort_order);
 
@@ -1228,7 +1236,7 @@ function ImageGallerySection({ images, locale }: { images: LessonImage[]; locale
           >
             <img
               src={getImageStreamUrl(img.file_key)}
-              alt={img.caption || img.original_name || ''}
+              alt={img.caption || `${lessonTitle} – ${i + 1}`}
               className="w-full h-full object-cover"
               loading="lazy"
             />
@@ -1265,7 +1273,7 @@ function ImageGallerySection({ images, locale }: { images: LessonImage[]; locale
 
           <img
             src={getImageStreamUrl(sorted[lightboxIndex].file_key)}
-            alt={sorted[lightboxIndex].caption || sorted[lightboxIndex].original_name || ''}
+            alt={sorted[lightboxIndex].caption || `${lessonTitle} – ${lightboxIndex + 1}`}
             className="max-w-[90vw] max-h-[85vh] object-contain rounded-lg"
             onClick={(e) => e.stopPropagation()}
           />

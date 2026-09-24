@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
         lesson_id: lessonId,
         file_key: fileKey,
         image_url: imageUrl,
-        original_name: file.name.slice(0, 255),
+        source_filename: file.name.slice(0, 255),
         file_size: buffer.length,
         sort_order: sortOrder,
       })

@@ -65,7 +65,11 @@ export interface LessonAudio {
   lesson_id: string;
   file_key: string;
   audio_url: string;
+  /** Optional admin-editable display name. */
   original_name: string | null;
+  /** File as uploaded/imported; traceability only, never displayed. */
+  source_filename: string | null;
+  content_sha1: string | null;
   file_size: number;
   duration: number;
   codec: string;
@@ -80,6 +84,8 @@ export interface LessonImage {
   file_key: string;
   image_url: string;
   original_name: string | null;
+  source_filename: string | null;
+  content_sha1: string | null;
   file_size: number;
   width: number | null;
   height: number | null;
