@@ -25,16 +25,16 @@ const r2Client = new S3Client({
 
 const BUCKET = getR2BucketName(process.env);
 
-export async function getUploadPresignedUrl(key: string, contentType: string) {
-  const command = new PutObjectCommand({
-    Bucket: BUCKET,
-    Key: key,
-    ContentType: contentType,
-  });
-  return getSignedUrl(r2Client, command, { expiresIn: 3600 });
-}
-
-interface DownloadPresignOptions {
+1: import { Home, BookOpen, Scissors, ListMusic, Bookmark, Download } from 'lucide-react';
+2: const navItems = [
+  { href: '', label: 'home', icon: Home },
+  { href: '/lessons', label: 'lessons', icon: BookOpen },
+  { href: '/shorts', label: 'shorts', icon: Scissors },
+  { href: '/bookmarks', label: 'bookmarks', icon: Bookmark },
+  { href: '/playlists', label: 'playlists', icon: ListMusic },
+  { href: '/offline', label: 'downloads', icon: Download },
+] as const;
+3: interface DownloadPresignOptions {
   /** Seconds the URL stays valid (only checked when a request starts). */
   expiresIn?: number;
   /** Overrides the Content-Disposition R2 returns (e.g. an attachment filename). */
@@ -128,15 +128,6 @@ export async function configureBucketCors(allowedOrigins: string[] = ['*']) {
     },
   });
   await r2Client.send(command);
-}
-
-export function generateAudioKey(lessonId: string, format: string = 'mp3'): string {
-  return `audio/${lessonId}/lesson.${format}`;
-}
-
-export function generateOriginalKey(lessonId: string, originalName: string): string {
-  const ext = originalName.split('.').pop() || 'bin';
-  return `originals/${lessonId}/original.${ext}`;
 }
 
 // ─── S3 Multipart Upload API ───────────────────────────────────────

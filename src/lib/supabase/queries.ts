@@ -3,11 +3,13 @@ import type { Lesson, LessonWithRelations, Playlist, PlaylistWithLessons, Series
 
 // ==================== LESSONS ====================
 
+/** Latest published daily lessons; short lessons have their own section (lib/supabase/shorts). */
 export async function getRecentLessons(supabase: SupabaseClient, limit = 20) {
   const { data, error } = await supabase
     .from('lessons')
     .select('*, series(*), category:categories(id, hebrew_name)')
     .eq('is_published', true)
+    .or('lesson_type.is.null,lesson_type.neq.short_clip')
     .order('date', { ascending: false })
     .limit(limit);
 
