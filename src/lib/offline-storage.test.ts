@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const dbState = vi.hoisted(() => ({
   stores: new Map<string, Map<IDBValidKey, unknown>>(),
+  putError: null as Error | null,
 }));
 
 vi.mock('idb', () => ({
@@ -20,6 +21,7 @@ vi.mock('idb', () => ({
       put: async (storeName: string, value: unknown, key?: IDBValidKey) => {
         const store = dbState.stores.get(storeName);
         if (!store) throw new Error(`Missing store ${storeName}`);
+        if (dbState.putError) throw dbState.putError;
         const storedKey = key ?? (value as { lessonId?: IDBValidKey }).lessonId;
         if (!storedKey) throw new Error('Missing key');
         store.set(storedKey, value);
@@ -61,6 +63,8 @@ function mockAudioFetch(failSecondFile = false) {
 
 beforeEach(() => {
   dbState.stores.clear();
+  dbState.putError = null;
+  vi.spyOn(console, 'warn').mockImplementation(() => {});
   vi.spyOn(console, 'error').mockImplementation(() => {});
   let blobCounter = 0;
   vi.stubGlobal(
@@ -82,13 +86,13 @@ describe('offline lesson storage', () => {
     mockAudioFetch();
     const progress: number[] = [];
     const {
-      downloadLessonAudioFiles,
+      saveAudioFilesOffline,
       getDownloadedLessons,
       getOfflineAudioUrl,
       isLessonDownloaded,
     } = await loadOfflineStorage();
 
-    const success = await downloadLessonAudioFiles(
+    const result = await saveAudioFilesOffline(
       'lesson-1',
       [
         {
@@ -117,7 +121,7 @@ describe('offline lesson storage', () => {
       (percent) => progress.push(percent)
     );
 
-    expect(success).toBe(true);
+    expect(result).toEqual({ ok: true });
     expect(await isLessonDownloaded('lesson-1')).toBe(true);
 
     const [lesson] = await getDownloadedLessons();
@@ -139,9 +143,9 @@ describe('offline lesson storage', () => {
 
   it('does not resolve an unmatched requested url to the only cached secondary file', async () => {
     mockAudioFetch();
-    const { downloadLessonAudioFiles, getOfflineAudioUrl } = await loadOfflineStorage();
+    const { saveAudioFilesOffline, getOfflineAudioUrl } = await loadOfflineStorage();
 
-    const success = await downloadLessonAudioFiles(
+    const result = await saveAudioFilesOffline(
       'lesson-secondary-only',
       [
         {
@@ -162,7 +166,7 @@ describe('offline lesson storage', () => {
       }
     );
 
-    expect(success).toBe(true);
+    expect(result).toEqual({ ok: true });
     expect(await getOfflineAudioUrl('lesson-secondary-only', '/api/audio/stream/part-1.mp3')).toBeNull();
     expect(await getOfflineAudioUrl('lesson-secondary-only', '/api/audio/stream/part-2.mp3')).toMatch(/^blob:audio-/);
     expect(await getOfflineAudioUrl('lesson-secondary-only')).toMatch(/^blob:audio-/);
@@ -171,12 +175,12 @@ describe('offline lesson storage', () => {
   it('filters downloaded lesson metadata to files that still have audio blobs', async () => {
     mockAudioFetch();
     const {
-      downloadLessonAudioFiles,
+      saveAudioFilesOffline,
       getDownloadedLesson,
       getDownloadedLessons,
     } = await loadOfflineStorage();
 
-    await downloadLessonAudioFiles(
+    await saveAudioFilesOffline(
       'lesson-stale-meta',
       [
         { audioFileId: 'audio-1', audioUrl: '/api/audio/stream/part-1.mp3', title: 'Part 1' },
@@ -205,16 +209,16 @@ describe('offline lesson storage', () => {
     expect(await getDownloadedLessons()).toEqual([]);
   });
 
-  it('cleans partial lesson data when a multi-file download fails', async () => {
-    mockAudioFetch(true);
+  it('keeps completed files and reports failure when a later file keeps failing', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    const fetchMock = mockAudioFetch(true);
     const {
-      downloadLessonAudioFiles,
-      getDownloadedLessons,
+      saveAudioFilesOffline,
+      getDownloadedLesson,
       getOfflineAudioUrl,
-      isLessonDownloaded,
     } = await loadOfflineStorage();
 
-    const success = await downloadLessonAudioFiles(
+    const pending = saveAudioFilesOffline(
       'lesson-2',
       [
         { audioFileId: 'audio-1', audioUrl: '/api/audio/stream/part-1.mp3', title: 'Part 1' },
@@ -228,23 +232,91 @@ describe('offline lesson storage', () => {
         date: '2026-05-10',
       }
     );
+    await vi.runAllTimersAsync();
+    const result = await pending;
+    vi.useRealTimers();
 
-    expect(success).toBe(false);
-    expect(await isLessonDownloaded('lesson-2')).toBe(false);
-    expect(await getDownloadedLessons()).toEqual([]);
-    expect(await getOfflineAudioUrl('lesson-2', '/api/audio/stream/part-1.mp3')).toBeNull();
+    expect(result).toEqual({ ok: false, reason: 'failed' });
+    // part 1 once, part 2 three attempts
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('part-2'))).toHaveLength(3);
+    const saved = await getDownloadedLesson('lesson-2');
+    expect(saved?.audioFiles.map((file) => file.offlineKey)).toEqual(['lesson-2:audio-1']);
+    expect(await getOfflineAudioUrl('lesson-2', '/api/audio/stream/part-1.mp3')).toMatch(/^blob:audio-/);
+    expect(await getOfflineAudioUrl('lesson-2', '/api/audio/stream/part-2.mp3')).toBeNull();
+  });
+
+  it('rejects a truncated body instead of saving it', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    vi.stubGlobal(
+      'fetch',
+      // 99 of 100 bytes: within the old 5% tolerance, still a broken file.
+      vi.fn(async () => new Response('x'.repeat(99), { status: 200, headers: { 'content-length': '100' } })),
+    );
+    const { saveAudioFilesOffline, isLessonDownloaded } = await loadOfflineStorage();
+
+    const pending = saveAudioFilesOffline(
+      'lesson-truncated',
+      [{ audioFileId: 'audio-1', audioUrl: '/api/audio/stream/part-1.mp3' }],
+      { lessonId: 'lesson-truncated', title: 'Lesson', hebrewTitle: 'שיעור', duration: 0, date: '2026-05-10' }
+    );
+    await vi.runAllTimersAsync();
+    const result = await pending;
+    vi.useRealTimers();
+
+    expect(result).toEqual({ ok: false, reason: 'failed' });
+    expect(await isLessonDownloaded('lesson-truncated')).toBe(false);
+  });
+
+  it('reports a full disk as quota without retrying the download', async () => {
+    const fetchMock = mockAudioFetch();
+    dbState.putError = new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+    const { saveAudioFilesOffline, isLessonDownloaded } = await loadOfflineStorage();
+
+    const result = await saveAudioFilesOffline(
+      'lesson-quota',
+      [
+        { audioFileId: 'audio-1', audioUrl: '/api/audio/stream/part-1.mp3' },
+        { audioFileId: 'audio-2', audioUrl: '/api/audio/stream/part-2.mp3' },
+      ],
+      { lessonId: 'lesson-quota', title: 'Lesson', hebrewTitle: 'שיעור', duration: 0, date: '2026-05-10' }
+    );
+
+    expect(result).toEqual({ ok: false, reason: 'quota' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(await isLessonDownloaded('lesson-quota')).toBe(false);
+  });
+
+  it('downloads straight from R2 via the download route, falling back to the stream proxy', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.startsWith('/api/audio/download/')) throw new TypeError('Failed to fetch');
+      return new Response('first', { status: 200, headers: { 'content-length': '5' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { saveAudioFilesOffline } = await loadOfflineStorage();
+
+    const result = await saveAudioFilesOffline(
+      'lesson-direct',
+      [{ audioFileId: 'audio-1', audioUrl: '/api/audio/stream/audio%2Fpart-1.opus' }],
+      { lessonId: 'lesson-direct', title: 'Lesson', hebrewTitle: 'שיעור', duration: 0, date: '2026-05-10' }
+    );
+
+    expect(result).toEqual({ ok: true });
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      '/api/audio/download/audio%2Fpart-1.opus?disposition=inline',
+      '/api/audio/stream/audio%2Fpart-1.opus',
+    ]);
   });
 
   it('deletes every cached audio file for a downloaded lesson', async () => {
     mockAudioFetch();
     const {
       deleteDownloadedLesson,
-      downloadLessonAudioFiles,
+      saveAudioFilesOffline,
       getOfflineAudioUrl,
       isLessonDownloaded,
     } = await loadOfflineStorage();
 
-    await downloadLessonAudioFiles(
+    await saveAudioFilesOffline(
       'lesson-3',
       [
         { audioFileId: 'audio-1', audioUrl: '/api/audio/stream/part-1.mp3', title: 'Part 1' },

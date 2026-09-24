@@ -26,7 +26,8 @@ import { useBookmarksStore } from '@/stores/bookmarks-store';
 import { BookmarkDialog } from '@/components/bookmarks/bookmark-dialog';
 import { getTagInfo } from '@/components/bookmarks/bookmark-dialog';
 import { ShareClipDialog } from '@/components/player/share-clip-dialog';
-import { downloadLessonAudioFiles, getDownloadedLesson } from '@/lib/offline-storage';
+import { saveAudioFilesOffline, getDownloadedLesson } from '@/lib/offline-storage';
+import { handleDeviceDownloadClick } from '@/lib/device-download';
 import {
   getTrackDownloadFilename,
   getTrackDownloadUrl,
@@ -35,7 +36,6 @@ import {
   getTrackOfflineLessonInput,
   isTrackDownloadedInLesson,
 } from '@/lib/player-track-actions';
-import { notifyOfflineDownloadsChanged } from '@/lib/offline-events';
 
 function Skip15Back({ className }: { className?: string }) {
   return (
@@ -147,6 +147,9 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
     };
   }, [currentTrack, lessonId]);
 
+  const [offlineSaveError, setOfflineSaveError] = useState<'quota' | 'failed' | null>(null);
+  const tOffline = useTranslations('offline');
+
   const handleSaveOffline = useCallback(async () => {
     if (!currentTrack) return;
     if (offlineSaveState === 'downloaded' || offlineSaveState === 'downloading') return;
@@ -154,25 +157,26 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
     setOfflineSaveState('downloading');
     setOfflineSaveProgress(0);
 
-    const success = await downloadLessonAudioFiles(
+    const result = await saveAudioFilesOffline(
       lessonId,
       [getTrackOfflineDownloadInput(currentTrack)],
       getTrackOfflineLessonInput(currentTrack),
       (pct) => setOfflineSaveProgress(pct),
     );
 
-    if (success) {
+    if (result.ok) {
       setOfflineSaveProgress(100);
       setOfflineSaveState('downloaded');
-      notifyOfflineDownloadsChanged(lessonId);
       return;
     }
 
     setOfflineSaveState('error');
+    setOfflineSaveError(result.reason);
     setTimeout(() => {
       setOfflineSaveState('idle');
       setOfflineSaveProgress(0);
-    }, 3000);
+      setOfflineSaveError(null);
+    }, 5000);
   }, [currentTrack, lessonId, offlineSaveState]);
 
   if (!currentTrack) return null;
@@ -371,9 +375,26 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
                     : t('saveOffline')}
               </span>
             </button>
+            {offlineSaveError && (
+              <p
+                role="alert"
+                className="fixed inset-x-4 bottom-8 z-[60] mx-auto max-w-md rounded-lg bg-destructive px-4 py-3 text-center text-sm text-destructive-foreground shadow-lg"
+              >
+                {tOffline(offlineSaveError === 'quota' ? 'storageFull' : 'saveFailed')}
+              </p>
+            )}
             <a
               href={downloadUrl}
               download={downloadFilename}
+              onClick={(e) =>
+                handleDeviceDownloadClick(e, {
+                  lessonId,
+                  offlineKey: currentTrack.offlineKey,
+                  audioUrl: currentTrack.audioUrl,
+                  filename: downloadFilename,
+                  savedOffline: offlineSaveState === 'downloaded',
+                })
+              }
               className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
               aria-label={locale === 'he' ? 'הורדת קובץ למכשיר' : 'Download file to device'}
             >

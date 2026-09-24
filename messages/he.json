@@ -135,7 +135,16 @@
     "remove": "הסר הורדה",
     "storageUsed": "נפח בשימוש",
     "noDownloads": "אין הורדות עדיין",
-    "offlineReady": "מוכן להאזנה לא מקוונת"
+    "offlineReady": "מוכן להאזנה לא מקוונת",
+    "storageFull": "אין מספיק מקום פנוי במכשיר. מחק הורדות ישנות ונסה שוב.",
+    "saveFailed": "השמירה נכשלה. בדוק את החיבור ונסה שוב.",
+    "online": "מחובר",
+    "offlineStatus": "לא מקוון – ניתן להאזין לשיעורים שנשמרו",
+    "filesCount": "{count, plural, one {קובץ אחד} other {# קבצים}}",
+    "part": "חלק {number}",
+    "play": "נגן שיעור שמור",
+    "playFile": "נגן קובץ שמור",
+    "noDownloadsHint": "בדף שיעור, הקש על \"שמירה אופליין\" כדי להאזין גם בלי קליטה."
   },
   "settings": {
     "title": "הגדרות",
@@ -147,5 +156,14 @@
     "skipDuration": "משך דילוג",
     "autoPlay": "ניגון אוטומטי",
     "installApp": "התקן אפליקציה"
+  },
+  "nav": {
+    "home": "בית",
+    "lessons": "שיעורים",
+    "search": "חיפוש",
+    "bookmarks": "סימניות",
+    "playlists": "רשימות",
+    "downloads": "הורדות",
+    "label": "ניווט ראשי"
   }
 }

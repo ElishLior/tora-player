@@ -1,4 +1,4 @@
-import { getAudioDownloadUrl, sanitizeDownloadFilename } from '@/lib/audio-download';
+import { buildAudioDownloadFilename, getAudioDownloadUrl } from '@/lib/audio-download';
 import {
   getOfflineKey,
   type OfflineAudioDownloadInput,
@@ -7,13 +7,6 @@ import {
 } from '@/lib/offline-storage';
 import { normalizeAudioUrl } from '@/lib/audio-url';
 import type { AudioTrack } from '@/stores/audio-store';
-
-function getExtensionFromUrl(url: string): string {
-  const path = url.split('?')[0] || '';
-  const decoded = decodeURIComponent(path);
-  const match = decoded.match(/\.([a-z0-9]{2,5})$/i);
-  return match?.[1]?.toLowerCase() || 'mp3';
-}
 
 export function getTrackLessonId(track: AudioTrack): string {
   return track.lessonId || track.id;
@@ -29,8 +22,7 @@ export function getTrackOfflineKey(track: AudioTrack): string {
 }
 
 export function getTrackDownloadFilename(track: AudioTrack): string {
-  const extension = getExtensionFromUrl(track.audioUrl);
-  return sanitizeDownloadFilename(track.originalName || track.hebrewTitle || track.title || 'lesson', extension);
+  return buildAudioDownloadFilename(track.originalName || track.hebrewTitle || track.title || 'lesson', track.audioUrl);
 }
 
 export function getTrackDownloadUrl(track: AudioTrack): string {

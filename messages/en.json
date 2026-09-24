@@ -135,7 +135,16 @@
     "remove": "Remove download",
     "storageUsed": "Storage used",
     "noDownloads": "No downloads yet",
-    "offlineReady": "Ready for offline listening"
+    "offlineReady": "Ready for offline listening",
+    "storageFull": "Not enough free space on this device. Remove old downloads and try again.",
+    "saveFailed": "Saving failed. Check your connection and try again.",
+    "online": "Online",
+    "offlineStatus": "Offline – saved lessons are available",
+    "filesCount": "{count, plural, one {1 file} other {# files}}",
+    "part": "Part {number}",
+    "play": "Play saved lesson",
+    "playFile": "Play saved file",
+    "noDownloadsHint": "On a lesson page, tap \"Save offline\" to listen without a connection."
   },
   "settings": {
     "title": "Settings",
@@ -147,5 +156,14 @@
     "skipDuration": "Skip Duration",
     "autoPlay": "Auto Play",
     "installApp": "Install App"
+  },
+  "nav": {
+    "home": "Home",
+    "lessons": "Lessons",
+    "search": "Search",
+    "bookmarks": "Bookmarks",
+    "playlists": "Playlists",
+    "downloads": "Downloads",
+    "label": "Main navigation"
   }
 }

@@ -97,7 +97,7 @@ test.describe('offline downloads', () => {
       };
     });
 
-    await page.getByRole('button', { name: 'נגן שיעור שהורד' }).click();
+    await page.getByRole('button', { name: 'נגן שיעור שמור' }).click();
     await expect(page.getByRole('button', { name: 'מתנגן כעת' })).toBeVisible();
     await expect
       .poll(() => page.evaluate(() => window.__offlinePlaybackBlobUrls?.some((url) => url.startsWith('blob:'))))
@@ -117,20 +117,16 @@ test.describe('offline downloads', () => {
     const downloadLink = page.getByRole('link', { name: 'הורדת קובץ למכשיר' }).first();
     await expect(downloadLink).toBeVisible();
     const href = await downloadLink.getAttribute('href');
-    expect(href).toContain('download=1');
+    expect(href).toContain('/api/audio/download/');
     expect(href).toContain('filename=');
 
-    await page.route('**/api/audio/stream/**', async (route) => {
-      const url = new URL(route.request().url());
-      if (url.searchParams.get('download') !== '1') {
-        await route.continue();
-        return;
-      }
-
+    // The route redirects to a presigned R2 attachment; stub it so the test
+    // doesn't depend on storage.
+    await page.route('**/api/audio/download/**', async (route) => {
       await route.fulfill({
         status: 200,
         headers: {
-          'Content-Type': 'audio/mpeg',
+          'Content-Type': 'application/octet-stream',
           'Content-Disposition': 'attachment; filename="qa-download.mp3"',
         },
         body: 'fake-audio',

@@ -94,10 +94,11 @@ src/components/layout/header.tsx
 
 ### Offline And Download Behavior
 
-- Offline lesson cache uses IndexedDB.
-- Local file download uses the audio stream route with `download=1` and `filename=...`.
-- Download mode should ignore Range requests and return a full attachment response.
-- Validate download fixes with browser download tests and header checks.
+- Offline lesson cache uses IndexedDB (`src/lib/offline-storage.ts`); each saved file is a Blob, played through a blob URL.
+- Offline save and local file download both use `/api/audio/download/[fileKey]`, which 302-redirects to a short-lived presigned R2 URL (bytes never pass through a Vercel function). `?filename=` gives an attachment with an RFC 5987 UTF-8 filename; `?disposition=inline` is the raw audio for offline saving. Only `audio/…` keys with an audio extension are signed.
+- `/api/audio/stream/[fileKey]` is for playback only (Range → 206).
+- iOS home-screen apps can't save attachment downloads: `src/lib/device-download.ts` uses the share sheet (saved files) or opens the link in a Safari view.
+- The service worker is registered as `/sw.js?v=<NEXT_PUBLIC_BUILD_ID>`; each deploy installs a new worker, precaches `/he/offline` + its chunks, and deletes older caches. Navigations are network-first with the offline library as fallback; `/api/*` and cross-origin requests are never intercepted.
 
 Useful checks:
 
@@ -150,4 +151,4 @@ After the May 11, 2026 production release, these checks passed:
 - `curl https://tora-player.vercel.app/api/health`
 - production `/he`, `/he/lessons`, and exact lesson route smoke checks
 - Playwright production smoke: `offline-download.spec.ts` and `player-behavior.spec.ts`
-- exact lesson download header returned full `application/octet-stream` attachment with full content length
+- exact lesson download header returned full `application/octet-stream` attachment with full content length (before downloads moved to presigned R2 redirects)
