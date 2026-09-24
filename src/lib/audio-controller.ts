@@ -123,6 +123,7 @@ function syncPlayback() {
   });
 
   if (plan.type === "play-loaded") {
+    pendingLoadKey = null; // a lookup for a track we switched away from is moot
     if (state.isPlaying) audioEngine.play();
     else audioEngine.pause();
     return;

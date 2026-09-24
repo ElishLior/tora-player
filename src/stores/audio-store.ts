@@ -180,7 +180,7 @@ export const useAudioStore = create<AudioPlayerState>()(
       },
 
       play: () => set({ isPlaying: true, playbackIssue: null }),
-      pause: () => set({ isPlaying: false }),
+      pause: () => set({ isPlaying: false, playbackIssue: null }),
       togglePlay: () => {
         if (getTransportState(get()) === "paused") set({ isPlaying: true, playbackIssue: null });
         else set({ isPlaying: false });
