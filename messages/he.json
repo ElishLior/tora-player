@@ -1,6 +1,7 @@
 {
   "common": {
     "appName": "נגן תורה",
+    "offline": "אופליין",
     "home": "בית",
     "lessons": "שיעורים",
     "playlists": "רשימות השמעה",
@@ -24,8 +25,7 @@
     "noResults": "לא נמצאו תוצאות",
     "error": "שגיאה",
     "retry": "נסה שוב",
-    "back": "חזרה",
-    "offline": "אופליין"
+    "back": "חזרה"
   },
   "home": {
     "title": "נגן תורה",
@@ -134,10 +134,6 @@
   },
   "bookmarks": {
     "title": "סימניות",
-    "addBookmark": "הוסף סימניה",
-    "bookmarkLabel": "תווית",
-    "noBookmarks": "אין סימניות עדיין",
-    "jumpTo": "קפוץ אל",
     "time": "זמן:",
     "tag": "סוג",
     "note": "הערה (אופציונלי)",
@@ -147,7 +143,11 @@
     "close": "סגור",
     "jumpToTime": "קפוץ אל {time}",
     "deleteBookmark": "מחק את הסימניה {time}",
-    "deleteSyncFailed": "הסימניה נמחקה מהמכשיר, אך המחיקה מהחשבון נכשלה."
+    "deleteSyncFailed": "הסימניה נמחקה מהמכשיר, אך המחיקה מהחשבון נכשלה.",
+    "addBookmark": "הוסף סימניה",
+    "bookmarkLabel": "תווית",
+    "noBookmarks": "אין סימניות עדיין",
+    "jumpTo": "קפוץ אל"
   },
   "offline": {
     "title": "הורדות",
