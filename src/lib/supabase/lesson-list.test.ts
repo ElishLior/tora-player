@@ -45,6 +45,7 @@ const lesson: LessonWithRelations = {
   lesson_type: null,
   seder_number: null,
   category_id: null,
+  tags: [],
   created_at: '2026-01-01',
   updated_at: '2026-01-01',
 };

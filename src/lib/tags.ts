@@ -5,7 +5,7 @@ export const MAX_TAG_LENGTH = 40;
 
 /** Trim, drop a leading '#', collapse whitespace; empty or over-long input yields null. */
 export function normalizeTag(raw: string): string | null {
-  const tag = raw.replace(/^#+/, '').replace(/\s+/g, ' ').trim();
+  const tag = raw.trim().replace(/^#+/, '').replace(/\s+/g, ' ').trim();
   if (!tag || tag.length > MAX_TAG_LENGTH) return null;
   return tag;
 }
