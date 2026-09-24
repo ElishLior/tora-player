@@ -1,83 +1,55 @@
-import type { AudioTrack } from "@/stores/audio-store";
-import type { LoadedAudioTrackIdentity } from "@/lib/audio-engine";
+import { normalizeAudioUrl } from "@/lib/audio-url";
+import { getTrackKey, type AudioTrack } from "@/stores/audio-store";
 
-interface ResumeTrackState {
-  track: AudioTrack | null;
-  currentTime: number;
-  forceReload?: boolean;
+/**
+ * What it takes to make the current track audible:
+ * - play-loaded: the element already holds this track → just play, never seek
+ *   (the element knows the real position, even after hours in the background)
+ * - load: the source is known now → load at startPosition and play in the same
+ *   call stack (keeps iOS' user-gesture requirement satisfied)
+ * - resolve: the file may be saved offline → look up the blob URL first
+ */
+export type PlaybackPlan =
+  | { type: "play-loaded" }
+  | { type: "load"; source: string; startPosition: number }
+  | { type: "resolve"; startPosition: number };
+
+interface PlanInput {
+  track: AudioTrack;
+  loadedTrackKey: string | null;
+  /** Store position of `track`; used only when a different track is loaded. */
+  position: number;
+  cachedSource?: string;
+  /** Lessons with offline copies; null while still unknown. */
+  downloadedLessonIds: ReadonlySet<string> | null;
 }
 
-interface ResumeTrackDeps {
-  getOfflineAudioUrl: (track: AudioTrack) => Promise<string | null>;
-  ensurePlaying: (
-    url: string,
-    options?: {
-      startPosition?: number;
-      trackIdentity?: Omit<LoadedAudioTrackIdentity, "resolvedUrl">;
-      forceReload?: boolean;
-    },
-  ) => void;
-  markPlaying: () => void;
-  isEngineLoaded: () => boolean;
-  getCurrentEngineUrl: () => string | null;
-  isLoadedUrlCurrentTrack?: (url: string, track: AudioTrack) => boolean;
-  isStillCurrent?: (track: AudioTrack) => boolean;
-  shouldResume?: () => boolean;
+export function getStreamSource(track: AudioTrack): string {
+  return normalizeAudioUrl(track.audioUrl) || track.audioUrl;
 }
 
-function getTrackIdentity(
+export function planTrackPlayback({
+  track,
+  loadedTrackKey,
+  position,
+  cachedSource,
+  downloadedLessonIds,
+}: PlanInput): PlaybackPlan {
+  if (getTrackKey(track) === loadedTrackKey) return { type: "play-loaded" };
+
+  const startPosition = Math.max(0, position);
+  if (cachedSource) return { type: "load", source: cachedSource, startPosition };
+  if (downloadedLessonIds && !downloadedLessonIds.has(track.lessonId || track.id)) {
+    return { type: "load", source: getStreamSource(track), startPosition };
+  }
+  return { type: "resolve", startPosition };
+}
+
+/** Offline blob URL when the file is saved on this device, else the stream URL. */
+export async function resolveTrackSource(
   track: AudioTrack,
-): Omit<LoadedAudioTrackIdentity, "resolvedUrl"> {
-  return {
-    lessonId: track.lessonId || track.id,
-    audioFileId: track.audioFileId,
-    offlineKey: track.offlineKey,
-    sourceUrl: track.audioUrl,
-  };
-}
-
-export async function resumeTrackPlayback(
-  { track, currentTime, forceReload = false }: ResumeTrackState,
-  deps: ResumeTrackDeps,
-) {
-  if (!track?.audioUrl) return false;
-
-  if (deps.shouldResume && !deps.shouldResume()) {
-    return false;
-  }
-
-  const startPosition = currentTime > 0 ? currentTime : undefined;
-  const trackIdentity = getTrackIdentity(track);
-  const loadedUrl = deps.getCurrentEngineUrl();
-  const playbackOptions = {
-    startPosition,
-    trackIdentity,
-    ...(forceReload ? { forceReload: true } : {}),
-  };
-
-  if (
-    !forceReload &&
-    deps.isEngineLoaded() &&
-    loadedUrl &&
-    (deps.isLoadedUrlCurrentTrack?.(loadedUrl, track) ??
-      loadedUrl === track.audioUrl)
-  ) {
-    deps.ensurePlaying(loadedUrl, playbackOptions);
-    deps.markPlaying();
-    return true;
-  }
-
-  const offlineUrl = await deps.getOfflineAudioUrl(track).catch(() => null);
-
-  if (deps.isStillCurrent && !deps.isStillCurrent(track)) {
-    return false;
-  }
-
-  if (deps.shouldResume && !deps.shouldResume()) {
-    return false;
-  }
-
-  deps.ensurePlaying(offlineUrl || track.audioUrl, playbackOptions);
-  deps.markPlaying();
-  return true;
+  getOfflineSource: (track: AudioTrack) => Promise<string | null>,
+): Promise<string> {
+  const offlineSource = await getOfflineSource(track).catch(() => null);
+  return offlineSource || getStreamSource(track);
 }

@@ -1,167 +1,75 @@
 import { describe, expect, it, vi } from "vitest";
-import { resumeTrackPlayback } from "./audio-resume";
-import type { AudioTrack } from "@/stores/audio-store";
+import { planTrackPlayback, resolveTrackSource } from "./audio-resume";
+import { getTrackKey, type AudioTrack } from "@/stores/audio-store";
 
 const track: AudioTrack = {
   id: "lesson-1",
   lessonId: "lesson-1",
   audioFileId: "audio-1",
-  offlineKey: "lesson-1:/api/audio/stream/lesson.mp3",
+  offlineKey: "lesson-1:audio-1",
   title: "Lesson",
   hebrewTitle: "שיעור",
-  audioUrl: "/api/audio/stream/lesson.mp3",
-  duration: 100,
+  audioUrl: "https://account.r2.cloudflarestorage.com/bucket/audio/lesson-1.mp3",
+  duration: 3600,
   date: "2026-01-01",
 };
+const streamUrl = "/api/audio/stream/audio%2Flesson-1.mp3";
 
-const trackIdentity = {
-  lessonId: "lesson-1",
-  audioFileId: "audio-1",
-  offlineKey: "lesson-1:/api/audio/stream/lesson.mp3",
-  sourceUrl: "/api/audio/stream/lesson.mp3",
-};
-
-describe("resumeTrackPlayback", () => {
-  it("resumes the current track loaded engine URL without waiting for offline storage", async () => {
-    const getOfflineAudioUrl = vi.fn(async () => "blob:lesson-1");
-    const ensurePlaying = vi.fn();
-    const markPlaying = vi.fn();
-
-    const result = await resumeTrackPlayback(
-      { track, currentTime: 42 },
-      {
-        getOfflineAudioUrl,
-        ensurePlaying,
-        markPlaying,
-        isEngineLoaded: () => true,
-        getCurrentEngineUrl: () => "blob:already-loaded",
-        isLoadedUrlCurrentTrack: () => true,
-        shouldResume: () => true,
-      },
-    );
-
-    expect(result).toBe(true);
-    expect(getOfflineAudioUrl).not.toHaveBeenCalled();
-    expect(ensurePlaying).toHaveBeenCalledWith("blob:already-loaded", {
-      startPosition: 42,
-      trackIdentity,
-    });
-    expect(markPlaying).toHaveBeenCalled();
+describe("planTrackPlayback", () => {
+  it("plays the loaded track without seeking, whatever position the UI holds", () => {
+    expect(
+      planTrackPlayback({
+        track,
+        loadedTrackKey: getTrackKey(track),
+        position: 42,
+        downloadedLessonIds: new Set(),
+      }),
+    ).toEqual({ type: "play-loaded" });
   });
 
-  it("does not trust a loaded engine URL that does not belong to the current track", async () => {
-    const getOfflineAudioUrl = vi.fn(async () => null);
-    const ensurePlaying = vi.fn();
-
-    const result = await resumeTrackPlayback(
-      { track, currentTime: 42 },
-      {
-        getOfflineAudioUrl,
-        ensurePlaying,
-        markPlaying: vi.fn(),
-        isEngineLoaded: () => true,
-        getCurrentEngineUrl: () => "blob:previous-track",
-        isLoadedUrlCurrentTrack: () => false,
-        shouldResume: () => true,
-      },
-    );
-
-    expect(result).toBe(true);
-    expect(getOfflineAudioUrl).toHaveBeenCalledWith(track);
-    expect(ensurePlaying).toHaveBeenCalledWith(track.audioUrl, {
-      startPosition: 42,
-      trackIdentity,
-    });
+  it("loads a track that is not saved offline right away from the stream", () => {
+    expect(
+      planTrackPlayback({
+        track,
+        loadedTrackKey: "another-track",
+        position: 42,
+        downloadedLessonIds: new Set(["lesson-2"]),
+      }),
+    ).toEqual({ type: "load", source: streamUrl, startPosition: 42 });
   });
 
-  it("bypasses the loaded URL shortcut when a fresh reload is requested", async () => {
-    const getOfflineAudioUrl = vi.fn(async () => null);
-    const ensurePlaying = vi.fn();
-
-    const result = await resumeTrackPlayback(
-      { track, currentTime: 7, forceReload: true },
-      {
-        getOfflineAudioUrl,
-        ensurePlaying,
-        markPlaying: vi.fn(),
-        isEngineLoaded: () => true,
-        getCurrentEngineUrl: () => track.audioUrl,
-        isLoadedUrlCurrentTrack: () => true,
-        shouldResume: () => true,
-      },
-    );
-
-    expect(result).toBe(true);
-    expect(getOfflineAudioUrl).toHaveBeenCalledWith(track);
-    expect(ensurePlaying).toHaveBeenCalledWith(track.audioUrl, {
-      startPosition: 7,
-      trackIdentity,
-      forceReload: true,
-    });
+  it("loads an already resolved offline copy right away", () => {
+    expect(
+      planTrackPlayback({
+        track,
+        loadedTrackKey: null,
+        position: 0,
+        cachedSource: "blob:lesson-1",
+        downloadedLessonIds: new Set(["lesson-1"]),
+      }),
+    ).toEqual({ type: "load", source: "blob:lesson-1", startPosition: 0 });
   });
 
-  it("prefers an offline blob URL when the engine must be loaded", async () => {
-    const ensurePlaying = vi.fn();
+  it("looks up the offline copy when the lesson may be saved or downloads are not known yet", () => {
+    for (const downloadedLessonIds of [new Set(["lesson-1"]), null]) {
+      expect(
+        planTrackPlayback({ track, loadedTrackKey: null, position: 7, downloadedLessonIds }),
+      ).toEqual({ type: "resolve", startPosition: 7 });
+    }
+  });
+});
 
-    const result = await resumeTrackPlayback(
-      { track, currentTime: 0 },
-      {
-        getOfflineAudioUrl: vi.fn(async () => "blob:lesson-1"),
-        ensurePlaying,
-        markPlaying: vi.fn(),
-        isEngineLoaded: () => false,
-        getCurrentEngineUrl: () => null,
-        shouldResume: () => true,
-      },
+describe("resolveTrackSource", () => {
+  it("prefers the offline blob URL", async () => {
+    await expect(resolveTrackSource(track, async () => "blob:lesson-1")).resolves.toBe(
+      "blob:lesson-1",
     );
-
-    expect(result).toBe(true);
-    expect(ensurePlaying).toHaveBeenCalledWith("blob:lesson-1", {
-      startPosition: undefined,
-      trackIdentity,
-    });
   });
 
-  it("does not resume when playback is no longer requested after offline lookup", async () => {
-    const ensurePlaying = vi.fn();
-    const markPlaying = vi.fn();
-
-    const result = await resumeTrackPlayback(
-      { track, currentTime: 15 },
-      {
-        getOfflineAudioUrl: vi.fn(async () => "blob:lesson-1"),
-        ensurePlaying,
-        markPlaying,
-        isEngineLoaded: () => false,
-        getCurrentEngineUrl: () => null,
-        shouldResume: () => false,
-      },
-    );
-
-    expect(result).toBe(false);
-    expect(ensurePlaying).not.toHaveBeenCalled();
-    expect(markPlaying).not.toHaveBeenCalled();
-  });
-
-  it("does not resume a stale track after asynchronous offline lookup", async () => {
-    const ensurePlaying = vi.fn();
-    const markPlaying = vi.fn();
-
-    const result = await resumeTrackPlayback(
-      { track, currentTime: 15 },
-      {
-        getOfflineAudioUrl: vi.fn(async () => "blob:lesson-1"),
-        ensurePlaying,
-        markPlaying,
-        isStillCurrent: () => false,
-        isEngineLoaded: () => false,
-        getCurrentEngineUrl: () => null,
-        shouldResume: () => true,
-      },
-    );
-
-    expect(result).toBe(false);
-    expect(ensurePlaying).not.toHaveBeenCalled();
-    expect(markPlaying).not.toHaveBeenCalled();
+  it("falls back to the stream URL when there is no offline copy or the lookup fails", async () => {
+    await expect(resolveTrackSource(track, async () => null)).resolves.toBe(streamUrl);
+    await expect(
+      resolveTrackSource(track, vi.fn(async () => Promise.reject(new Error("IndexedDB blocked")))),
+    ).resolves.toBe(streamUrl);
   });
 });

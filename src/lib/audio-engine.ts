@@ -1,410 +1,259 @@
 "use client";
 
-import { Howl, Howler } from "howler";
 import { normalizeAudioUrl } from "@/lib/audio-url";
 
-// Increase Howler's HTML5 audio pool to prevent "pool exhausted" warnings
-// Default is 10 — raise to 20 for safety with streaming + preloading
-Howler.html5PoolSize = 20;
+/**
+ * What the audio element is doing, read from its live state:
+ * - idle: no source
+ * - paused / ended / error: not producing sound
+ * - buffering: asked to play, waiting for data
+ * - playing: producing sound
+ */
+export type AudioEngineStatus =
+  | "idle"
+  | "paused"
+  | "buffering"
+  | "playing"
+  | "ended"
+  | "error";
 
-export interface LoadedAudioTrackIdentity {
-  lessonId?: string;
-  audioFileId?: string;
-  offlineKey?: string;
-  sourceUrl: string;
-  resolvedUrl: string;
+export interface AudioEngineHandlers {
+  onStatusChange?: (status: AudioEngineStatus) => void;
+  onTimeUpdate?: (time: number) => void;
+  onDurationChange?: (duration: number) => void;
+  /** play() was rejected until the user taps again (iOS/Chrome autoplay policy). */
+  onPlayBlocked?: () => void;
 }
 
-export interface NativeAudioEventSnapshot {
-  type: string;
-  paused: boolean;
-  ended: boolean;
-  errored: boolean;
-  readyState: number;
-  currentUrl: string | null;
-  loadedTrackIdentity: LoadedAudioTrackIdentity | null;
-}
-
-interface AudioEngineLoadOptions {
+interface LoadOptions {
+  trackKey: string;
+  /** Position to start from once the new source has metadata. */
   startPosition?: number;
-  trackIdentity?: Omit<LoadedAudioTrackIdentity, "resolvedUrl">;
-  forceReload?: boolean;
 }
+
+const HAVE_METADATA = 1;
+const HAVE_FUTURE_DATA = 3;
+
+// Every event after which the element's play state may have changed. The
+// status is always re-read from the element, so events that were queued for a
+// previous source (or by our own seeks) cannot put the player in a wrong state.
+const STATUS_EVENTS = [
+  "loadstart",
+  "emptied",
+  "play",
+  "playing",
+  "pause",
+  "waiting",
+  "canplay",
+  "seeked",
+  "ended",
+  "error",
+] as const;
 
 /**
- * Singleton audio engine wrapping Howler.js.
- * Manages a single audio instance and provides control methods.
+ * Owns the one HTMLAudioElement used for all playback. Reusing a single
+ * element keeps the iOS "user activated" state across tracks, so lock-screen
+ * resume and auto-advance keep working after the first tap.
  */
-class AudioEngine {
-  private howl: Howl | null = null;
-  private currentUrl: string | null = null;
-  private soundId: number | null = null; // Track Howler sound ID to prevent duplicate streams
-  private onTimeUpdate: ((time: number) => void) | null = null;
-  private onEnd: (() => void) | null = null;
-  private onLoad: ((duration: number) => void) | null = null;
-  private onError: ((error: string) => void) | null = null;
-  private onNativeAudioEvent:
-    | ((event: NativeAudioEventSnapshot) => void)
-    | null = null;
-  private nativeAudioCleanup: (() => void) | null = null;
-  private loadedTrackIdentity: LoadedAudioTrackIdentity | null = null;
-  private animationFrameId: number | null = null;
-  private _userPaused = false; // Track if user explicitly paused to prevent auto-resume
+export class AudioEngine {
+  private element: HTMLAudioElement | null = null;
+  private source: string | null = null;
+  private trackKey: string | null = null;
+  private pendingPosition: number | null = null;
+  private status: AudioEngineStatus = "idle";
+  private rate = 1;
+  private volume = 1;
+  private handlers: AudioEngineHandlers = {};
 
-  /**
-   * Detect audio format from URL for Howler.js format hint.
-   * Helps the browser choose the correct decoder.
-   */
-  private detectFormat(url: string): string[] {
-    // Try to get extension from the encoded file key in the URL
-    const decoded = decodeURIComponent(url);
-    const ext = decoded.split(".").pop()?.split("?")[0]?.toLowerCase();
-    switch (ext) {
-      case "mp3":
-        return ["mp3"];
-      case "m4a":
-      case "aac":
-        return ["m4a"];
-      case "mp4":
-        return ["mp4"];
-      case "ogg":
-      case "opus":
-        return ["ogg"];
-      case "wav":
-        return ["wav"];
-      case "flac":
-        return ["flac"];
-      case "webm":
-        return ["webm"];
-      default:
-        return ["mp3", "m4a", "ogg", "wav", "webm"];
-    }
+  constructor(
+    private readonly createElement: () => HTMLAudioElement = () => new Audio(),
+  ) {}
+
+  setHandlers(handlers: AudioEngineHandlers) {
+    this.handlers = handlers;
   }
 
-  private buildNativeAudioSnapshot(type: string): NativeAudioEventSnapshot {
-    const audioEl = this.getAudioElement();
-    return {
-      type,
-      paused: audioEl?.paused ?? true,
-      ended: audioEl?.ended ?? false,
-      errored: Boolean(audioEl?.error),
-      readyState: audioEl?.readyState ?? 0,
-      currentUrl: this.currentUrl,
-      loadedTrackIdentity: this.loadedTrackIdentity,
-    };
-  }
+  /** Loading the track that is already loaded is a no-op: it never seeks. */
+  load(url: string, { trackKey, startPosition }: LoadOptions) {
+    const source = normalizeAudioUrl(url) || url;
+    if (this.trackKey === trackKey && this.source === source) return;
 
-  private emitNativeAudioSnapshot(
-    type: string,
-    overrides?: Partial<NativeAudioEventSnapshot>,
-  ) {
-    this.onNativeAudioEvent?.({
-      ...this.buildNativeAudioSnapshot(type),
-      ...overrides,
-    });
-  }
-
-  private attachNativeAudioEventListeners() {
-    this.nativeAudioCleanup?.();
-
-    const audioEl = this.getAudioElement();
-    if (!audioEl) {
-      this.nativeAudioCleanup = null;
-      return;
-    }
-
-    const eventTypes = [
-      "pause",
-      "playing",
-      "waiting",
-      "stalled",
-      "suspend",
-      "error",
-      "ended",
-      "emptied",
-    ];
-    const listener = (event: Event) => {
-      this.onNativeAudioEvent?.({
-        type: event.type,
-        paused: audioEl.paused,
-        ended: audioEl.ended,
-        errored: Boolean(audioEl.error),
-        readyState: audioEl.readyState,
-        currentUrl: this.currentUrl,
-        loadedTrackIdentity: this.loadedTrackIdentity,
-      });
-    };
-
-    for (const eventType of eventTypes) {
-      audioEl.addEventListener(eventType, listener);
-    }
-
-    this.nativeAudioCleanup = () => {
-      for (const eventType of eventTypes) {
-        audioEl.removeEventListener(eventType, listener);
-      }
-    };
-  }
-
-  load(url: string, options?: AudioEngineLoadOptions) {
-    // Normalize the URL to use stream proxy instead of direct R2
-    const normalizedUrl = normalizeAudioUrl(url) || url;
-    const loadedTrackIdentity = options?.trackIdentity
-      ? { ...options.trackIdentity, resolvedUrl: normalizedUrl }
-      : { sourceUrl: url, resolvedUrl: normalizedUrl };
-
-    // Don't reload same track
-    if (
-      this.currentUrl === normalizedUrl &&
-      this.howl &&
-      !options?.forceReload
-    ) {
-      this.loadedTrackIdentity = loadedTrackIdentity;
-      if (options?.startPosition) {
-        this.howl.seek(options.startPosition);
-      }
-      this.attachNativeAudioEventListeners();
-      return;
-    }
-
-    // Cleanup previous
-    this.unload();
-    this.currentUrl = normalizedUrl;
-    this.loadedTrackIdentity = loadedTrackIdentity;
-
-    this.howl = new Howl({
-      src: [normalizedUrl],
-      format: this.detectFormat(normalizedUrl),
-      html5: true, // Required for streaming long audio files
-      preload: true,
-      onload: () => {
-        this.attachNativeAudioEventListeners();
-        const duration = this.howl?.duration() || 0;
-        this.onLoad?.(duration);
-        if (options?.startPosition && options.startPosition > 0) {
-          this.howl?.seek(options.startPosition);
-        }
-      },
-      onend: () => {
-        this.stopTimeTracking();
-        this.onEnd?.();
-      },
-      onloaderror: (_id: number, error: unknown) => {
-        this.emitNativeAudioSnapshot("error", { errored: true, paused: true });
-        this.onError?.(`Failed to load audio: ${error}`);
-      },
-      onplayerror: (_id: number, error: unknown) => {
-        this.emitNativeAudioSnapshot("error", { errored: true, paused: true });
-        this.onError?.(`Playback error: ${error}`);
-        // Try to recover — but only if user hasn't explicitly paused
-        // and the same Howl instance is still active (not stale)
-        if (this.howl) {
-          const howlAtError = this.howl;
-          const urlAtError = this.currentUrl;
-          this.howl.once("unlock", () => {
-            // Guard: don't auto-resume if user explicitly paused,
-            // or if the Howl/URL has changed since the error (stale unlock)
-            if (
-              this.howl === howlAtError &&
-              this.currentUrl === urlAtError &&
-              !this._userPaused
-            ) {
-              this.play();
-            }
-          });
-        }
-      },
-    });
-    this.attachNativeAudioEventListeners();
-  }
-
-  ensurePlaying(url: string, options?: AudioEngineLoadOptions) {
-    const normalizedUrl = normalizeAudioUrl(url) || url;
-    if (options?.forceReload) {
-      this.unload();
-    }
-
-    if (!this.howl || this.currentUrl !== normalizedUrl) {
-      this.load(url, options);
-    } else {
-      if (options?.trackIdentity) {
-        this.loadedTrackIdentity = {
-          ...options.trackIdentity,
-          resolvedUrl: normalizedUrl,
-        };
-      }
-      if (options?.startPosition !== undefined) {
-        this.seek(options.startPosition);
-      }
-    }
-    this.play();
+    const element = this.getOrCreateElement();
+    this.trackKey = trackKey;
+    this.source = source;
+    this.pendingPosition =
+      startPosition && startPosition > 0 ? startPosition : null;
+    element.src = source;
+    element.defaultPlaybackRate = this.rate;
+    element.playbackRate = this.rate;
   }
 
   play() {
-    if (!this.howl) return;
-    // If already playing, don't create a duplicate stream
-    if (this.soundId !== null && this.howl.playing(this.soundId)) return;
-    // Reuse existing sound ID to resume instead of creating a new stream
-    if (this.soundId !== null) {
-      this.soundId = this.howl.play(this.soundId);
-    } else {
-      this.soundId = this.howl.play();
-    }
-    // Only clear _userPaused AFTER we actually start playing,
-    // not at the top — prevents race where a pending play() clears a recent pause()
-    this._userPaused = false;
-    this.startTimeTracking();
+    const element = this.element;
+    if (!element || !this.source) return;
+    if (element.error) this.reload();
+
+    const trackKey = this.trackKey;
+    element.play()?.catch((error: unknown) => {
+      // AbortError means a newer load/pause superseded this call.
+      if (
+        trackKey === this.trackKey &&
+        (error as { name?: string } | null)?.name === "NotAllowedError"
+      ) {
+        this.handlers.onPlayBlocked?.();
+      }
+    });
   }
 
   pause() {
-    if (!this.howl) return;
-    this._userPaused = true;
-    // Pause the specific sound ID to avoid orphan streams
-    if (this.soundId !== null) {
-      this.howl.pause(this.soundId);
-    }
-    // Safety net: also pause without soundId to ensure ALL sounds on this Howl stop
-    this.howl.pause();
-    this.stopTimeTracking();
+    this.element?.pause();
   }
 
   seek(time: number) {
-    if (!this.howl) return;
-    if (this.soundId !== null) {
-      this.howl.seek(time, this.soundId);
-    } else {
-      this.howl.seek(time);
+    const element = this.element;
+    if (!element || !this.source) return;
+    const target = Math.max(0, Number.isFinite(time) ? time : 0);
+
+    if (this.pendingPosition !== null || element.readyState < HAVE_METADATA) {
+      this.pendingPosition = target;
+      return;
     }
+    const duration = this.getDuration();
+    element.currentTime = duration > 0 ? Math.min(target, duration) : target;
   }
 
-  setVolume(volume: number) {
-    if (!this.howl) return;
-    this.howl.volume(volume);
+  /** Re-fetches the current source and continues from the same position. */
+  reload() {
+    const element = this.element;
+    if (!element || !this.source) return;
+    const position = this.getCurrentTime();
+    this.pendingPosition = position > 0 ? position : null;
+    element.load();
+  }
+
+  unload() {
+    const element = this.element;
+    this.source = null;
+    this.trackKey = null;
+    this.pendingPosition = null;
+    if (!element) return;
+    element.removeAttribute("src");
+    element.load();
   }
 
   setRate(rate: number) {
-    if (!this.howl) return;
-    if (this.soundId !== null) {
-      this.howl.rate(rate, this.soundId);
-    } else {
-      this.howl.rate(rate);
+    this.rate = rate;
+    if (!this.element) return;
+    this.element.defaultPlaybackRate = rate;
+    this.element.playbackRate = rate;
+  }
+
+  setVolume(volume: number) {
+    this.volume = volume;
+    if (this.element) this.element.volume = volume;
+  }
+
+  /** Re-reads the element (e.g. after the page was frozen in the background). */
+  refresh() {
+    this.updateStatus();
+    if (this.element && this.pendingPosition === null && this.source) {
+      this.handlers.onTimeUpdate?.(this.element.currentTime);
     }
   }
 
   getCurrentTime(): number {
-    if (!this.howl) return 0;
-    const seek =
-      this.soundId !== null ? this.howl.seek(this.soundId) : this.howl.seek();
-    return typeof seek === "number" ? seek : 0;
+    return this.pendingPosition ?? this.element?.currentTime ?? 0;
   }
 
   getDuration(): number {
-    if (!this.howl) return 0;
-    return this.howl.duration() || 0;
+    const duration = this.element?.duration;
+    return duration !== undefined && Number.isFinite(duration) ? duration : 0;
   }
 
-  isPlaying(): boolean {
-    if (!this.howl) return false;
-    return this.soundId !== null
-      ? this.howl.playing(this.soundId)
-      : this.howl.playing();
+  getStatus(): AudioEngineStatus {
+    return this.status;
   }
 
-  isNativePaused(): boolean {
-    const audioEl = this.getAudioElement();
-    return Boolean(audioEl?.paused || audioEl?.ended || audioEl?.error);
+  getTrackKey(): string | null {
+    return this.trackKey;
   }
 
-  /** Check if the audio engine has a loaded Howl instance */
-  isLoaded(): boolean {
-    return this.howl !== null;
-  }
-
-  /** Get the current audio URL being played */
   getCurrentUrl(): string | null {
-    return this.currentUrl;
+    return this.source;
   }
 
-  getNativeAudioSnapshot(type = "snapshot"): NativeAudioEventSnapshot | null {
-    if (!this.getAudioElement()) return null;
-    return this.buildNativeAudioSnapshot(type);
-  }
-
-  /**
-   * Get the underlying HTML audio element (for Remote Playback / AirPlay).
-   * Howler.js stores it internally when html5 mode is used.
-   */
+  /** The element that plays audio (used for AirPlay / Remote Playback). */
   getAudioElement(): HTMLAudioElement | null {
-    if (!this.howl) return null;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sounds = (this.howl as any)._sounds;
-    if (sounds && sounds.length > 0 && sounds[0]._node) {
-      return sounds[0]._node as HTMLAudioElement;
+    return this.element;
+  }
+
+  private getOrCreateElement(): HTMLAudioElement {
+    if (this.element) return this.element;
+    const element = this.createElement();
+    // Metadata only until play(): opening the app must not download a lesson.
+    element.preload = "metadata";
+    element.volume = this.volume;
+    for (const type of STATUS_EVENTS) {
+      element.addEventListener(type, this.updateStatus);
     }
-    return null;
+    element.addEventListener("loadedmetadata", this.handleMetadata);
+    element.addEventListener("durationchange", this.handleDurationChange);
+    element.addEventListener("canplay", this.applyPendingPosition);
+    element.addEventListener("playing", this.applyPendingPosition);
+    element.addEventListener("timeupdate", this.handleTimeUpdate);
+    this.element = element;
+    return element;
   }
 
-  /** Stop all sounds on the current Howl instance without unloading */
-  stopAll() {
-    if (!this.howl) return;
-    this._userPaused = true;
-    this.howl.stop();
-    this.stopTimeTracking();
+  private readStatus(): AudioEngineStatus {
+    const element = this.element;
+    if (!element || !this.source) return "idle";
+    if (element.error) return "error";
+    if (element.ended) return "ended";
+    if (element.paused) return "paused";
+    return element.readyState >= HAVE_FUTURE_DATA ? "playing" : "buffering";
   }
 
-  unload() {
-    this.stopTimeTracking();
-    this.nativeAudioCleanup?.();
-    this.nativeAudioCleanup = null;
-    if (this.howl) {
-      this.howl.unload();
-      this.howl = null;
+  private updateStatus = () => {
+    const status = this.readStatus();
+    if (status === this.status) return;
+    this.status = status;
+    this.handlers.onStatusChange?.(status);
+  };
+
+  private handleMetadata = () => {
+    this.applyPendingPosition();
+    this.handleDurationChange();
+  };
+
+  private handleDurationChange = () => {
+    const duration = this.getDuration();
+    if (duration > 0) this.handlers.onDurationChange?.(duration);
+  };
+
+  // iOS may ignore a seek issued at loadedmetadata for streamed audio, so the
+  // start position is re-checked until data at that position is available.
+  private applyPendingPosition = () => {
+    const element = this.element;
+    const target = this.pendingPosition;
+    if (!element || target === null || element.readyState < HAVE_METADATA) {
+      return;
     }
-    this.currentUrl = null;
-    this.soundId = null;
-    this.loadedTrackIdentity = null;
-  }
-
-  // Event listeners
-  setOnTimeUpdate(cb: (time: number) => void) {
-    this.onTimeUpdate = cb;
-  }
-
-  setOnEnd(cb: () => void) {
-    this.onEnd = cb;
-  }
-
-  setOnLoad(cb: (duration: number) => void) {
-    this.onLoad = cb;
-  }
-
-  setOnError(cb: (error: string) => void) {
-    this.onError = cb;
-  }
-
-  setOnNativeAudioEvent(cb: (event: NativeAudioEventSnapshot) => void) {
-    this.onNativeAudioEvent = cb;
-  }
-
-  private startTimeTracking() {
-    this.stopTimeTracking();
-    const track = () => {
-      if (this.howl && this.howl.playing()) {
-        const time = this.getCurrentTime();
-        this.onTimeUpdate?.(time);
-      }
-      this.animationFrameId = requestAnimationFrame(track);
-    };
-    this.animationFrameId = requestAnimationFrame(track);
-  }
-
-  private stopTimeTracking() {
-    if (this.animationFrameId !== null) {
-      cancelAnimationFrame(this.animationFrameId);
-      this.animationFrameId = null;
+    const duration = this.getDuration();
+    const position = duration > 0 ? Math.min(target, duration) : target;
+    if (Math.abs(element.currentTime - position) > 0.5) {
+      element.currentTime = position;
     }
-  }
+    if (element.readyState >= HAVE_FUTURE_DATA) {
+      this.pendingPosition = null;
+      this.handlers.onTimeUpdate?.(element.currentTime);
+    }
+  };
+
+  private handleTimeUpdate = () => {
+    if (!this.element || this.pendingPosition !== null) return;
+    this.handlers.onTimeUpdate?.(this.element.currentTime);
+  };
 }
 
-// Singleton instance
 export const audioEngine = new AudioEngine();
