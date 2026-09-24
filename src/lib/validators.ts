@@ -48,6 +48,34 @@ export const updateLessonSchema = z.object({
   category_id: uuidLike.optional().nullable(),
 });
 
+// ==================== UPLOADS ====================
+
+/** Body of POST /api/upload/complete (chunked audio upload). */
+export const completeAudioUploadSchema = z.object({
+  uploadId: uuidLike,
+  totalParts: z.number().int().min(1).max(200),
+  lessonId: uuidLike,
+  /** Name of the uploaded bytes (may be a transcoded .ogg); decides the stored format. */
+  fileName: z.string().min(1).max(255),
+  /** Name of the file the admin dropped, kept for traceability. */
+  originalName: z.string().min(1).max(255).optional(),
+  fileSize: z.number().int().min(1),
+  sortOrder: z.number().int().min(0).max(999).default(0),
+  duration: z.number().int().min(0).max(24 * 3600).default(0),
+  audioType: z.string().trim().min(1).max(50).optional().nullable(),
+});
+
+export const duplicateAudioCandidatesSchema = z
+  .array(
+    z.object({
+      fileId: z.string().min(1).max(100),
+      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      size: z.number().int().min(0),
+      name: z.string().max(255),
+    }),
+  )
+  .max(500);
+
 export const createPlaylistSchema = z.object({
   name: z.string().min(1, 'Playlist name is required'),
   hebrew_name: z.string().optional(),

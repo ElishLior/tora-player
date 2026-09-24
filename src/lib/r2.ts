@@ -25,15 +25,6 @@ const r2Client = new S3Client({
 
 const BUCKET = getR2BucketName(process.env);
 
-export async function getUploadPresignedUrl(key: string, contentType: string) {
-  const command = new PutObjectCommand({
-    Bucket: BUCKET,
-    Key: key,
-    ContentType: contentType,
-  });
-  return getSignedUrl(r2Client, command, { expiresIn: 3600 });
-}
-
 export async function getDownloadPresignedUrl(key: string) {
   const command = new GetObjectCommand({
     Bucket: BUCKET,
@@ -114,15 +105,6 @@ export async function configureBucketCors(allowedOrigins: string[] = ['*']) {
     },
   });
   await r2Client.send(command);
-}
-
-export function generateAudioKey(lessonId: string, format: string = 'mp3'): string {
-  return `audio/${lessonId}/lesson.${format}`;
-}
-
-export function generateOriginalKey(lessonId: string, originalName: string): string {
-  const ext = originalName.split('.').pop() || 'bin';
-  return `originals/${lessonId}/original.${ext}`;
 }
 
 // ─── S3 Multipart Upload API ───────────────────────────────────────

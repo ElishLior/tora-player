@@ -43,38 +43,31 @@ export function getAudioFormat(file: File): string {
   return 'unknown';
 }
 
-export async function extractAudioMetadata(file: File): Promise<AudioMetadata> {
-  return new Promise((resolve, reject) => {
-    const audio = new Audio();
-    const objectUrl = URL.createObjectURL(file);
-
-    audio.addEventListener('loadedmetadata', () => {
-      resolve({
-        duration: Math.round(audio.duration),
-        format: getAudioFormat(file),
-        fileSize: file.size,
-      });
-      URL.revokeObjectURL(objectUrl);
+/**
+ * Read duration from the file's own metadata via the browser decoder.
+ * Never rejects: unknown/unreadable durations (and Infinity from streamed
+ * containers) come back as 0 after at most 30 s.
+ */
+export function extractAudioMetadata(file: File): Promise<AudioMetadata> {
+  const { promise, resolve } = Promise.withResolvers<AudioMetadata>();
+  const audio = new Audio();
+  const objectUrl = URL.createObjectURL(file);
+  const finish = (duration: number) => {
+    clearTimeout(timer);
+    URL.revokeObjectURL(objectUrl);
+    audio.removeAttribute('src');
+    resolve({
+      duration: Number.isFinite(duration) && duration > 0 ? Math.round(duration) : 0,
+      format: getAudioFormat(file),
+      fileSize: file.size,
     });
-
-    audio.addEventListener('error', () => {
-      URL.revokeObjectURL(objectUrl);
-      // Return partial metadata even on error
-      resolve({
-        duration: 0,
-        format: getAudioFormat(file),
-        fileSize: file.size,
-      });
-    });
-
-    // Set timeout for very large files
-    setTimeout(() => {
-      URL.revokeObjectURL(objectUrl);
-      reject(new Error('Audio metadata extraction timed out'));
-    }, 30000);
-
-    audio.src = objectUrl;
-  });
+  };
+  const timer = setTimeout(() => finish(0), 30000);
+  audio.preload = 'metadata';
+  audio.addEventListener('loadedmetadata', () => finish(audio.duration), { once: true });
+  audio.addEventListener('error', () => finish(0), { once: true });
+  audio.src = objectUrl;
+  return promise;
 }
 
 export function formatFileSize(bytes: number): string {

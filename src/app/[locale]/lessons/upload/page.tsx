@@ -1,32 +1,26 @@
 import { setRequestLocale } from 'next-intl/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { getAllSeries } from '@/lib/supabase/queries';
-import { UploadForm } from './upload-form';
+import { getCategoriesTree } from '@/lib/supabase/queries';
+import type { CategoryWithChildren } from '@/types/database';
+import DailyUploadClient from './daily-upload-client';
 
 type Props = {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ seriesId?: string }>;
 };
 
-export default async function UploadPage({ params, searchParams }: Props) {
+export default async function UploadPage({ params }: Props) {
   const { locale } = await params;
-  const { seriesId } = await searchParams;
   setRequestLocale(locale);
 
-  let series: Awaited<ReturnType<typeof getAllSeries>> = [];
+  let categories: CategoryWithChildren[] = [];
   const supabase = await createServerSupabaseClient();
   if (supabase) {
     try {
-      series = await getAllSeries(supabase);
-    } catch {
-      // fallback to empty
+      categories = await getCategoriesTree(supabase);
+    } catch (error) {
+      console.error('Upload page: failed to load categories', error);
     }
   }
 
-  return (
-    <UploadForm
-      series={series}
-      defaultSeriesId={seriesId}
-    />
-  );
+  return <DailyUploadClient categories={categories} />;
 }
