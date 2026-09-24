@@ -1,128 +1,62 @@
-export type NativeAudioLifecycleEvent =
-  | "pause"
-  | "playing"
-  | "waiting"
-  | "stalled"
-  | "suspend"
-  | "error"
-  | "ended"
-  | "emptied"
-  | "visibility-visible"
-  | "visibility-hidden"
-  | "page-show";
+import type { AudioEngineStatus } from "@/lib/audio-engine";
 
-export type AudioRecoveryAction =
+/**
+ * How the controller reacts when the audio element changes state.
+ * - sync-playing: the element started on its own (headset, OS) → reflect it
+ * - sync-paused: the element stopped on its own (call, Siri, unplugged
+ *   headphones, OS interruption) → reflect it; never auto-resume
+ * - advance: the track finished → next queue item or stop
+ * - retry: a transient failure (network error, truncated stream) → reload at
+ *   the same position
+ * - fail: retries exhausted or offline → stop and tell the listener
+ */
+export type PlaybackReaction =
   | "none"
-  | "wait-for-cooldown"
-  | "resume-current-track"
-  | "reload-current-track"
-  | "needs-user-gesture"
-  | "mark-ended"
-  | "mark-paused";
+  | "sync-playing"
+  | "sync-paused"
+  | "advance"
+  | "retry"
+  | "fail";
 
-export type NativeAudioSyncAction = "none" | "mark-playing";
-
-export interface AudioLifecycleSnapshot {
+export interface PlaybackStatusContext {
+  status: AudioEngineStatus;
+  /** The listener asked for playback. */
   intentPlaying: boolean;
-  engineLoaded: boolean;
-  enginePlaying: boolean;
-  nativePaused: boolean;
-  nativeEnded: boolean;
-  nativeErrored: boolean;
-  documentVisible: boolean;
-  online: boolean;
-  currentTime: number;
+  position: number;
   duration: number;
-  userPausedAt: number | null;
-  sameTrack: boolean;
-  recoveryAttemptsForTrack: number;
-  msSinceLastRecovery: number;
-  playBlockedByBrowser: boolean;
+  online: boolean;
+  recoveryAttempts: number;
 }
 
-const RECOVERY_COOLDOWN_MS = 2000;
-const MAX_RECOVERY_ATTEMPTS_PER_TRACK = 3;
+export const MAX_RECOVERY_ATTEMPTS = 3;
+// An "ended" further than this from the known duration is a cut-off stream.
 const NEAR_END_SECONDS = 2;
 
-function isNearEnd(currentTime: number, duration: number) {
-  return duration > 0 && duration - currentTime <= NEAR_END_SECONDS;
-}
+export function getPlaybackReaction(context: PlaybackStatusContext): PlaybackReaction {
+  const canRetry =
+    context.online && context.recoveryAttempts < MAX_RECOVERY_ATTEMPTS;
 
-export function getAudioRecoveryAction(
-  eventName: NativeAudioLifecycleEvent,
-  snapshot: AudioLifecycleSnapshot,
-): AudioRecoveryAction {
-  if (!snapshot.intentPlaying) return "none";
-  if (!snapshot.sameTrack) return "none";
-  if (snapshot.playBlockedByBrowser) return "needs-user-gesture";
-  if (snapshot.recoveryAttemptsForTrack >= MAX_RECOVERY_ATTEMPTS_PER_TRACK) {
-    return "needs-user-gesture";
-  }
-  if (
-    snapshot.msSinceLastRecovery >= 0 &&
-    snapshot.msSinceLastRecovery < RECOVERY_COOLDOWN_MS
-  ) {
-    return "wait-for-cooldown";
-  }
-
-  if (eventName === "ended" || snapshot.nativeEnded) {
-    return isNearEnd(snapshot.currentTime, snapshot.duration)
-      ? "mark-ended"
-      : "resume-current-track";
-  }
-
-  if (
-    snapshot.nativeErrored ||
-    eventName === "error" ||
-    eventName === "emptied"
-  ) {
-    return "reload-current-track";
-  }
-
-  if (
-    eventName === "pause" &&
-    !snapshot.documentVisible &&
-    snapshot.nativePaused
-  ) {
-    return "none";
-  }
-
-  if (
-    !snapshot.documentVisible &&
-    snapshot.enginePlaying &&
-    !snapshot.nativePaused
-  ) {
-    return "none";
-  }
-
-  if (!snapshot.engineLoaded) return "reload-current-track";
-
-  if (
-    eventName === "pause" ||
-    eventName === "waiting" ||
-    eventName === "stalled" ||
-    eventName === "suspend" ||
-    eventName === "visibility-visible" ||
-    eventName === "page-show"
-  ) {
-    if (!snapshot.enginePlaying || snapshot.nativePaused) {
-      return "resume-current-track";
+  switch (context.status) {
+    case "playing":
+      return context.intentPlaying ? "none" : "sync-playing";
+    case "paused":
+      return context.intentPlaying ? "sync-paused" : "none";
+    case "ended": {
+      if (!context.intentPlaying) return "none";
+      const cutOff =
+        context.duration > 0 &&
+        context.duration - context.position > NEAR_END_SECONDS;
+      if (!cutOff) return "advance";
+      return canRetry ? "retry" : "fail";
     }
+    case "error":
+      if (!context.intentPlaying) return "none";
+      return canRetry ? "retry" : "fail";
+    default:
+      return "none";
   }
-
-  return "none";
 }
 
-export function getNativeAudioSyncAction(
-  eventName: NativeAudioLifecycleEvent,
-  snapshot: AudioLifecycleSnapshot,
-): NativeAudioSyncAction {
-  if (eventName !== "playing") return "none";
-  if (snapshot.intentPlaying) return "none";
-  if (!snapshot.sameTrack) return "none";
-  if (snapshot.nativePaused || snapshot.nativeEnded || snapshot.nativeErrored) {
-    return "none";
-  }
-
-  return "mark-playing";
+export function getRetryDelayMs(attempt: number): number {
+  return 1000 * 2 ** Math.max(0, attempt - 1);
 }

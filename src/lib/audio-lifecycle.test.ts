@@ -1,155 +1,72 @@
 import { describe, expect, it } from "vitest";
 import {
-  getAudioRecoveryAction,
-  getNativeAudioSyncAction,
-  type AudioLifecycleSnapshot,
+  MAX_RECOVERY_ATTEMPTS,
+  getPlaybackReaction,
+  getRetryDelayMs,
+  type PlaybackStatusContext,
 } from "./audio-lifecycle";
 
-const baseSnapshot: AudioLifecycleSnapshot = {
+const context: PlaybackStatusContext = {
+  status: "playing",
   intentPlaying: true,
-  engineLoaded: true,
-  enginePlaying: false,
-  nativePaused: true,
-  nativeEnded: false,
-  nativeErrored: false,
-  documentVisible: true,
-  online: true,
-  currentTime: 120,
+  position: 120,
   duration: 3600,
-  userPausedAt: null,
-  sameTrack: true,
-  recoveryAttemptsForTrack: 0,
-  msSinceLastRecovery: 5000,
-  playBlockedByBrowser: false,
+  online: true,
+  recoveryAttempts: 0,
 };
 
-describe("getAudioRecoveryAction", () => {
-  it("resumes when native audio pauses unexpectedly while play intent remains active", () => {
-    expect(getAudioRecoveryAction("pause", baseSnapshot)).toBe(
-      "resume-current-track",
-    );
+describe("getPlaybackReaction", () => {
+  it("reflects playback started outside the app (headset, lock screen, OS)", () => {
+    expect(getPlaybackReaction({ ...context, intentPlaying: false })).toBe("sync-playing");
+    expect(getPlaybackReaction(context)).toBe("none");
   });
 
-  it("does nothing for an explicit user pause", () => {
+  it("reflects an interruption as paused instead of fighting it", () => {
+    expect(getPlaybackReaction({ ...context, status: "paused" })).toBe("sync-paused");
+    expect(getPlaybackReaction({ ...context, status: "paused", intentPlaying: false })).toBe("none");
+  });
+
+  it("waits while buffering", () => {
+    expect(getPlaybackReaction({ ...context, status: "buffering" })).toBe("none");
+  });
+
+  it("advances after a natural end", () => {
+    expect(getPlaybackReaction({ ...context, status: "ended", position: 3599 })).toBe("advance");
+  });
+
+  it("does not advance when the end was reached by seeking while paused", () => {
     expect(
-      getAudioRecoveryAction("pause", {
-        ...baseSnapshot,
-        intentPlaying: false,
-        userPausedAt: Date.now(),
-      }),
+      getPlaybackReaction({ ...context, status: "ended", position: 3600, intentPlaying: false }),
     ).toBe("none");
   });
 
-  it("reloads the current track after a native error while still intending to play", () => {
+  it("retries a stream that ended long before its duration", () => {
+    expect(getPlaybackReaction({ ...context, status: "ended", position: 1200 })).toBe("retry");
     expect(
-      getAudioRecoveryAction("error", {
-        ...baseSnapshot,
-        nativeErrored: true,
+      getPlaybackReaction({
+        ...context,
+        status: "ended",
+        position: 1200,
+        recoveryAttempts: MAX_RECOVERY_ATTEMPTS,
       }),
-    ).toBe("reload-current-track");
+    ).toBe("fail");
   });
 
-  it("marks playback ended when native media ended near duration", () => {
+  it("retries media errors only while online and under the attempt limit", () => {
+    expect(getPlaybackReaction({ ...context, status: "error" })).toBe("retry");
+    expect(getPlaybackReaction({ ...context, status: "error", online: false })).toBe("fail");
     expect(
-      getAudioRecoveryAction("ended", {
-        ...baseSnapshot,
-        nativePaused: true,
-        nativeEnded: true,
-        currentTime: 3599,
-        duration: 3600,
-      }),
-    ).toBe("mark-ended");
+      getPlaybackReaction({ ...context, status: "error", recoveryAttempts: MAX_RECOVERY_ATTEMPTS }),
+    ).toBe("fail");
   });
 
-  it("defers recovery while the document is hidden and the engine still reports playing", () => {
-    expect(
-      getAudioRecoveryAction("visibility-hidden", {
-        ...baseSnapshot,
-        documentVisible: false,
-        enginePlaying: true,
-        nativePaused: false,
-      }),
-    ).toBe("none");
-  });
-
-  it("does not immediately reverse a hidden native pause", () => {
-    expect(
-      getAudioRecoveryAction("pause", {
-        ...baseSnapshot,
-        documentVisible: false,
-        enginePlaying: false,
-        nativePaused: true,
-      }),
-    ).toBe("none");
-  });
-
-  it("does not recover stale native events from another track", () => {
-    expect(
-      getAudioRecoveryAction("pause", {
-        ...baseSnapshot,
-        sameTrack: false,
-      }),
-    ).toBe("none");
-  });
-
-  it("uses cooldown instead of repeated immediate resume attempts", () => {
-    expect(
-      getAudioRecoveryAction("stalled", {
-        ...baseSnapshot,
-        msSinceLastRecovery: 250,
-      }),
-    ).toBe("wait-for-cooldown");
-  });
-
-  it("asks for user gesture after browser autoplay blocks resume", () => {
-    expect(
-      getAudioRecoveryAction("pause", {
-        ...baseSnapshot,
-        playBlockedByBrowser: true,
-      }),
-    ).toBe("needs-user-gesture");
-  });
-
-  it("asks for user gesture after max recovery attempts are exhausted", () => {
-    expect(
-      getAudioRecoveryAction("waiting", {
-        ...baseSnapshot,
-        recoveryAttemptsForTrack: 3,
-      }),
-    ).toBe("needs-user-gesture");
+  it("ignores errors of a track nobody is trying to play", () => {
+    expect(getPlaybackReaction({ ...context, status: "error", intentPlaying: false })).toBe("none");
   });
 });
 
-describe("getNativeAudioSyncAction", () => {
-  it("marks UI as playing when native audio resumes the current track outside React intent", () => {
-    expect(
-      getNativeAudioSyncAction("playing", {
-        ...baseSnapshot,
-        intentPlaying: false,
-        enginePlaying: false,
-        nativePaused: false,
-      }),
-    ).toBe("mark-playing");
-  });
-
-  it("does not mark UI as playing for stale or non-playing native events", () => {
-    expect(
-      getNativeAudioSyncAction("playing", {
-        ...baseSnapshot,
-        intentPlaying: false,
-        enginePlaying: true,
-        nativePaused: false,
-        sameTrack: false,
-      }),
-    ).toBe("none");
-
-    expect(
-      getNativeAudioSyncAction("pause", {
-        ...baseSnapshot,
-        intentPlaying: false,
-        enginePlaying: false,
-        nativePaused: true,
-      }),
-    ).toBe("none");
+describe("getRetryDelayMs", () => {
+  it("backs off exponentially", () => {
+    expect([1, 2, 3].map(getRetryDelayMs)).toEqual([1000, 2000, 4000]);
   });
 });

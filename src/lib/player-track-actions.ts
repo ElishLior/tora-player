@@ -70,3 +70,7 @@ export function isTrackDownloadedInLesson(track: AudioTrack, downloadedLesson: O
     );
   });
 }
+
+/** The "back" control always rewinds this much; "forward" always advances SKIP_FORWARD_SECONDS. */
+export const SKIP_BACK_SECONDS = 15;
+export const SKIP_FORWARD_SECONDS = 30;

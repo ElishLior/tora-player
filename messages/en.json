@@ -1,6 +1,7 @@
 {
   "common": {
     "appName": "Tora Player",
+    "offline": "Offline",
     "home": "Home",
     "lessons": "Lessons",
     "playlists": "Playlists",
@@ -66,8 +67,8 @@
   "player": {
     "play": "Play",
     "pause": "Pause",
-    "skipForward": "Skip 15s forward",
-    "skipBackward": "Skip 15s backward",
+    "skipForward": "Skip 30 seconds forward",
+    "skipBackward": "Back 15 seconds",
     "speed": "Speed",
     "volume": "Volume",
     "cast": "Cast",
@@ -84,20 +85,31 @@
     "shareClip": "Share Clip",
     "openLesson": "Open lesson",
     "noActiveLesson": "No active lesson",
-    "clipMode": "Clip Mode"
+    "clipMode": "Clip Mode",
+    "skipBackwardShort": "-15",
+    "skipForwardShort": "+30",
+    "seek": "Position in lesson",
+    "closePlayer": "Close player",
+    "lessonFallback": "Torah lesson",
+    "audioFiles": "Audio files",
+    "part": "Part {number}",
+    "issue": {
+      "retrying": "Connection lost, trying to continue…",
+      "blocked": "The browser stopped playback. Tap play to continue.",
+      "failed": "Playback stopped. Tap play to try again."
+    }
   },
   "driving": {
     "title": "Driving Mode",
     "noActiveLesson": "No active lesson",
-    "back": "Back",
     "close": "Close driving mode",
     "play": "Play",
     "pause": "Pause",
-    "skipForward": "15 seconds forward",
-    "skipBackward": "15 seconds back",
     "offlineRecommended": "For stable driving playback or low-signal areas, save this lesson offline before the drive.",
-    "playbackRecovering": "Playback stalled and Tora Player is trying to resume.",
-    "tapToResume": "Tap to resume playback"
+    "previousLesson": "Previous lesson",
+    "nextLesson": "Next lesson",
+    "speed": "Playback speed {speed}",
+    "browseLessons": "Browse lessons"
   },
   "playlists": {
     "title": "Playlists",
@@ -179,6 +191,16 @@
   },
   "bookmarks": {
     "title": "Bookmarks",
+    "time": "Time:",
+    "tag": "Tag",
+    "note": "Note (optional)",
+    "notePlaceholder": "Write a note...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "close": "Close",
+    "jumpToTime": "Jump to {time}",
+    "deleteBookmark": "Delete bookmark {time}",
+    "deleteSyncFailed": "Removed from this device, but not from your account.",
     "addBookmark": "Add Bookmark",
     "bookmarkLabel": "Label",
     "noBookmarks": "No bookmarks yet",
