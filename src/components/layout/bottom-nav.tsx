@@ -1,6 +1,6 @@
 'use client';
 
-import { Home, BookOpen, Search, ListMusic, Bookmark } from 'lucide-react';
+import { Home, BookOpen, Scissors, ListMusic, Bookmark } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useAudioStore } from '@/stores/audio-store';
@@ -16,7 +16,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { href: '', labelHe: 'בית', labelEn: 'Home', icon: Home },
   { href: '/lessons', labelHe: 'שיעורים', labelEn: 'Lessons', icon: BookOpen },
-  { href: '/search', labelHe: 'חיפוש', labelEn: 'Search', icon: Search },
+  { href: '/shorts', labelHe: 'קצרים', labelEn: 'Shorts', icon: Scissors },
   { href: '/bookmarks', labelHe: 'סימניות', labelEn: 'Bookmarks', icon: Bookmark },
   { href: '/playlists', labelHe: 'רשימות', labelEn: 'Playlists', icon: ListMusic },
 ];
