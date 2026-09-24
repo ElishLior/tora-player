@@ -66,6 +66,19 @@ describe('buildLessonDrafts', () => {
     expect(drafts[1].title).toBe(generateLessonMetadata('2026-09-25').title);
   });
 
+  it('groups phone voice-recorder files with WhatsApp files of the same day', () => {
+    const { drafts } = buildLessonDrafts(
+      [file('20260924-061500.mp3'), file('WhatsApp Audio 2026-09-24 at 05.00.01.opus')],
+      FALLBACK,
+    );
+    expect(drafts).toHaveLength(1);
+    expect(drafts[0]).toMatchObject({ date: '2026-09-24', isShort: false, dateFromFilename: true });
+    expect(drafts[0].audio.map((p) => [p.name, p.audioType])).toEqual([
+      ['WhatsApp Audio 2026-09-24 at 05.00.01.opus', 'סידור'],
+      ['20260924-061500.mp3', 'עץ חיים'],
+    ]);
+  });
+
   it('flags clips under two minutes and types only the real parts', () => {
     const { drafts } = buildLessonDrafts(
       [

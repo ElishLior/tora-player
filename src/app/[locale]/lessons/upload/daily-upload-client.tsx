@@ -372,6 +372,8 @@ function DraftCard({ draft, run, files, categories, onChange, onDescription, onU
   const t = useTranslations('upload');
   // Once the lesson row exists its fields are fixed here; later changes go through the edit page.
   const locked = run.lessonId != null || run.phase !== 'review';
+  // After a failed run, files that never landed can still be dropped before retrying.
+  const droppable = (entry: FileEntry | undefined) => run.phase === 'failed' && entry?.status !== 'done';
   const hebrewDate = useMemo(() => generateLessonMetadata(draft.date).hebrewDate, [draft.date]);
   const categoryOptions = draft.isShort ? categories.filter((c) => c.id === SHORTS_CATEGORY_ID) : categories;
   const canUpload = includedParts(draft).length > 0;
@@ -496,7 +498,7 @@ function DraftCard({ draft, run, files, categories, onChange, onDescription, onU
                   <input
                     type="checkbox"
                     checked={part.include}
-                    disabled={locked}
+                    disabled={locked && !droppable(entry)}
                     onChange={(e) =>
                       editPart(part.fileId, {
                         include: e.target.checked,
@@ -582,7 +584,18 @@ function DraftCard({ draft, run, files, categories, onChange, onDescription, onU
                         </button>
                       </>
                     ) : (
-                      <FileStatusIcon entry={entry} />
+                      <>
+                        <FileStatusIcon entry={entry} />
+                        {droppable(entry) && (
+                          <button
+                            type="button"
+                            aria-label={t('remove')}
+                            onClick={() => onChange((d) => ({ ...d, imageIds: d.imageIds.filter((x) => x !== id) }))}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </>
                     )}
                   </div>
                   {entry?.status === 'error' && (
