@@ -106,6 +106,8 @@ function startTrack(track: AudioTrack) {
     duration: track.duration || 0,
     resumePosition: 0,
     isPlaying: true,
+    // The element still reports the previous track until the new one loads.
+    playbackStatus: "idle" as const,
     playbackIssue: null,
   };
 }

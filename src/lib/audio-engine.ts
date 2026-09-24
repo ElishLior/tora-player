@@ -211,7 +211,10 @@ export class AudioEngine {
     if (element.error) return "error";
     if (element.ended) return "ended";
     if (element.paused) return "paused";
-    return element.readyState >= HAVE_FUTURE_DATA ? "playing" : "buffering";
+    if (element.readyState >= HAVE_FUTURE_DATA) return "playing";
+    // A skip briefly drops readyState even inside the buffer; only a real
+    // wait for data (after the seek completes) counts as buffering.
+    return element.seeking && this.status === "playing" ? "playing" : "buffering";
   }
 
   private updateStatus = () => {

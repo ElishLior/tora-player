@@ -5,6 +5,7 @@ import { AudioEngine, type AudioEngineStatus } from "./audio-engine";
 class FakeAudioElement {
   paused = true;
   ended = false;
+  seeking = false;
   error: { code: number } | null = null;
   readyState = 0;
   currentTime = 0;
@@ -189,6 +190,24 @@ describe("AudioEngine", () => {
     element.paused = true; // phone call / Siri / Bluetooth disconnect
     element.emit("pause");
     expect(engine.getStatus()).toBe("paused");
+  });
+
+  it("keeps showing playing through a skip, and buffering only for a real wait", () => {
+    const { element, engine, statuses } = env;
+    engine.load(LESSON_URL, { trackKey: "lesson-1" });
+    startPlaying(element, engine);
+
+    element.seeking = true;
+    element.readyState = 1;
+    element.emit("waiting");
+    element.seeking = false;
+    element.readyState = 4;
+    element.emit("seeked");
+    expect(statuses).toEqual(["playing"]);
+
+    element.readyState = 2;
+    element.emit("waiting");
+    expect(engine.getStatus()).toBe("buffering");
   });
 
   it("reports play() refused by the autoplay policy, but not superseded plays", async () => {
