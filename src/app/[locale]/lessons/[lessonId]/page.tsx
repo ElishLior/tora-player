@@ -196,25 +196,6 @@ export default async function LessonDetailPage({ params }: Props) {
           </div>
         </div>
       )}
-
-      {/* Bookmarks */}
-      {lesson.bookmarks && lesson.bookmarks.length > 0 && (
-        <div dir="rtl">
-          <h2 className="text-sm font-bold mb-3 text-muted-foreground uppercase tracking-wider">
-            {locale === 'he' ? 'סימניות' : 'Bookmarks'}
-          </h2>
-          <div className="space-y-1">
-            {lesson.bookmarks.map((bm) => (
-              <div key={bm.id} className="flex items-center gap-3 rounded-md p-2.5 hover:bg-[hsl(var(--surface-highlight))] transition-colors">
-                <span className="text-xs text-primary tabular-nums">
-                  {formatDuration(bm.position)}
-                </span>
-                <span className="text-sm">{bm.note}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -24,7 +24,8 @@
     "noResults": "לא נמצאו תוצאות",
     "error": "שגיאה",
     "retry": "נסה שוב",
-    "back": "חזרה"
+    "back": "חזרה",
+    "offline": "אופליין"
   },
   "home": {
     "title": "נגן תורה",
@@ -65,8 +66,8 @@
   "player": {
     "play": "נגן",
     "pause": "השהה",
-    "skipForward": "דלג 15 שניות קדימה",
-    "skipBackward": "דלג 15 שניות אחורה",
+    "skipForward": "דלג 30 שניות קדימה",
+    "skipBackward": "חזור 15 שניות אחורה",
     "speed": "מהירות",
     "volume": "עוצמה",
     "cast": "שדר",
@@ -83,20 +84,31 @@
     "shareClip": "שתף קטע",
     "openLesson": "פתח שיעור",
     "noActiveLesson": "אין שיעור פעיל",
-    "clipMode": "מצב קטע"
+    "clipMode": "מצב קטע",
+    "skipBackwardShort": "15-",
+    "skipForwardShort": "30+",
+    "seek": "מיקום בשיעור",
+    "closePlayer": "סגור נגן",
+    "lessonFallback": "שיעור תורה",
+    "audioFiles": "קבצי שמע",
+    "part": "חלק {number}",
+    "issue": {
+      "retrying": "החיבור נקטע, מנסה להמשיך…",
+      "blocked": "הדפדפן עצר את ההשמעה. הקש על נגן כדי להמשיך.",
+      "failed": "ההשמעה נעצרה. הקש על נגן כדי לנסות שוב."
+    }
   },
   "driving": {
     "title": "מצב נהיגה",
     "noActiveLesson": "אין שיעור פעיל",
-    "back": "חזרה",
     "close": "סגור מצב נהיגה",
     "play": "נגן",
     "pause": "השהה",
-    "skipForward": "15 שניות קדימה",
-    "skipBackward": "15 שניות אחורה",
     "offlineRecommended": "להאזנה יציבה בנהיגה או באזורים בלי קליטה, שמור את השיעור לאופליין לפני הנסיעה.",
-    "playbackRecovering": "הנגן זיהה עצירה זמנית ומנסה להמשיך את ההשמעה.",
-    "tapToResume": "הקש כדי להמשיך להשמיע"
+    "previousLesson": "השיעור הקודם",
+    "nextLesson": "השיעור הבא",
+    "speed": "מהירות השמעה {speed}",
+    "browseLessons": "לרשימת השיעורים"
   },
   "playlists": {
     "title": "רשימות השמעה",
@@ -125,7 +137,17 @@
     "addBookmark": "הוסף סימניה",
     "bookmarkLabel": "תווית",
     "noBookmarks": "אין סימניות עדיין",
-    "jumpTo": "קפוץ אל"
+    "jumpTo": "קפוץ אל",
+    "time": "זמן:",
+    "tag": "סוג",
+    "note": "הערה (אופציונלי)",
+    "notePlaceholder": "כתוב הערה...",
+    "save": "שמור",
+    "cancel": "ביטול",
+    "close": "סגור",
+    "jumpToTime": "קפוץ אל {time}",
+    "deleteBookmark": "מחק את הסימניה {time}",
+    "deleteSyncFailed": "הסימניה נמחקה מהמכשיר, אך המחיקה מהחשבון נכשלה."
   },
   "offline": {
     "title": "הורדות",

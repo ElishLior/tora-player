@@ -1,9 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Search, Play, Pause, Music, Shield, WifiOff } from 'lucide-react';
+import { Search, Music, Shield, WifiOff } from 'lucide-react';
 import Link from 'next/link';
-import { useAudioStore } from '@/stores/audio-store';
+import { useTranslations } from 'next-intl';
+import { togglePlay } from '@/lib/audio-controller';
+import { getTransportState, useAudioStore } from '@/stores/audio-store';
+import { PlayPauseIcon } from '@/components/player/player-controls';
 
 interface HeaderProps {
   locale: string;
@@ -11,7 +14,10 @@ interface HeaderProps {
 
 export function Header({ locale }: HeaderProps) {
   const isRTL = locale === 'he';
-  const { currentTrack, isPlaying, togglePlay, toggleMiniPlayer } = useAudioStore();
+  const t = useTranslations();
+  const currentTrack = useAudioStore((s) => s.currentTrack);
+  const toggleMiniPlayer = useAudioStore((s) => s.toggleMiniPlayer);
+  const transport = useAudioStore(getTransportState);
   const [isAdminVisible, setIsAdminVisible] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
 
@@ -40,9 +46,7 @@ export function Header({ locale }: HeaderProps) {
             <div className="h-7 w-7 rounded-full bg-primary flex items-center justify-center">
               <span className="text-xs font-bold text-primary-foreground">ת</span>
             </div>
-            <h1 className="text-base font-bold text-foreground">
-              {isRTL ? 'נגן תורה' : 'Tora Player'}
-            </h1>
+            <h1 className="text-base font-bold text-foreground">{t('common.appName')}</h1>
           </div>
         </Link>
 
@@ -51,7 +55,7 @@ export function Header({ locale }: HeaderProps) {
           {isOffline && (
             <div className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-orange-500/15 text-orange-400 border border-orange-500/20">
               <WifiOff className="h-3 w-3" />
-              <span>{isRTL ? 'אופליין' : 'Offline'}</span>
+              <span>{t('common.offline')}</span>
             </div>
           )}
 
@@ -62,10 +66,10 @@ export function Header({ locale }: HeaderProps) {
                 type="button"
                 onClick={toggleMiniPlayer}
                 className="min-w-0 flex items-center gap-1.5 rounded-full px-1.5 py-0.5 hover:bg-primary/15 transition-colors"
-                aria-label={isRTL ? 'מתנגן כעת' : 'Now Playing'}
+                aria-label={t('player.nowPlaying')}
               >
                 <Music className="h-3 w-3 flex-shrink-0" />
-                <span className="truncate" dir="rtl">
+                <span className="truncate" dir="auto">
                   {currentTrack.hebrewTitle || currentTrack.title}
                 </span>
               </button>
@@ -73,13 +77,9 @@ export function Header({ locale }: HeaderProps) {
                 type="button"
                 onClick={togglePlay}
                 className="flex-shrink-0 rounded-full p-1 hover:bg-primary/15 transition-colors"
-                aria-label={isPlaying ? (isRTL ? 'השהה' : 'Pause') : isRTL ? 'נגן' : 'Play'}
+                aria-label={transport === 'paused' ? t('player.play') : t('player.pause')}
               >
-                {isPlaying ? (
-                  <Pause className="h-3 w-3 fill-current" />
-                ) : (
-                  <Play className="h-3 w-3 fill-current" />
-                )}
+                <PlayPauseIcon transport={transport} className="h-3 w-3" />
               </button>
             </div>
           )}
@@ -97,7 +97,7 @@ export function Header({ locale }: HeaderProps) {
           <Link
             href={`/${locale}/search`}
             className="rounded-full p-2 text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--surface-highlight))] transition-colors"
-            aria-label={isRTL ? 'חיפוש' : 'Search'}
+            aria-label={t('common.search')}
           >
             <Search className="h-4 w-4" />
           </Link>
