@@ -2,83 +2,95 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import {
-  AlertTriangle, ArrowRight, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp,
-  FileAudio, Loader2, RotateCcw, Upload, X, Zap,
-} from 'lucide-react';
+import { AlertTriangle, ArrowRight, Loader2, Upload } from 'lucide-react';
 import { Link } from '@/i18n/routing';
-import { createDraftLesson, findDuplicateAudio, publishUploadedLesson } from '@/actions/upload';
-import { ImageUnreadableError, uploadAudioFile, uploadImageFile } from '@/hooks/use-upload';
-import { extractAudioMetadata, formatFileSize } from '@/lib/audio-utils';
-import { shouldTranscode } from '@/lib/audio-transcode';
-import { generateLessonMetadata } from '@/lib/hebrew-date';
-import { LESSON_PART_TYPES, mediaKindOf, SHORTS_AUDIO_TYPE } from '@/lib/lesson-naming';
 import {
-  applyDuplicates,
+  announceUploadedLessons,
+  createDraftLesson,
+  lookupUploadTargets,
+  mergeLessonTags,
+  publishUploadedLesson,
+} from '@/actions/upload';
+import { ImageUnreadableError, uploadAudioFile, uploadImageFile } from '@/hooks/use-upload';
+import { extractAudioMetadata } from '@/lib/audio-utils';
+import { shouldTranscode } from '@/lib/audio-transcode';
+import { mediaKindOf } from '@/lib/lesson-naming';
+import { defaultNotifyMode, type NotifyMode } from '@/lib/notifications/batch-rules';
+import {
+  appendTarget,
+  applyUploadLookup,
   buildLessonDrafts,
+  compareDrafts,
+  draftState,
+  includedImages,
   includedParts,
   jerusalemToday,
   lessonFieldsForDraft,
+  lookupCandidates,
   mergeLessonDrafts,
-  setDraftDate,
-  setDraftShort,
-  SHORTS_CATEGORY_ID,
+  moveDraftToDate,
+  summarizeDrafts,
   type LessonDraft,
 } from '@/lib/upload-drafts';
-import { formatDuration } from '@/lib/utils';
+import { draftOutcome, pendingJobs, queueProgress, runQueue, type JobStatus, type UploadJob } from '@/lib/upload-queue';
+import { useAudioStore } from '@/stores/audio-store';
 import type { CategoryWithChildren } from '@/types/database';
+import { DraftRow } from './draft-row';
+import { takeSharedFiles } from './shared-files';
+import { UploadActionBar } from './upload-action-bar';
+import { draftJobs, NEW_RUN, rowStatus, type DraftRun, type FileEntry } from './upload-state';
+import { useUploadGuard } from './use-upload-guard';
 
-type FileStatus = 'ready' | 'uploading' | 'done' | 'error';
+/** Files sent at once across the whole batch. */
+const CONCURRENCY = 2;
+/** Bottom nav height (+ border), and the mini player above it when a track is loaded. */
+const BOTTOM_NAV_OFFSET = 57;
+const MINI_PLAYER_OFFSET = 56;
 
-interface FileEntry {
-  id: string;
-  file: File;
-  durationSec: number | null;
-  transcode: boolean;
-  previewUrl: string | null;
-  status: FileStatus;
-  progress: number;
-  error: string | null;
+interface SendJob extends UploadJob {
+  send: (entry: FileEntry, onProgress: (percent: number) => void) => Promise<unknown>;
 }
 
-type DraftPhase = 'review' | 'uploading' | 'failed' | 'published';
+/** Lesson fields can still change: upload not started, or its lesson row was never created. */
+const isOpenRun = (run: DraftRun) => run.phase === 'idle' || (run.phase === 'failed' && run.lessonId == null);
 
-interface DraftRun {
-  phase: DraftPhase;
-  lessonId: string | null;
-  error: string | null;
-  description: string;
+/** Server actions reject on network loss; turn that into their `{ error }` shape. */
+function settle<T>(promise: Promise<T>): Promise<T | { data?: undefined; error: string }> {
+  return promise.catch((err: unknown) => ({ error: err instanceof Error ? err.message : String(err) }));
 }
 
-const NEW_RUN: DraftRun = { phase: 'review', lessonId: null, error: null, description: '' };
-const PART_TYPE_OPTIONS = [...LESSON_PART_TYPES, SHORTS_AUDIO_TYPE];
-const inputClass =
-  'w-full rounded-lg bg-[hsl(var(--surface-elevated))] px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 border-0';
+const bidi = (text: string) => `\u2068${text}\u2069`;
 
-export default function DailyUploadClient({ categories }: { categories: CategoryWithChildren[] }) {
+export default function DailyUploadClient({ categories, shared }: { categories: CategoryWithChildren[]; shared: boolean }) {
   const t = useTranslations('upload');
   const [files, setFiles] = useState<Record<string, FileEntry>>({});
   const [drafts, setDrafts] = useState<LessonDraft[]>([]);
   const [runs, setRuns] = useState<Record<string, DraftRun>>({});
-  const [fallbackDate, setFallbackDate] = useState(() => jerusalemToday());
   const [unsupported, setUnsupported] = useState<string[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [notifyChoice, setNotifyChoice] = useState<NotifyMode | null>(null);
+  const [running, setRunning] = useState(false);
+  const [runJobs, setRunJobs] = useState<UploadJob[]>([]);
+  const [lookup, setLookup] = useState<{ signature: string; error: string | null }>({ signature: '', error: null });
+  const [sharedEmpty, setSharedEmpty] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const hasMiniPlayer = useAudioStore((s) => s.currentTrack != null);
 
-  // Async upload loops read the latest state through refs.
+  // The async upload run reads the latest state through refs.
   const filesRef = useRef(files);
   const draftsRef = useRef(drafts);
   const runsRef = useRef(runs);
+  const runningRef = useRef(false);
   filesRef.current = files;
   draftsRef.current = drafts;
   runsRef.current = runs;
 
   const runOf = (key: string) => runs[key] ?? NEW_RUN;
-  const isUploading = Object.values(runs).some((r) => r.phase === 'uploading');
 
   const patchFile = useCallback((id: string, patch: Partial<FileEntry>) => {
-    setFiles((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
+    setFiles((prev) => (prev[id] ? { ...prev, [id]: { ...prev[id], ...patch } } : prev));
   }, []);
   const patchRun = useCallback((key: string, patch: Partial<DraftRun>) => {
     setRuns((prev) => ({ ...prev, [key]: { ...(prev[key] ?? NEW_RUN), ...patch } }));
@@ -86,6 +98,8 @@ export default function DailyUploadClient({ categories }: { categories: Category
   const updateDraft = useCallback((key: string, update: (d: LessonDraft) => LessonDraft) => {
     setDrafts((prev) => prev.map((d) => (d.key === key ? update(d) : d)));
   }, []);
+
+  useUploadGuard(running, t('leaveWarning'));
 
   // Revoke image previews when the page goes away.
   useEffect(
@@ -96,16 +110,6 @@ export default function DailyUploadClient({ categories }: { categories: Category
     },
     [],
   );
-
-  useEffect(() => {
-    if (!isUploading) return;
-    const warn = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = t('leaveWarning');
-    };
-    window.addEventListener('beforeunload', warn);
-    return () => window.removeEventListener('beforeunload', warn);
-  }, [isUploading, t]);
 
   const addFiles = useCallback(async (list: File[]) => {
     const known = new Set(Object.values(filesRef.current).map((e) => `${e.file.name}:${e.file.size}`));
@@ -123,7 +127,7 @@ export default function DailyUploadClient({ categories }: { categories: Category
           durationSec,
           transcode: kind === 'audio' && shouldTranscode(file),
           previewUrl: kind === 'image' ? URL.createObjectURL(file) : null,
-          status: 'ready',
+          status: 'pending',
           progress: 0,
           error: null,
         };
@@ -132,149 +136,257 @@ export default function DailyUploadClient({ categories }: { categories: Category
 
     const { drafts: incoming, unsupportedIds } = buildLessonDrafts(
       entries.map((e) => ({ id: e.id, name: e.file.name, size: e.file.size, durationSec: e.durationSec })),
-      fallbackDate,
+      jerusalemToday(),
     );
-    // New files for a day that is already uploading/published start a new lesson.
-    const locked = new Set(
-      draftsRef.current.filter((d) => (runsRef.current[d.key] ?? NEW_RUN).phase !== 'review').map((d) => d.key),
+    // New files for a day whose upload already started become a lesson of their own
+    // (the lookup then appends them to that day's lesson).
+    const started = new Set(
+      draftsRef.current.filter((d) => !isOpenRun(runsRef.current[d.key] ?? NEW_RUN)).map((d) => d.key),
     );
-    const adjusted = incoming.map((d) => (locked.has(d.key) ? { ...d, key: `${d.key}#${crypto.randomUUID()}` } : d));
+    const adjusted = incoming.map((d) => (started.has(d.key) ? { ...d, key: `${d.key}#${crypto.randomUUID()}` } : d));
 
     setFiles((prev) => ({ ...prev, ...Object.fromEntries(entries.map((e) => [e.id, e])) }));
     setDrafts((prev) => mergeLessonDrafts(prev, adjusted));
-    setUnsupported((prev) => [
-      ...prev,
-      ...entries.filter((e) => unsupportedIds.includes(e.id)).map((e) => e.file.name),
-    ]);
+    setUnsupported((prev) => [...prev, ...entries.filter((e) => unsupportedIds.includes(e.id)).map((e) => e.file.name)]);
+    setSharedEmpty(false);
     setAnalyzing(false);
-  }, [fallbackDate]);
+  }, []);
 
-  // Duplicate detection: re-check whenever the files or dates under review change.
-  const reviewDrafts = drafts.filter((d) => runOf(d.key).phase === 'review');
-  const duplicateSignature = reviewDrafts
-    .map((d) => `${d.key}@${d.date}:${d.audio.map((p) => p.fileId).join(',')}`)
+  // Files shared from WhatsApp arrive through the service worker's stash.
+  const sharedTaken = useRef(false);
+  useEffect(() => {
+    if (!shared || sharedTaken.current) return;
+    sharedTaken.current = true;
+    window.history.replaceState(null, '', window.location.pathname);
+    takeSharedFiles()
+      .then((list) => (list.length > 0 ? addFiles(list) : setSharedEmpty(true)))
+      .catch(() => setSharedEmpty(true));
+  }, [shared, addFiles]);
+
+  // Check open drafts against the DB whenever their files or dates change:
+  // duplicates are skipped and days that already have a lesson are appended to.
+  const lookupSignature = drafts
+    .filter((d) => isOpenRun(runOf(d.key)))
+    .map((d) => `${d.key}@${d.date}:${[...d.audio, ...d.images].map((f) => f.fileId).join(',')}`)
     .join('|');
   useEffect(() => {
-    const candidates = draftsRef.current
-      .filter((d) => (runsRef.current[d.key] ?? NEW_RUN).phase === 'review')
-      .flatMap((d) => d.audio.map((p) => ({ fileId: p.fileId, date: d.date, size: p.size, name: p.name })));
-    if (candidates.length === 0) return;
+    if (!lookupSignature) return;
+    const open = (d: LessonDraft) => isOpenRun(runsRef.current[d.key] ?? NEW_RUN);
     let cancelled = false;
-    findDuplicateAudio(candidates).then((res) => {
-      if (cancelled || !res.data) return;
-      const duplicates = res.data;
-      setDrafts((prev) =>
-        prev.map((d) => ((runsRef.current[d.key] ?? NEW_RUN).phase === 'review' ? applyDuplicates(d, duplicates) : d)),
-      );
+    settle(lookupUploadTargets(draftsRef.current.filter(open).flatMap(lookupCandidates))).then((res) => {
+      if (cancelled) return;
+      if (res.data) {
+        const data = res.data;
+        setDrafts((prev) => prev.map((d) => (open(d) ? applyUploadLookup(d, data) : d)));
+      }
+      setLookup({ signature: lookupSignature, error: res.error ?? null });
     });
     return () => {
       cancelled = true;
     };
-  }, [duplicateSignature]);
+  }, [lookupSignature]);
+  const checking = lookupSignature !== '' && lookup.signature !== lookupSignature;
 
-  const uploadDraft = useCallback(async (key: string) => {
-    const draft = draftsRef.current.find((d) => d.key === key);
-    if (!draft) return;
-    const run = runsRef.current[key] ?? NEW_RUN;
-    patchRun(key, { phase: 'uploading', error: null });
+  const sortedDrafts = useMemo(() => [...drafts].sort(compareDrafts), [drafts]);
+  const summary = useMemo(() => summarizeDrafts(drafts), [drafts]);
+  const fileStatus = useMemo(() => Object.fromEntries(Object.values(files).map((e) => [e.id, e.status])), [files]);
+  const fileProgress = useMemo(() => Object.fromEntries(Object.values(files).map((e) => [e.id, e.progress])), [files]);
 
-    let lessonId = run.lessonId;
-    if (!lessonId) {
-      const created = await createDraftLesson(lessonFieldsForDraft(draft, run.description));
-      if (!created.data) {
-        patchRun(key, { phase: 'failed', error: t('createFailed', { error: `\u2068${created.error}\u2069` }) });
+  const batch = sortedDrafts.filter((d) => {
+    const run = runOf(d.key);
+    if (run.phase === 'failed' && run.lessonId) return true;
+    return isOpenRun(run) && draftState(d).kind === 'ready';
+  });
+  const blocked = sortedDrafts.filter((d) => isOpenRun(runOf(d.key)) && draftState(d).kind === 'attention').length;
+  const failed = sortedDrafts.filter((d) => runOf(d.key).phase === 'failed').length;
+  const finished =
+    !running &&
+    batch.length === 0 &&
+    blocked === 0 &&
+    sortedDrafts.some((d) => ['published', 'saved'].includes(runOf(d.key).phase));
+  // Appends to a lesson that is already public are never announced.
+  const notifyMode =
+    notifyChoice ?? defaultNotifyMode(batch.filter((d) => !appendTarget(d)?.isPublished).length);
+
+  const runBatch = async (keys: string[], publish: boolean) => {
+    if (runningRef.current || keys.length === 0) return;
+    runningRef.current = true;
+    setRunning(true);
+    const mode = notifyMode;
+    const drafted = keys
+      .map((key) => draftsRef.current.find((d) => d.key === key))
+      .filter((d): d is LessonDraft => d != null);
+    const status: Record<string, JobStatus> = Object.fromEntries(
+      Object.values(filesRef.current).map((e) => [e.id, e.status]),
+    );
+    const lessonIds: Record<string, string> = {};
+    const newlyPublished: string[] = [];
+    for (const draft of drafted) patchRun(draft.key, { phase: 'queued', error: null, publish });
+
+    // 1. The lesson rows: created unpublished, or the existing lesson of that day.
+    for (const draft of drafted) {
+      let lessonId = (runsRef.current[draft.key] ?? NEW_RUN).lessonId ?? appendTarget(draft)?.id ?? null;
+      if (!lessonId) {
+        const created = await settle(createDraftLesson(lessonFieldsForDraft(draft)));
+        if (!created.data) {
+          patchRun(draft.key, { phase: 'failed', error: t('createFailed', { error: bidi(created.error) }) });
+          continue;
+        }
+        lessonId = created.data.id;
+      }
+      lessonIds[draft.key] = lessonId;
+      patchRun(draft.key, { lessonId });
+    }
+
+    // 2. One queue for every file of the batch; files that landed in an earlier run are skipped.
+    const jobs: SendJob[] = drafted
+      .filter((d) => lessonIds[d.key])
+      .flatMap((draft) => {
+        const lessonId = lessonIds[draft.key];
+        const all: SendJob[] = [
+          ...includedParts(draft).map((part) => ({
+            id: part.fileId,
+            draftKey: draft.key,
+            bytes: part.size,
+            send: (entry: FileEntry, onProgress: (percent: number) => void) =>
+              uploadAudioFile(entry.file, {
+                lessonId,
+                sortOrder: part.sortOrder,
+                audioType: part.audioType,
+                duration: part.durationSec ?? 0,
+                transcode: entry.transcode,
+                onProgress,
+              }),
+          })),
+          ...includedImages(draft).map((image) => ({
+            id: image.fileId,
+            draftKey: draft.key,
+            bytes: image.size,
+            send: (entry: FileEntry) => uploadImageFile(entry.file, { lessonId, sortOrder: image.sortOrder }),
+          })),
+        ];
+        return pendingJobs(all, status);
+      });
+    const jobIdsOf = (key: string) => jobs.filter((job) => job.draftKey === key).map((job) => job.id);
+    setRunJobs(jobs);
+
+    // 3. A lesson whose files all landed is finished: tags merged, then published (or kept as draft).
+    const finish = async (draft: LessonDraft) => {
+      const target = appendTarget(draft);
+      if (target && draft.tags.length > 0) {
+        const merged = await settle(mergeLessonTags(target.id, draft.tags));
+        if (!merged.data) {
+          patchRun(draft.key, { phase: 'failed', error: t('tagsFailed', { error: bidi(merged.error) }) });
+          return;
+        }
+      }
+      if (!publish) {
+        patchRun(draft.key, { phase: target?.isPublished ? 'published' : 'saved', error: null });
         return;
       }
-      lessonId = created.data.id;
-      patchRun(key, { lessonId });
-    }
-
-    let failures = 0;
-    const jobs = [
-      ...includedParts(draft).map((part) => ({
-        id: part.fileId,
-        send: (entry: FileEntry) =>
-          uploadAudioFile(entry.file, {
-            lessonId: lessonId!,
-            sortOrder: part.sortOrder,
-            audioType: part.audioType,
-            duration: part.durationSec ?? 0,
-            transcode: entry.transcode,
-            onProgress: (progress) => patchFile(part.fileId, { progress }),
-          }),
-      })),
-      ...draft.imageIds.map((id, sortOrder) => ({
-        id,
-        send: (entry: FileEntry) => uploadImageFile(entry.file, { lessonId: lessonId!, sortOrder }),
-      })),
-    ];
-    for (const job of jobs) {
-      const entry = filesRef.current[job.id];
-      if (entry.status === 'done') continue;
-      patchFile(job.id, { status: 'uploading', progress: 0, error: null });
-      try {
-        await job.send(entry);
-        patchFile(job.id, { status: 'done', progress: 100 });
-      } catch (err) {
-        failures++;
-        patchFile(job.id, {
-          status: 'error',
-          error: err instanceof ImageUnreadableError ? t('imageUnreadable') : err instanceof Error ? err.message : String(err),
-        });
+      const published = await settle(publishUploadedLesson(lessonIds[draft.key], false));
+      if (!published.data) {
+        patchRun(draft.key, { phase: 'failed', error: t('publishFailed', { error: bidi(published.error) }) });
+        return;
       }
+      if (published.data.newlyPublished) newlyPublished.push(published.data.id);
+      patchRun(draft.key, { phase: 'published', error: null });
+    };
+
+    for (const draft of drafted) {
+      if (lessonIds[draft.key] && jobIdsOf(draft.key).length === 0) await finish(draft);
     }
 
-    if (failures > 0) {
-      patchRun(key, { phase: 'failed', error: t('filesFailed') });
-      return;
-    }
-    const published = await publishUploadedLesson(lessonId);
-    if (!published.data) {
-      patchRun(key, { phase: 'failed', error: t('publishFailed', { error: `\u2068${published.error}\u2069` }) });
-      return;
-    }
-    patchRun(key, { phase: 'published', error: null });
-  }, [patchFile, patchRun, t]);
+    await runQueue(
+      jobs,
+      CONCURRENCY,
+      async (job) => {
+        status[job.id] = 'running';
+        patchFile(job.id, { status: 'running', progress: 0, error: null });
+        patchRun(job.draftKey, { phase: 'uploading' });
+        await job.send(filesRef.current[job.id], (progress) => patchFile(job.id, { progress }));
+      },
+      async (job, outcome) => {
+        status[job.id] = outcome.ok ? 'done' : 'error';
+        patchFile(
+          job.id,
+          outcome.ok
+            ? { status: 'done', progress: 100 }
+            : {
+                status: 'error',
+                error:
+                  outcome.error instanceof ImageUnreadableError
+                    ? t('imageUnreadable')
+                    : outcome.error instanceof Error
+                      ? outcome.error.message
+                      : String(outcome.error),
+              },
+        );
+        const ids = jobIdsOf(job.draftKey);
+        const result = draftOutcome(ids, status);
+        if (result === 'uploading') return;
+        if (result === 'failed') {
+          const count = ids.filter((id) => status[id] === 'error').length;
+          patchRun(job.draftKey, { phase: 'failed', error: t('filesFailed', { count }) });
+          return;
+        }
+        await finish(drafted.find((d) => d.key === job.draftKey)!);
+      },
+    );
 
-  const pendingKeys = drafts
-    .filter((d) => runOf(d.key).phase !== 'published' && includedParts(d).length > 0)
-    .map((d) => d.key);
-
-  const uploadAll = async () => {
-    for (const key of pendingKeys) await uploadDraft(key);
+    // 4. One announcement for everything this run published ('none' still marks them announced).
+    if (publish && newlyPublished.length > 0) await settle(announceUploadedLessons(newlyPublished, mode));
+    runningRef.current = false;
+    setRunning(false);
+    setRunJobs([]);
   };
 
-  const removeDraft = (key: string) => {
-    const draft = drafts.find((d) => d.key === key);
-    if (!draft) return;
-    const ids = [...draft.audio.map((p) => p.fileId), ...draft.imageIds];
-    for (const id of ids) {
-      const url = files[id]?.previewUrl;
-      if (url) URL.revokeObjectURL(url);
+  const onDateChange = (key: string, date: string) => {
+    const before = draftsRef.current.find((d) => d.key === key);
+    const firstFile = before?.audio[0]?.fileId ?? before?.images[0]?.fileId;
+    const next = moveDraftToDate(draftsRef.current, key, date, (k) => isOpenRun(runsRef.current[k] ?? NEW_RUN));
+    setDrafts(next);
+    // The draft may have taken that day's key or joined its draft; keep it open.
+    const moved = next.find((d) => [...d.audio, ...d.images].some((f) => f.fileId === firstFile)) ?? next.find((d) => d.key === key);
+    if (moved) setExpanded(moved.key);
+  };
+
+  const startOver = () => {
+    for (const entry of Object.values(files)) {
+      if (entry.previewUrl) URL.revokeObjectURL(entry.previewUrl);
     }
-    setDrafts((prev) => prev.filter((d) => d.key !== key));
-    setFiles((prev) => Object.fromEntries(Object.entries(prev).filter(([id]) => !ids.includes(id))));
+    setFiles({});
+    setDrafts([]);
+    setRuns({});
+    setUnsupported([]);
+    setExpanded(null);
+    setNotifyChoice(null);
+    setSharedEmpty(false);
+    setLookup({ signature: '', error: null });
   };
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragging(false);
-    if (!analyzing) addFiles(Array.from(e.dataTransfer.files));
+    if (!analyzing) void addFiles(Array.from(e.dataTransfer.files));
   };
 
+  const runPercent = queueProgress(runJobs, fileStatus, fileProgress);
+  const hasDrafts = drafts.length > 0;
+
   return (
-    <div className="mx-auto max-w-2xl space-y-5 animate-fade-in">
+    <div className="mx-auto max-w-2xl space-y-4 animate-fade-in">
       <div className="flex items-center gap-3">
         <Link
           href="/lessons"
           aria-label={t('back')}
-          className="rounded-full p-2 text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--surface-highlight))] transition-colors"
+          className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-[hsl(var(--surface-highlight))] hover:text-foreground"
         >
           <ArrowRight className="h-5 w-5 ltr:rotate-180" />
         </Link>
-        <div>
+        <div className="min-w-0">
           <h1 className="text-xl font-bold">{t('title')}</h1>
-          <p className="text-xs text-muted-foreground">{t('subtitle')}</p>
+          {!hasDrafts && <p className="text-xs text-muted-foreground">{t('subtitle')}</p>}
         </div>
       </div>
 
@@ -283,397 +395,117 @@ export default function DailyUploadClient({ categories }: { categories: Category
         tabIndex={0}
         onClick={() => !analyzing && inputRef.current?.click()}
         onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && inputRef.current?.click()}
-        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragging(true);
+        }}
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
-        className={`flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-8 text-center transition-all cursor-pointer ${
-          dragging ? 'border-primary bg-primary/5' : 'border-[hsl(0,0%,25%)] hover:border-primary/50'
-        }`}
+        className={`flex cursor-pointer items-center justify-center rounded-xl border-2 border-dashed text-center transition-all ${
+          hasDrafts ? 'gap-2 p-3' : 'flex-col p-8'
+        } ${dragging ? 'border-primary bg-primary/5' : 'border-[hsl(0,0%,25%)] hover:border-primary/50'}`}
       >
         <input
           ref={inputRef}
           type="file"
           multiple
-          accept="audio/*,image/*,.opus,.ogg,.oga,.m4a,.heic,.heif"
+          accept="audio/*,image/*,.opus,.ogg,.oga,.m4a,.mp3,.heic,.heif"
           className="hidden"
           onChange={(e) => {
-            addFiles(Array.from(e.target.files ?? []));
+            void addFiles(Array.from(e.target.files ?? []));
             e.target.value = '';
           }}
         />
         {analyzing ? (
-          <Loader2 className="h-6 w-6 mb-2 animate-spin text-muted-foreground" />
+          <Loader2 className={`animate-spin text-muted-foreground ${hasDrafts ? 'h-4 w-4' : 'mb-2 h-6 w-6'}`} />
         ) : (
-          <Upload className="h-6 w-6 mb-2 text-muted-foreground" />
+          <Upload className={`text-muted-foreground ${hasDrafts ? 'h-4 w-4' : 'mb-2 h-6 w-6'}`} />
         )}
-        <p className="text-sm font-medium">{analyzing ? t('analyzing') : t('dropHere')}</p>
-        <p className="text-xs text-muted-foreground mt-1">{t('dropHint')}</p>
+        <p className="text-sm font-medium">{analyzing ? t('analyzing') : hasDrafts ? t('dropMore') : t('dropHere')}</p>
+        {!hasDrafts && <p className="mt-1 text-xs text-muted-foreground">{t('dropHint')}</p>}
       </div>
 
-      <label className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-        <span>{t('fallbackDate')}</span>
-        <input
-          type="date"
-          value={fallbackDate}
-          onChange={(e) => e.target.value && setFallbackDate(e.target.value)}
-          className={`${inputClass} max-w-[11rem]`}
-        />
-      </label>
+      {sharedEmpty && <Notice>{t('sharedEmpty')}</Notice>}
+      {unsupported.length > 0 && <Notice>{t('unsupported', { names: unsupported.map(bidi).join(', ') })}</Notice>}
+      {lookup.error && !checking && <Notice>{t('lookupFailed', { error: bidi(lookup.error) })}</Notice>}
 
-      {unsupported.length > 0 && (
-        <p className="flex items-start gap-1.5 text-xs text-amber-500">
-          <AlertTriangle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
-          <span>{t('unsupported', { names: unsupported.map((n) => `\u2068${n}\u2069`).join(', ') })}</span>
-        </p>
-      )}
-
-      {drafts.map((draft) => (
-        <DraftCard
-          key={draft.key}
-          draft={draft}
-          run={runOf(draft.key)}
-          files={files}
-          categories={categories}
-          onChange={(update) => updateDraft(draft.key, update)}
-          onDescription={(description) => patchRun(draft.key, { description })}
-          onUpload={() => uploadDraft(draft.key)}
-          onRemove={() => removeDraft(draft.key)}
-          disabled={isUploading}
-        />
-      ))}
-
-      {pendingKeys.length > 1 && (
-        <button
-          type="button"
-          onClick={uploadAll}
-          disabled={isUploading || analyzing}
-          className="w-full rounded-full bg-primary py-3.5 text-sm font-bold text-primary-foreground transition-all hover:bg-primary/90 disabled:opacity-40"
-        >
-          {isUploading ? t('uploading') : t('uploadAll', { count: pendingKeys.length })}
-        </button>
-      )}
-    </div>
-  );
-}
-
-interface DraftCardProps {
-  draft: LessonDraft;
-  run: DraftRun;
-  files: Record<string, FileEntry>;
-  categories: CategoryWithChildren[];
-  onChange: (update: (d: LessonDraft) => LessonDraft) => void;
-  onDescription: (value: string) => void;
-  onUpload: () => void;
-  onRemove: () => void;
-  disabled: boolean;
-}
-
-function DraftCard({ draft, run, files, categories, onChange, onDescription, onUpload, onRemove, disabled }: DraftCardProps) {
-  const t = useTranslations('upload');
-  // Once the lesson row exists its fields are fixed here; later changes go through the edit page.
-  const locked = run.lessonId != null || run.phase !== 'review';
-  // After a failed run, files that never landed can still be dropped before retrying.
-  const droppable = (entry: FileEntry | undefined) => run.phase === 'failed' && entry?.status !== 'done';
-  const hebrewDate = useMemo(() => generateLessonMetadata(draft.date).hebrewDate, [draft.date]);
-  const categoryOptions = draft.isShort ? categories.filter((c) => c.id === SHORTS_CATEGORY_ID) : categories;
-  const canUpload = includedParts(draft).length > 0;
-
-  const movePart = (index: number, delta: number) =>
-    onChange((d) => {
-      const audio = [...d.audio];
-      const [part] = audio.splice(index, 1);
-      audio.splice(index + delta, 0, part);
-      return { ...d, audio, partsEdited: true };
-    });
-  const editPart = (fileId: string, patch: Partial<LessonDraft['audio'][number]>) =>
-    onChange((d) => ({
-      ...d,
-      partsEdited: true,
-      audio: d.audio.map((p) => (p.fileId === fileId ? { ...p, ...patch } : p)),
-    }));
-  const moveImage = (index: number, delta: number) =>
-    onChange((d) => {
-      const imageIds = [...d.imageIds];
-      const [id] = imageIds.splice(index, 1);
-      imageIds.splice(index + delta, 0, id);
-      return { ...d, imageIds };
-    });
-
-  return (
-    <section className="rounded-xl bg-[hsl(var(--surface-elevated))]/60 p-4 space-y-4 border border-[hsl(0,0%,18%)]">
-      <div className="flex flex-wrap items-center gap-2">
-        <input
-          type="date"
-          value={draft.date}
-          disabled={locked}
-          aria-label={t('date')}
-          onChange={(e) => e.target.value && onChange((d) => setDraftDate(d, e.target.value))}
-          className={`${inputClass} max-w-[11rem]`}
-        />
-        <span className="text-xs text-muted-foreground">{hebrewDate}</span>
-        <label className="ms-auto flex items-center gap-1.5 text-xs font-bold">
-          <input
-            type="checkbox"
-            checked={draft.isShort}
-            disabled={locked}
-            onChange={(e) => onChange((d) => setDraftShort(d, e.target.checked))}
-            className="h-4 w-4 accent-[hsl(var(--primary))]"
-          />
-          {t('shortToggle')}
-        </label>
-        {!locked && (
-          <button
-            type="button"
-            onClick={onRemove}
-            aria-label={t('removeDraft')}
-            className="rounded-full p-1 text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--surface-highlight))]"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        )}
-      </div>
-
-      {!draft.dateFromFilename && (
-        <p className="flex items-center gap-1.5 text-xs text-amber-500">
-          <AlertTriangle className="h-3.5 w-3.5" />
-          {t('dateNotDetected')}
-        </p>
-      )}
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="space-y-1 sm:col-span-2">
-          <span className="text-xs font-bold text-muted-foreground">{t('lessonTitle')}</span>
-          <input
-            type="text"
-            dir="auto"
-            value={draft.title}
-            disabled={locked}
-            onChange={(e) => onChange((d) => ({ ...d, title: e.target.value, titleEdited: true }))}
-            className={inputClass}
-          />
-        </label>
-        <label className="space-y-1">
-          <span className="text-xs font-bold text-muted-foreground">{t('category')}</span>
-          <select
-            value={draft.categoryId}
-            disabled={locked}
-            onChange={(e) => onChange((d) => ({ ...d, categoryId: e.target.value }))}
-            className={inputClass}
-          >
-            {!draft.isShort && <option value="">{t('noCategory')}</option>}
-            {categoryOptions.map((parent) => (
-              <optgroup key={parent.id} label={parent.hebrew_name}>
-                {draft.isShort && <option value={parent.id}>{parent.hebrew_name}</option>}
-                {parent.children.map((child) => (
-                  <option key={child.id} value={child.id}>{child.hebrew_name}</option>
-                ))}
-                {!draft.isShort && parent.children.length === 0 && (
-                  <option value={parent.id}>{parent.hebrew_name}</option>
-                )}
-              </optgroup>
-            ))}
-          </select>
-        </label>
-        <label className="space-y-1">
-          <span className="text-xs font-bold text-muted-foreground">{t('description')}</span>
-          <input
-            type="text"
-            dir="auto"
-            value={run.description}
-            disabled={locked}
-            onChange={(e) => onDescription(e.target.value)}
-            className={inputClass}
-          />
-        </label>
-      </div>
-
-      {draft.audio.length > 0 && (
-        <div className="space-y-1.5">
-          <h3 className="text-xs font-bold text-muted-foreground">{t('audioParts', { count: draft.audio.length })}</h3>
-          {draft.audio.map((part, index) => {
-            const entry = files[part.fileId];
-            return (
-              <div key={part.fileId} className="rounded-lg bg-background/40 p-2.5 space-y-1">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={part.include}
-                    disabled={locked && !droppable(entry)}
-                    onChange={(e) =>
-                      editPart(part.fileId, {
-                        include: e.target.checked,
-                        audioType: e.target.checked ? part.audioType : null,
-                      })
-                    }
-                    className="h-4 w-4 accent-[hsl(var(--primary))]"
-                  />
-                  <FileAudio className="h-4 w-4 flex-shrink-0 text-primary" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm text-start" dir="auto">{part.name}</p>
-                    <p className="text-[11px] text-muted-foreground">
-                      <bdi>{part.durationSec ? formatDuration(part.durationSec) : '—'}</bdi> · <bdi>{formatFileSize(part.size)}</bdi>
-                    </p>
-                  </div>
-                  <select
-                    value={part.audioType ?? ''}
-                    disabled={locked || !part.include}
-                    onChange={(e) => editPart(part.fileId, { audioType: e.target.value || null })}
-                    className="rounded-md bg-[hsl(var(--surface-elevated))] px-2 py-1 text-xs border-0"
-                  >
-                    <option value="">{t('noType')}</option>
-                    {PART_TYPE_OPTIONS.map((type) => (
-                      <option key={type} value={type}>{type}</option>
-                    ))}
-                  </select>
-                  {!locked && (
-                    <div className="flex flex-col">
-                      <button type="button" aria-label={t('moveUp')} disabled={index === 0} onClick={() => movePart(index, -1)} className="disabled:opacity-30">
-                        <ChevronUp className="h-3.5 w-3.5" />
-                      </button>
-                      <button type="button" aria-label={t('moveDown')} disabled={index === draft.audio.length - 1} onClick={() => movePart(index, 1)} className="disabled:opacity-30">
-                        <ChevronDown className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  )}
-                  <FileStatusIcon entry={entry} />
-                </div>
-                {part.tooShort && <p className="text-[11px] text-amber-500">{t('tooShort')}</p>}
-                {part.duplicateOf && (
-                  <p className="text-[11px] text-amber-500">{t('duplicate', { title: part.duplicateOf })}</p>
-                )}
-                {entry?.transcode && part.include && (
-                  <p className="flex items-center gap-1 text-[11px] text-primary">
-                    <Zap className="h-3 w-3" />
-                    {t('willTranscode')}
-                  </p>
-                )}
-                <FileProgress entry={entry} />
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {draft.imageIds.length > 0 && (
-        <div className="space-y-1.5">
-          <h3 className="text-xs font-bold text-muted-foreground">{t('images', { count: draft.imageIds.length })}</h3>
-          <div className="flex flex-wrap gap-2">
-            {draft.imageIds.map((id, index) => {
-              const entry = files[id];
-              return (
-                <div key={id} className="relative h-20 w-20">
-                  {entry?.previewUrl && (
-                    // eslint-disable-next-line @next/next/no-img-element -- local blob preview
-                    <img src={entry.previewUrl} alt={entry.file.name} className="h-full w-full rounded-lg object-cover" />
-                  )}
-                  <div className="absolute inset-x-0 bottom-0 flex justify-between rounded-b-lg bg-black/60 px-1 py-0.5 text-white">
-                    {!locked ? (
-                      <>
-                        <button type="button" aria-label={t('moveUp')} disabled={index === 0} onClick={() => moveImage(index, -1)} className="disabled:opacity-30">
-                          <ChevronRight className="h-3.5 w-3.5 ltr:rotate-180" />
-                        </button>
-                        <button
-                          type="button"
-                          aria-label={t('remove')}
-                          onClick={() => onChange((d) => ({ ...d, imageIds: d.imageIds.filter((x) => x !== id) }))}
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                        <button type="button" aria-label={t('moveDown')} disabled={index === draft.imageIds.length - 1} onClick={() => moveImage(index, 1)} className="disabled:opacity-30">
-                          <ChevronLeft className="h-3.5 w-3.5 ltr:rotate-180" />
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <FileStatusIcon entry={entry} />
-                        {droppable(entry) && (
-                          <button
-                            type="button"
-                            aria-label={t('remove')}
-                            onClick={() => onChange((d) => ({ ...d, imageIds: d.imageIds.filter((x) => x !== id) }))}
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                      </>
-                    )}
-                  </div>
-                  {entry?.status === 'error' && (
-                    <p className="absolute inset-x-0 top-0 rounded-t-lg bg-destructive/90 px-1 text-[10px] text-destructive-foreground line-clamp-2" title={entry.error ?? ''}>
-                      <bdi>{entry.error}</bdi>
-                    </p>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {!canUpload && run.phase !== 'published' && (
-        <p className="text-xs text-muted-foreground">{t('noAudio')}</p>
-      )}
-      {run.error && (
-        <p className="flex items-start gap-1.5 text-xs text-destructive">
-          <AlertTriangle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
-          {run.error}
-        </p>
-      )}
-
-      <div className="flex items-center gap-2">
-        {run.phase === 'published' ? (
-          <>
-            <span className="flex items-center gap-1 text-sm font-bold text-primary">
-              <CheckCircle2 className="h-4 w-4" />
-              {t('published')}
+      {hasDrafts && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl bg-[hsl(var(--surface-elevated))]/60 px-3 py-2.5 text-xs">
+          <span className="font-bold">{t('summary.lessons', { count: summary.lessons })}</span>
+          {summary.shorts > 0 && <span className="font-bold">{t('summary.shorts', { count: summary.shorts })}</span>}
+          <span className="text-muted-foreground">{t('summary.recordings', { count: summary.recordings })}</span>
+          <span className="text-muted-foreground">{t('summary.images', { count: summary.images })}</span>
+          {(summary.duplicates > 0 || summary.undated > 0 || summary.tinyClips > 0) && (
+            <span className="flex basis-full flex-wrap gap-x-3 gap-y-1 text-amber-400">
+              {summary.duplicates > 0 && <span>{t('summary.duplicates', { count: summary.duplicates })}</span>}
+              {summary.undated > 0 && <span>{t('summary.undated', { count: summary.undated })}</span>}
+              {summary.tinyClips > 0 && <span>{t('summary.tinyClips', { count: summary.tinyClips })}</span>}
             </span>
-            <Link href={`/lessons/${run.lessonId}`} className="ms-auto text-sm font-bold underline">
-              {t('openLesson')}
-            </Link>
-          </>
-        ) : (
-          <>
-            <button
-              type="button"
-              onClick={onUpload}
-              disabled={disabled || !canUpload}
-              className="flex items-center gap-1.5 rounded-full bg-primary px-5 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
-            >
-              {run.phase === 'uploading' ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : run.phase === 'failed' ? (
-                <RotateCcw className="h-4 w-4" />
-              ) : (
-                <Upload className="h-4 w-4" />
-              )}
-              {run.phase === 'uploading' ? t('uploading') : run.phase === 'failed' ? t('retryFailed') : t('uploadDraft')}
-            </button>
-            {run.lessonId && run.phase === 'failed' && (
-              <Link href={`/lessons/${run.lessonId}/edit`} className="ms-auto text-xs underline text-muted-foreground">
-                {t('editLesson')}
-              </Link>
-            )}
-          </>
-        )}
+          )}
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {sortedDrafts.map((draft) => {
+          const run = runOf(draft.key);
+          return (
+            <DraftRow
+              key={draft.key}
+              draft={draft}
+              run={run}
+              status={rowStatus(draft, run, queueProgress(draftJobs(draft), fileStatus, fileProgress))}
+              open={isOpenRun(run)}
+              files={files}
+              categories={categories}
+              expanded={expanded === draft.key}
+              busy={running}
+              onToggle={() => setExpanded((current) => (current === draft.key ? null : draft.key))}
+              onChange={(update) => updateDraft(draft.key, update)}
+              onDateChange={(date) => onDateChange(draft.key, date)}
+              onRetry={() => void runBatch([draft.key], run.publish)}
+            />
+          );
+        })}
       </div>
-    </section>
+
+      {hasDrafts && (
+        <>
+          {/* Room for the fixed action bar. */}
+          <div aria-hidden className="h-32" />
+          <UploadActionBar
+            bottomOffset={BOTTOM_NAV_OFFSET + (hasMiniPlayer ? MINI_PLAYER_OFFSET : 0)}
+            notifyMode={notifyMode}
+            onNotifyMode={setNotifyChoice}
+            count={batch.length}
+            blocked={blocked}
+            checking={checking || analyzing}
+            running={running}
+            progress={
+              running
+                ? {
+                    percent: runPercent,
+                    done: runJobs.filter((job) => fileStatus[job.id] === 'done').length,
+                    total: runJobs.length,
+                  }
+                : null
+            }
+            failed={failed}
+            finished={finished}
+            onPublish={() => void runBatch(batch.map((d) => d.key), true)}
+            onSaveDraft={() => void runBatch(batch.map((d) => d.key), false)}
+            onStartOver={startOver}
+          />
+        </>
+      )}
+    </div>
   );
 }
 
-function FileStatusIcon({ entry }: { entry: FileEntry | undefined }) {
-  if (entry?.status === 'uploading') return <Loader2 className="h-4 w-4 animate-spin text-primary" />;
-  if (entry?.status === 'done') return <CheckCircle2 className="h-4 w-4 text-primary" />;
-  if (entry?.status === 'error') return <AlertTriangle className="h-4 w-4 text-destructive" />;
-  return null;
-}
-
-function FileProgress({ entry }: { entry: FileEntry | undefined }) {
-  if (!entry) return null;
-  if (entry.status === 'error') return <p className="text-[11px] text-destructive"><bdi>{entry.error}</bdi></p>;
-  if (entry.status !== 'uploading') return null;
+function Notice({ children }: { children: React.ReactNode }) {
   return (
-    <div className="h-1 overflow-hidden rounded-full bg-[hsl(0,0%,24%)]">
-      <div className="h-full bg-primary transition-[width]" style={{ width: `${entry.progress}%` }} />
-    </div>
+    <p className="flex items-start gap-1.5 text-xs text-amber-500">
+      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+      <span>{children}</span>
+    </p>
   );
 }

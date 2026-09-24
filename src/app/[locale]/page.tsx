@@ -8,7 +8,7 @@ import { SHORTS_CATEGORY_ID } from '@/lib/upload-drafts';
 import { LessonCard } from '@/components/lessons/lesson-card';
 import { EmptyState } from '@/components/shared/empty-state';
 import { Link } from '@/i18n/routing';
-import { BookOpen, Wrench, Sparkles, Music, Scissors, FolderOpen, Plus, ChevronLeft } from 'lucide-react';
+import { BookOpen, Wrench, Sparkles, Music, Scissors, FolderOpen, ChevronLeft, Upload } from 'lucide-react';
 import { isAdmin } from '@/lib/auth/admin';
 import { ContinueListeningSection } from '@/components/home/continue-listening-section';
 import type { CategoryWithChildren, LessonWithRelations } from '@/types/database';
@@ -46,6 +46,7 @@ export default async function HomePage({ params }: Props) {
   setRequestLocale(locale);
   const t = await getTranslations('home');
   const tShorts = await getTranslations('shorts');
+  const tUpload = await getTranslations('upload.entry');
 
   const supabase = await createServerSupabaseClient();
   const admin = await isAdmin();
@@ -82,6 +83,22 @@ export default async function HomePage({ params }: Props) {
       <section className="pt-2">
         <h1 className="text-2xl font-bold text-foreground">{t('welcome')}</h1>
       </section>
+
+      {admin && (
+        <Link
+          href="/lessons/upload"
+          className="flex items-center gap-3 rounded-xl bg-primary p-4 text-primary-foreground transition-colors hover:bg-primary/90"
+        >
+          <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-primary-foreground/15">
+            <Upload className="h-5 w-5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-base font-bold">{tUpload('cta')}</span>
+            <span className="block text-xs opacity-80">{tUpload('hint')}</span>
+          </span>
+          <ChevronLeft className="h-5 w-5 flex-shrink-0 ltr:rotate-180" />
+        </Link>
+      )}
 
       {/* Categories grid */}
       <section>
@@ -154,24 +171,13 @@ export default async function HomePage({ params }: Props) {
       <section>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-bold">{t('recentLessons')}</h2>
-          <div className="flex items-center gap-2">
-            <Link
-              href="/lessons"
-              className="flex items-center gap-0.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {isRTL ? 'הצג הכל' : 'Show all'}
-              <ChevronLeft className="h-3.5 w-3.5" />
-            </Link>
-            {admin && (
-              <Link
-                href="/lessons/upload"
-                className="flex items-center gap-1 rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90 hover:scale-105 transition-all"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                {isRTL ? 'הוסף' : 'Add'}
-              </Link>
-            )}
-          </div>
+          <Link
+            href="/lessons"
+            className="flex items-center gap-0.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {isRTL ? 'הצג הכל' : 'Show all'}
+            <ChevronLeft className="h-3.5 w-3.5" />
+          </Link>
         </div>
         {recentLessons.length > 0 ? (
           <div className="space-y-0.5">

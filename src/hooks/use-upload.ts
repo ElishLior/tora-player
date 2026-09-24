@@ -171,7 +171,7 @@ export interface UploadMultipleResult {
   failed: Array<{ fileName: string; error: string }>;
 }
 
-/** Sequential multi-file audio upload with per-file progress, for the edit and share pages. */
+/** Sequential multi-file audio upload with per-file progress, for the lesson edit page. */
 export function useUpload() {
   const [status, setStatus] = useState<UploadStatus>('idle');
   const [progress, setProgress] = useState(0);

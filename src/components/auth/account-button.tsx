@@ -3,20 +3,21 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
-import { Shield, UserRound } from 'lucide-react';
+import { Shield, Upload, UserRound } from 'lucide-react';
 import { getViewer, type Viewer } from '@/actions/account';
 import { syncAccountData } from '@/lib/account/sync';
 
 /**
  * Header account entry: opens the personal library (/me) for everyone — an
  * initial avatar for signed-in users, a person icon for guests — plus the
- * admin shortcut for admins. Also links this device's bookmarks, progress and
- * notes to the signed-in account.
+ * lesson upload and admin shortcuts for admins. Also links this device's
+ * bookmarks, progress and notes to the signed-in account.
  */
 export function AccountButton() {
   const locale = useLocale();
   const t = useTranslations('auth');
   const tLibrary = useTranslations('library');
+  const tUpload = useTranslations('upload.entry');
   const [viewer, setViewer] = useState<Viewer | null>(null);
 
   useEffect(() => {
@@ -41,14 +42,24 @@ export function AccountButton() {
   return (
     <>
       {viewer?.isAdmin && (
-        <Link
-          href={`/${locale}/admin`}
-          aria-label={t('adminArea')}
-          title={t('adminArea')}
-          className="rounded-full p-2 text-primary/70 transition-colors hover:bg-primary/10 hover:text-primary"
-        >
-          <Shield className="h-4 w-4" />
-        </Link>
+        <>
+          <Link
+            href={`/${locale}/lessons/upload`}
+            aria-label={tUpload('cta')}
+            title={tUpload('cta')}
+            className="mx-0.5 rounded-full bg-primary p-1.5 text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            <Upload className="h-4 w-4" />
+          </Link>
+          <Link
+            href={`/${locale}/admin`}
+            aria-label={t('adminArea')}
+            title={t('adminArea')}
+            className="rounded-full p-2 text-primary/70 transition-colors hover:bg-primary/10 hover:text-primary"
+          >
+            <Shield className="h-4 w-4" />
+          </Link>
+        </>
       )}
 
       <Link

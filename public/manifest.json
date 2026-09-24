@@ -43,16 +43,23 @@
       "url": "url",
       "files": [
         {
-          "name": "audio",
+          "name": "files",
           "accept": [
             "audio/*",
+            "image/*",
+            ".opus",
+            ".ogg",
+            ".oga",
             ".mp3",
             ".m4a",
-            ".ogg",
-            ".opus",
-            ".wav",
             ".aac",
-            ".wma"
+            ".wav",
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".webp",
+            ".heic",
+            ".heif"
           ]
         }
       ]
