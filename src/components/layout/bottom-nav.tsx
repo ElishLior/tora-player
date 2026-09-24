@@ -19,12 +19,12 @@ const navItems = [
 export function BottomNav({ locale }: { locale: string }) {
   const pathname = usePathname();
   const t = useTranslations('nav');
-  const { currentTrack, isMiniPlayerExpanded } = useAudioStore();
+  // Narrow selectors: the store updates currentTime ~4x a second during playback.
+  const hasMiniPlayer = useAudioStore((s) => s.currentTrack !== null);
+  const isMiniPlayerExpanded = useAudioStore((s) => s.isMiniPlayerExpanded);
 
   // Hide when full player is open
   if (isMiniPlayerExpanded) return null;
-
-  const hasMiniPlayer = !!currentTrack;
 
   return (
     <nav

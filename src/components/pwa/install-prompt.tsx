@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { useTranslations } from 'next-intl';
 import { Download, X } from 'lucide-react';
 
 interface BeforeInstallPromptEvent extends Event {
@@ -12,6 +13,8 @@ const DISMISS_KEY = 'tora-install-dismissed';
 const DISMISS_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 export function InstallPrompt() {
+  const t = useTranslations('pwa');
+  const tCommon = useTranslations('common');
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
   const [showBanner, setShowBanner] = useState(false);
@@ -60,11 +63,11 @@ export function InstallPrompt() {
         </div>
 
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium" dir="rtl">
-            התקן את נגן תורה
+          <p className="text-sm font-medium">
+            {t('installTitle', { appName: tCommon('appName') })}
           </p>
-          <p className="text-xs text-muted-foreground" dir="rtl">
-            גישה מהירה מהמסך הראשי
+          <p className="text-xs text-muted-foreground">
+            {t('installSubtitle')}
           </p>
         </div>
 
@@ -73,12 +76,12 @@ export function InstallPrompt() {
             onClick={handleInstall}
             className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
           >
-            התקן
+            {t('install')}
           </button>
           <button
             onClick={handleDismiss}
             className="rounded-full p-1 hover:bg-muted transition-colors"
-            aria-label="סגור"
+            aria-label={t('dismiss')}
           >
             <X className="h-4 w-4 text-muted-foreground" />
           </button>

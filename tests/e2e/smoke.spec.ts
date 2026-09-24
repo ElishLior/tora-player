@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import he from '../../messages/he.json';
 
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000';
 
@@ -92,11 +93,13 @@ test.describe('Tora Player Smoke Tests', () => {
     expect(count).toBeGreaterThanOrEqual(3);
   });
 
-  test('Verify header with app title "נגן תורה" is present', async ({ page }) => {
+  test('Verify header links home with the app name', async ({ page }) => {
     await page.goto(`${BASE_URL}/he`);
     const header = page.locator('header');
     await expect(header).toBeVisible();
-    const title = header.locator('h1');
-    await expect(title).toContainText('נגן תורה');
+    const home = header.getByRole('link', { name: he.common.appName, exact: true });
+    await expect(home).toContainText(he.common.appName);
+    // Each page has its own <h1>; the header's app name is not a heading.
+    await expect(header.locator('h1')).toHaveCount(0);
   });
 });

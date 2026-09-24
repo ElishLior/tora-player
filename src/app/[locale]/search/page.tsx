@@ -1,6 +1,7 @@
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { createSupabaseLessonListReader } from '@/lib/supabase/lesson-list';
+import { isSupabaseConfigured } from '@/lib/supabase/server';
+import { normalizeSearchQuery } from '@/lib/supabase/lesson-list';
+import { createCatalogLessonListReader } from '@/lib/supabase/anon';
 import { matchTags, tagPath, type TagCount } from '@/lib/tag-links';
 import { Link } from '@/i18n/routing';
 import { LessonCard } from '@/components/lessons/lesson-card';
@@ -15,7 +16,7 @@ type Props = {
 
 export default async function SearchPage({ params, searchParams }: Props) {
   const { locale } = await params;
-  const q = (await searchParams).q?.trim();
+  const q = normalizeSearchQuery((await searchParams).q);
   setRequestLocale(locale);
   const tagT = await getTranslations('tagBrowse');
   const lessonsT = await getTranslations('lessons');
@@ -25,10 +26,9 @@ export default async function SearchPage({ params, searchParams }: Props) {
   let failed = false;
 
   if (q) {
-    const supabase = await createServerSupabaseClient();
-    if (supabase) {
+    if (isSupabaseConfigured()) {
       try {
-        const reader = createSupabaseLessonListReader(supabase);
+        const reader = createCatalogLessonListReader();
         const tagCounts = await reader.getTagCounts();
         const matched = matchTags(tagCounts, q);
         tags = tagCounts.filter((row) => matched.includes(row.tag));

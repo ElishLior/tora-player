@@ -4,6 +4,7 @@ import { createTranslator } from 'next-intl';
 import heMessages from '../../../messages/he.json';
 import { createAdminSupabaseClient } from '@/lib/supabase/admin';
 import type { AnnouncedLesson } from '@/lib/notifications/batch-rules';
+import { absoluteUrl, lessonUrl, pageUrl } from '@/config/site';
 
 export function isEmailConfigured(env: Partial<Record<string, string | undefined>> = process.env): boolean {
   return Boolean(
@@ -40,10 +41,11 @@ interface EmailContent {
  * Emails every confirmed user with profiles.notify_new_lessons = true over
  * SMTP (Gmail app password or any provider): Hebrew RTL, logo, one button.
  * One message per recipient so addresses are never exposed to each other.
- * Skipped unless SMTP_*, NOTIFY_FROM_EMAIL and NEXT_PUBLIC_APP_URL are set.
+ * Skipped unless SMTP_*, NOTIFY_FROM_EMAIL and NEXT_PUBLIC_APP_URL (the link
+ * origin, see src/config/site.ts) are set.
  * Never throws.
  */
-async function sendToSubscribers(build: (appUrl: string) => EmailContent): Promise<{ sent: number }> {
+async function sendToSubscribers(build: () => EmailContent): Promise<{ sent: number }> {
   if (!isEmailConfigured()) return { sent: 0 };
 
   try {
@@ -63,14 +65,13 @@ async function sendToSubscribers(build: (appUrl: string) => EmailContent): Promi
     });
 
     const t = createTranslator({ locale: 'he', messages: heMessages, namespace: 'notifications.email' });
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL!.replace(/\/$/, '');
-    const accountUrl = `${appUrl}/he/me#notifications`;
-    const content = build(appUrl);
+    const accountUrl = `${pageUrl('/me')}#notifications`;
+    const content = build();
     const html = `<!doctype html>
 <html lang="he" dir="rtl">
 <body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,Helvetica,sans-serif;direction:rtl;text-align:right;color:#18181b">
 <div style="max-width:480px;margin:0 auto;padding:24px">
-<p style="margin:0 0 12px;text-align:center"><img src="${appUrl}/brand/email-logo.png" width="120" height="120" alt="${escapeHtml(t('appName'))}" style="display:inline-block;border:0"></p>
+<p style="margin:0 0 12px;text-align:center"><img src="${absoluteUrl('/brand/email-logo.png')}" width="120" height="120" alt="${escapeHtml(t('appName'))}" style="display:inline-block;border:0"></p>
 <p style="margin:0 0 8px;font-size:13px;color:#71717a">${escapeHtml(t('appName'))}</p>
 <h1 style="margin:0 0 12px;font-size:20px">${escapeHtml(content.heading)}</h1>
 ${content.bodyHtml}
@@ -107,16 +108,13 @@ ${content.bodyHtml}
 /** One new lesson: its title and a button to it. */
 export function sendNewLessonEmails(lesson: { id: string; title: string }): Promise<{ sent: number }> {
   const t = createTranslator({ locale: 'he', messages: heMessages, namespace: 'notifications.email' });
-  return sendToSubscribers((appUrl) => {
-    const lessonUrl = `${appUrl}/he/lessons/${lesson.id}`;
-    return {
-      subject: t('subject', { title: lesson.title }),
-      heading: t('heading'),
-      bodyHtml: `<p style="margin:0 0 20px;font-size:17px"><bdi>${escapeHtml(lesson.title)}</bdi></p>`,
-      bodyText: lesson.title,
-      cta: { label: t('cta'), url: lessonUrl },
-    };
-  });
+  return sendToSubscribers(() => ({
+    subject: t('subject', { title: lesson.title }),
+    heading: t('heading'),
+    bodyHtml: `<p style="margin:0 0 20px;font-size:17px"><bdi>${escapeHtml(lesson.title)}</bdi></p>`,
+    bodyText: lesson.title,
+    cta: { label: t('cta'), url: lessonUrl(lesson.id) },
+  }));
 }
 
 /** Several lessons published together: one email listing them all (oldest first). */
@@ -126,8 +124,8 @@ export function sendNewLessonsDigestEmails(digest: {
   lessons: Array<AnnouncedLesson & { dateLabel: string }>;
 }): Promise<{ sent: number }> {
   const t = createTranslator({ locale: 'he', messages: heMessages, namespace: 'notifications.batch' });
-  return sendToSubscribers((appUrl) => {
-    const items = digest.lessons.map((lesson) => ({ ...lesson, url: `${appUrl}/he/lessons/${lesson.id}` }));
+  return sendToSubscribers(() => {
+    const items = digest.lessons.map((lesson) => ({ ...lesson, url: lessonUrl(lesson.id) }));
     const list = items
       .map(
         (item) =>
@@ -140,7 +138,7 @@ export function sendNewLessonsDigestEmails(digest: {
       bodyHtml: `<p style="margin:0 0 16px;font-size:14px;color:#52525b"><bdi>${escapeHtml(digest.range)}</bdi></p>
 <ul style="margin:0 0 20px;padding:0 20px 0 0">${list}</ul>`,
       bodyText: `${digest.range}\n\n${items.map((item) => `- ${item.title}: ${item.url}`).join('\n')}`,
-      cta: { label: t('emailCta'), url: `${appUrl}/he/lessons` },
+      cta: { label: t('emailCta'), url: pageUrl('/lessons') },
     };
   });
 }

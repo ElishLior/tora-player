@@ -1,13 +1,14 @@
 'use client';
 
 import { useMemo } from 'react';
-import { Check, Play, Pause } from 'lucide-react';
+import { Check, ListChecks, ListPlus, Play, Pause } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/routing';
 import { Link } from '@/i18n/routing';
 import { formatDuration } from '@/lib/utils';
 import { useAudioStore } from '@/stores/audio-store';
 import { useProgressStore } from '@/stores/progress-store';
+import { isNewSince, useVisitStore } from '@/stores/visit-store';
 import { useIsDownloaded } from '@/hooks/use-offline';
 import { useHydrated } from '@/hooks/use-hydrated';
 import { getLessonTracks } from '@/lib/lesson-tracks';
@@ -32,6 +33,10 @@ export function LessonCard({ lesson, showProgress, selectable, selected, onToggl
   const hydrated = useHydrated();
   const saved = useProgressStore((s) => s.progressMap[lesson.id]);
   const tracks = useMemo(() => getLessonTracks(lesson), [lesson]);
+  const previousVisitAt = useVisitStore((s) => s.previousVisitAt);
+  const isQueuedNext = useAudioStore((s) =>
+    s.queue.some((track, index) => index > s.queueIndex && (track.lessonId || track.id) === lesson.id),
+  );
 
   const isCurrentlyPlaying = currentTrack?.id === lesson.id;
   const isOffline = useIsDownloaded(lesson.id);
@@ -40,6 +45,15 @@ export function LessonCard({ lesson, showProgress, selectable, selected, onToggl
   const progress = hydrated ? saved : undefined;
   const isHeard = progress?.completed === true;
   const progressPercent = isHeard ? 0 : Math.round(getListenedFraction(tracks, progress) * 100);
+  // Device-only too: created since the previous visit and not started here yet.
+  const isNew = hydrated && !saved && isNewSince(lesson.created_at, previousVisitAt);
+  const canPlayNext = hydrated && !!currentTrack && !isCurrentlyPlaying && tracks.length > 0;
+
+  const handlePlayNext = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    useAudioStore.getState().playNext(tracks);
+  };
 
   const handlePlay = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -131,6 +145,13 @@ export function LessonCard({ lesson, showProgress, selectable, selected, onToggl
           </span>
         )}
 
+        {/* New since the previous visit */}
+        {isNew && !selectable && (
+          <span className="flex-shrink-0 rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold text-primary-foreground">
+            {t('newBadge')}
+          </span>
+        )}
+
         {/* Part badge */}
         {lesson.part_number && !selectable && (
           <span className="text-[10px] text-muted-foreground bg-[hsl(var(--surface-elevated))] px-2 py-0.5 rounded-full flex-shrink-0">
@@ -146,6 +167,20 @@ export function LessonCard({ lesson, showProgress, selectable, selected, onToggl
         {/* Heard to the end */}
         {isHeard && !selectable && (
           <Check className="h-4 w-4 flex-shrink-0 text-primary" aria-label={t('heard')} />
+        )}
+
+        {/* Queue after the current track */}
+        {canPlayNext && !selectable && (
+          <button
+            type="button"
+            onClick={handlePlayNext}
+            disabled={isQueuedNext}
+            className="flex-shrink-0 rounded-full p-1.5 text-muted-foreground transition-colors hover:text-foreground disabled:text-primary"
+            aria-label={isQueuedNext ? t('queuedNext') : t('playNext')}
+            title={isQueuedNext ? t('queuedNext') : t('playNext')}
+          >
+            {isQueuedNext ? <ListChecks className="h-4 w-4" /> : <ListPlus className="h-4 w-4" />}
+          </button>
         )}
       </div>
 

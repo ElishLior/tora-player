@@ -1,8 +1,8 @@
 export const dynamic = 'force-dynamic';
 
 import { setRequestLocale } from 'next-intl/server';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { getCategoriesTree, getCategoryLessonCounts } from '@/lib/supabase/queries';
+import { isSupabaseConfigured } from '@/lib/supabase/server';
+import { getCachedCategoriesTree, getCachedCategoryLessonCounts } from '@/lib/supabase/anon';
 import { Link } from '@/i18n/routing';
 import { BookOpen, Wrench, Sparkles, Music, Scissors, FolderOpen, ChevronLeft } from 'lucide-react';
 import type { CategoryWithChildren } from '@/types/database';
@@ -23,17 +23,16 @@ export default async function CategoriesPage({ params }: Props) {
   const { locale } = await params;
   setRequestLocale(locale);
 
-  const supabase = await createServerSupabaseClient();
   const isRTL = locale === 'he';
 
   let categories: CategoryWithChildren[] = [];
   let counts: Record<string, number> = {};
 
-  if (supabase) {
+  if (isSupabaseConfigured()) {
     try {
       [categories, counts] = await Promise.all([
-        getCategoriesTree(supabase),
-        getCategoryLessonCounts(supabase),
+        getCachedCategoriesTree(),
+        getCachedCategoryLessonCounts(),
       ]);
     } catch {
       // defaults

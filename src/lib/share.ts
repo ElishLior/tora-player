@@ -1,5 +1,7 @@
 'use client';
 
+import { SITE_URL, lessonPath, localePath } from '@/config/site';
+
 interface ShareOptions {
   title: string;
   text?: string;
@@ -53,10 +55,12 @@ export async function copyToClipboard(text: string): Promise<boolean> {
   }
 }
 
+/**
+ * Absolute link to a lesson page (`?t=` starts playback there). In the browser
+ * it uses the current origin, so previews and localhost share links to themselves.
+ */
 export function getLessonShareUrl(lessonId: string, timestamp?: number): string {
-  const base = typeof window !== 'undefined'
-    ? window.location.origin
-    : process.env.NEXT_PUBLIC_APP_URL || '';
-  const url = `${base}/he/lessons/${lessonId}`;
+  const origin = typeof window !== 'undefined' ? window.location.origin : SITE_URL;
+  const url = `${origin}${localePath(lessonPath(lessonId))}`;
   return timestamp ? `${url}?t=${Math.round(timestamp)}` : url;
 }

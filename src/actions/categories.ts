@@ -1,6 +1,6 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
+import { revalidateCatalog } from '@/lib/supabase/anon';
 import { createAdminSupabaseClient } from '@/lib/supabase/admin';
 import { requireServerSupabaseClient } from '@/lib/supabase/server';
 import { createCategorySchema, updateCategorySchema } from '@/lib/validators';
@@ -73,7 +73,7 @@ export async function createCategory(formData: FormData) {
       return { error: { _form: [error.message] } };
     }
 
-    revalidatePath('/[locale]', 'layout');
+    revalidateCatalog();
     return { data: data as Category };
   } catch (err) {
     return { error: { _form: [err instanceof Error ? err.message : 'Failed to create category'] } };
@@ -120,7 +120,7 @@ export async function updateCategory(id: string, formData: FormData) {
       return { error: { _form: [error.message] } };
     }
 
-    revalidatePath('/[locale]', 'layout');
+    revalidateCatalog();
     return { data: data as Category };
   } catch (err) {
     return { error: { _form: [err instanceof Error ? err.message : 'Failed to update category'] } };
@@ -157,7 +157,7 @@ export async function deleteCategory(id: string) {
       return { error: error.message };
     }
 
-    revalidatePath('/[locale]', 'layout');
+    revalidateCatalog();
     return { success: true };
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Failed to delete category' };
@@ -186,7 +186,7 @@ export async function reorderCategories(categoryIds: string[]) {
     const failed = results.find((r) => r.error);
     if (failed?.error) return { error: failed.error.message };
 
-    revalidatePath('/[locale]', 'layout');
+    revalidateCatalog();
     return { success: true };
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Failed to reorder categories' };

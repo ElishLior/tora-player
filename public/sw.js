@@ -2,13 +2,18 @@
 //
 // The page registers `/sw.js?v=<build id>`. A new deploy changes the script
 // URL, so the browser installs a fresh worker whose caches are keyed by that
-// build id; activation deletes every cache from older builds.
+// build id. Activation deletes older builds' caches except the static cache of
+// the build it replaces, kept for PREVIOUS_BUILD_TTL_MS: a tab left open across
+// a deploy (a long lesson playing) still loads that build's hashed chunks.
 importScripts('/sw-push.js');
 
 const BUILD_ID = new URL(self.location.href).searchParams.get('v') || 'dev';
 const CACHE_PREFIX = 'tora-player-';
 const STATIC_CACHE = `${CACHE_PREFIX}${BUILD_ID}-static`;
 const PAGES_CACHE = `${CACHE_PREFIX}${BUILD_ID}-pages`;
+const PREVIOUS_BUILD_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+// Stored in each build's static cache: { installedAt, retiredAt? } (ms).
+const BUILD_META_URL = '/__sw/build-meta';
 // Files shared to the app wait here until the upload page takes them
 // (src/app/[locale]/lessons/upload/shared-files.ts). Not build-scoped, so a
 // worker update never drops a pending share.
@@ -51,7 +56,7 @@ async function precacheOfflineShell(locale) {
 
   const html = await response.clone().text();
   const staticCache = await caches.open(STATIC_CACHE);
-  await staticCache.addAll(['/manifest.json', ...extractNextAssets(html)]);
+  await staticCache.addAll(['/manifest.webmanifest', ...extractNextAssets(html)]);
   await pages.put(offlinePath(locale), response);
 }
 
@@ -64,6 +69,8 @@ self.addEventListener('install', (event) => {
       await Promise.allSettled(
         LOCALES.filter((locale) => locale !== DEFAULT_LOCALE).map(precacheOfflineShell),
       );
+      // A fresh record: a build installed again (rollback) is current, not retired.
+      await writeBuildMeta(await caches.open(STATIC_CACHE), { installedAt: Date.now() });
       // Activate right away. Open pages keep running their already-loaded
       // code; the next full navigation picks up the new build. The page never
       // force-reloads, so playback is not interrupted.
@@ -75,12 +82,29 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
+      const now = Date.now();
       const names = await caches.keys();
+      // Stamp every other build as retired now (if not already) and keep the
+      // static cache of the most recently installed one: the build this worker
+      // replaces, whose pages may still be open.
+      const previous = [];
+      for (const name of names.filter(isOtherBuildStaticCache)) {
+        const cache = await caches.open(name);
+        const meta = await readBuildMeta(cache);
+        if (!meta.retiredAt) await writeBuildMeta(cache, { ...meta, retiredAt: now });
+        previous.push({ name, installedAt: meta.installedAt || 0, retiredAt: meta.retiredAt || now });
+      }
+      previous.sort((a, b) => b.installedAt - a.installedAt);
+      const kept =
+        previous[0] && now - previous[0].retiredAt < PREVIOUS_BUILD_TTL_MS ? previous[0].name : null;
       await Promise.all(
         names
           .filter(
             (name) =>
-              (name.startsWith(CACHE_PREFIX) && name !== STATIC_CACHE && name !== PAGES_CACHE) ||
+              (name.startsWith(CACHE_PREFIX) &&
+                name !== STATIC_CACHE &&
+                name !== PAGES_CACHE &&
+                name !== kept) ||
               LEGACY_SHARE_CACHES.includes(name),
           )
           .map((name) => caches.delete(name)),
@@ -89,6 +113,35 @@ self.addEventListener('activate', (event) => {
     })(),
   );
 });
+
+function isOtherBuildStaticCache(name) {
+  return name.startsWith(CACHE_PREFIX) && name.endsWith('-static') && name !== STATIC_CACHE;
+}
+
+async function readBuildMeta(cache) {
+  const stored = await cache.match(BUILD_META_URL);
+  return stored ? stored.json().catch(() => ({})) : {};
+}
+
+function writeBuildMeta(cache, meta) {
+  return cache.put(
+    BUILD_META_URL,
+    new Response(JSON.stringify(meta), { headers: { 'Content-Type': 'application/json' } }),
+  );
+}
+
+// Activation runs only on a deploy, so the kept cache also expires here: once
+// per worker start, on the first navigation. Only caches an activation stamped
+// as retired are touched (never one a newer worker is still installing).
+let expiredBuildsPruned = false;
+
+async function pruneExpiredBuildCaches() {
+  const now = Date.now();
+  for (const name of (await caches.keys()).filter(isOtherBuildStaticCache)) {
+    const { retiredAt } = await readBuildMeta(await caches.open(name));
+    if (retiredAt && now - retiredAt >= PREVIOUS_BUILD_TTL_MS) await caches.delete(name);
+  }
+}
 
 // Sent by the sign-out flow: drop every stored page (they may contain the
 // previous account's data), then re-fetch the offline shell as the signed-out
@@ -105,7 +158,7 @@ self.addEventListener('message', (event) => {
 
 function isPublicStaticFile(url) {
   return (
-    url.pathname === '/manifest.json' ||
+    url.pathname === '/manifest.webmanifest' ||
     url.pathname.startsWith('/icons/') ||
     /\.(?:png|jpe?g|svg|ico|webp|woff2?|ttf|otf)$/i.test(url.pathname)
   );
@@ -144,6 +197,10 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.startsWith('/api/')) return;
 
   if (request.mode === 'navigate') {
+    if (!expiredBuildsPruned) {
+      expiredBuildsPruned = true;
+      event.waitUntil(pruneExpiredBuildCaches());
+    }
     event.respondWith(handleNavigation(event));
     return;
   }
@@ -193,12 +250,14 @@ async function handleNavigation(event) {
 }
 
 async function cacheFirst(request) {
-  const cache = await caches.open(STATIC_CACHE);
-  const cached = await cache.match(request);
+  // Any build's cache: a hashed file name never changes content, and a page
+  // still running the previous build asks for that build's chunks.
+  const cached = await caches.match(request);
   if (cached) return cached;
 
   const response = await fetch(request);
   if (response.status === 200) {
+    const cache = await caches.open(STATIC_CACHE);
     await cache.put(request, response.clone());
   }
   return response;

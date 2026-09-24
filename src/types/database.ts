@@ -84,6 +84,8 @@ export interface LessonImage {
   id: string;
   lesson_id: string;
   file_key: string;
+  /** WebP gallery thumbnail (`images/<lesson>/thumbs/<name>.webp`); null until backfilled. */
+  thumb_key: string | null;
   image_url: string;
   original_name: string | null;
   source_filename: string | null;

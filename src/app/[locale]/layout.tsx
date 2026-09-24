@@ -1,6 +1,6 @@
+import type { Metadata } from 'next';
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages, setRequestLocale } from 'next-intl/server';
-import { Inter } from 'next/font/google';
 import { notFound } from 'next/navigation';
 import { routing } from '@/i18n/routing';
 import { ThemeProvider } from 'next-themes';
@@ -9,11 +9,8 @@ import { Header } from '@/components/layout/header';
 import { BottomNav } from '@/components/layout/bottom-nav';
 import { InstallPrompt } from '@/components/pwa/install-prompt';
 import { ServiceWorkerRegistrar } from '@/components/pwa/sw-registrar';
-
-const inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-inter',
-});
+import { DEFAULT_LOCALE, SITE_DESCRIPTION, SITE_NAME, isSiteLocale } from '@/config/site';
+import { heebo } from '@/app/fonts';
 
 type Props = {
   children: React.ReactNode;
@@ -24,10 +21,25 @@ export function generateStaticParams() {
   return routing.locales.map((locale) => ({ locale }));
 }
 
+/**
+ * Lesson content is Hebrew-only, so other locales are UI translations of the
+ * same pages: they keep their own title/description but stay out of the index
+ * (content pages set canonical to the default-locale URL).
+ */
+export async function generateMetadata({ params }: Pick<Props, 'params'>): Promise<Metadata> {
+  const { locale } = await params;
+  if (locale === DEFAULT_LOCALE || !isSiteLocale(locale)) return {};
+  return {
+    title: { default: SITE_NAME[locale], template: `%s · ${SITE_NAME[locale]}` },
+    description: SITE_DESCRIPTION[locale],
+    robots: { index: false, follow: true },
+  };
+}
+
 export default async function LocaleLayout({ children, params }: Props) {
   const { locale } = await params;
 
-  if (!routing.locales.includes(locale as 'he' | 'en')) {
+  if (!isSiteLocale(locale)) {
     notFound();
   }
 
@@ -37,7 +49,7 @@ export default async function LocaleLayout({ children, params }: Props) {
 
   return (
     <html lang={locale} dir={isRTL ? 'rtl' : 'ltr'} className="dark" suppressHydrationWarning>
-      <body className={`${inter.variable} font-sans antialiased bg-background text-foreground min-h-screen`} suppressHydrationWarning>
+      <body className={`${heebo.variable} font-sans antialiased bg-background text-foreground min-h-screen`} suppressHydrationWarning>
         <ThemeProvider attribute="class" defaultTheme="dark" forcedTheme="dark" enableSystem={false}>
           <NextIntlClientProvider messages={messages}>
             <div className="flex min-h-screen flex-col">

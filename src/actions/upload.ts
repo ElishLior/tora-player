@@ -1,6 +1,6 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
+import { revalidateCatalog } from '@/lib/supabase/anon';
 import { AdminRequiredError, requireAdmin } from '@/lib/auth/admin';
 import { createAdminSupabaseClient } from '@/lib/supabase/admin';
 import { notifyNewLesson, notifyNewLessons } from '@/lib/notifications/notify';
@@ -153,7 +153,7 @@ export async function publishUploadedLesson(
     .select('id');
   if (error) return { error: error.message };
 
-  revalidatePath('/[locale]', 'layout');
+  revalidateCatalog();
   const newlyPublished = (data ?? []).length > 0;
   // Only the call that actually flipped the flag notifies (retries don't re-send).
   if (notify && newlyPublished) await notifyNewLesson(lessonId);

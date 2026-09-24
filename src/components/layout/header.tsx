@@ -41,9 +41,9 @@ export function Header({ locale }: HeaderProps) {
         <Link href={`/${locale}`} className="flex flex-shrink-0 items-center gap-2" aria-label={t('common.appName')}>
           <div className="flex items-center gap-2">
             <Image src="/brand/logo-mark.webp" alt="" width={28} height={28} className="h-7 w-7 rounded-full" priority />
-            <h1 className={`text-base font-bold text-foreground ${currentTrack ? 'hidden sm:block' : ''}`}>
+            <span className={`text-base font-bold text-foreground ${currentTrack ? 'hidden sm:block' : ''}`}>
               {t('common.appName')}
-            </h1>
+            </span>
           </div>
         </Link>
 

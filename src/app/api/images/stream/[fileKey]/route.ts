@@ -1,72 +1,51 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { imagePresignWindow, servableImageContentType } from '@/lib/image-keys';
 import { getDownloadPresignedUrl } from '@/lib/r2';
 
-const IMAGE_TYPES: Record<string, string> = {
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-  png: 'image/png',
-  webp: 'image/webp',
-  gif: 'image/gif',
-  avif: 'image/avif',
-  heic: 'image/heic',
-  heif: 'image/heif',
-};
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 /**
- * Image streaming proxy.
- * Serves lesson images (R2 keys under `images/`) via signed URLs. Only raster
- * formats are served — never SVG/HTML, which would execute script on the app
- * origin — and responses carry nosniff + a sandboxing CSP.
+ * Lesson gallery images (originals and `thumbs/` renditions): 302 to a
+ * presigned R2 URL, so image bytes go straight from R2 to the device.
+ *
+ * Only `images/…` keys with a raster extension are signed, and R2 is told
+ * the Content-Type (never SVG/HTML). The signed URL is stable per 6-hour
+ * window and carries an immutable Cache-Control override, so the browser
+ * keeps the bytes cached; the redirect is cached privately for less than the
+ * URL's remaining lifetime.
  */
 export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ fileKey: string }> }
+  _request: NextRequest,
+  { params }: { params: Promise<{ fileKey: string }> },
 ) {
+  const { fileKey } = await params;
+  const key = decodeURIComponent(fileKey);
+  const contentType = servableImageContentType(key);
+  if (!contentType) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
   try {
-    const { fileKey } = await params;
-    const decodedKey = decodeURIComponent(fileKey);
-    const extension = decodedKey.split('.').pop()?.toLowerCase() ?? '';
+    const { signingDate, expiresIn, redirectMaxAge } = imagePresignWindow(Date.now());
+    const signedUrl = await getDownloadPresignedUrl(key, {
+      expiresIn,
+      signingDate,
+      contentType,
+      // Keys are never overwritten (upload keys carry a timestamp or content hash).
+      cacheControl: 'public, max-age=31536000, immutable',
+    });
 
-    if (!decodedKey.startsWith('images/') || decodedKey.includes('..') || /^(svgz?|xml|html?|xhtml)$/.test(extension)) {
-      return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    }
-
-    const signedUrl = await getDownloadPresignedUrl(decodedKey);
-    // Legacy keys with unusual extensions were always served as JPEG.
-    const contentType = IMAGE_TYPES[extension] ?? 'image/jpeg';
-
-    // Fetch image from R2
-    const r2Response = await fetch(signedUrl);
-
-    if (!r2Response.ok) {
-      return NextResponse.json(
-        { error: 'Failed to fetch image from storage' },
-        { status: r2Response.status }
-      );
-    }
-
-    // Build response headers
-    const responseHeaders = new Headers();
-    responseHeaders.set('Content-Type', contentType);
-    responseHeaders.set('Cache-Control', 'public, max-age=604800, stale-while-revalidate=2592000');
-    responseHeaders.set('X-Content-Type-Options', 'nosniff');
-    responseHeaders.set('Content-Security-Policy', "default-src 'none'; sandbox");
-
-    const contentLength = r2Response.headers.get('Content-Length');
-    if (contentLength) responseHeaders.set('Content-Length', contentLength);
-
-    const etag = r2Response.headers.get('ETag');
-    if (etag) responseHeaders.set('ETag', etag);
-
-    return new NextResponse(r2Response.body, {
-      status: 200,
-      headers: responseHeaders,
+    return new NextResponse(null, {
+      status: 302,
+      headers: {
+        Location: signedUrl,
+        'Cache-Control': `private, max-age=${redirectMaxAge}`,
+        'Referrer-Policy': 'no-referrer',
+      },
     });
   } catch (error) {
-    console.error('Image stream error:', error);
-    return NextResponse.json(
-      { error: 'Failed to stream image' },
-      { status: 500 }
-    );
+    console.error('Image presign error:', error);
+    return NextResponse.json({ error: 'Failed to prepare image' }, { status: 500 });
   }
 }

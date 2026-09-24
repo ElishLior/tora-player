@@ -1,6 +1,6 @@
 import { setRequestLocale, getTranslations } from 'next-intl/server';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { getAllSeries } from '@/lib/supabase/queries';
+import { isSupabaseConfigured } from '@/lib/supabase/server';
+import { getCachedAllSeries } from '@/lib/supabase/anon';
 import { Link } from '@/i18n/routing';
 import { EmptyState } from '@/components/shared/empty-state';
 import { ChevronLeft, Library, Plus, Scissors } from 'lucide-react';
@@ -17,11 +17,10 @@ export default async function SeriesPage({ params }: Props) {
   const tCommon = await getTranslations('common');
   const admin = await isAdmin();
 
-  const supabase = await createServerSupabaseClient();
   let series: Series[] = [];
-  if (supabase) {
+  if (isSupabaseConfigured()) {
     try {
-      series = await getAllSeries(supabase);
+      series = await getCachedAllSeries();
     } catch (error) {
       console.error('Failed to load series:', error);
     }
