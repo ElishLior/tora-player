@@ -79,14 +79,26 @@ Playback should behave like a music app:
 - mini player remains tappable and informative
 - controls must fit compact mobile screens without horizontal overflow
 
+How playback is wired (keep it this way):
+
+- `src/lib/audio-engine.ts` owns the one `HTMLAudioElement` (no Howler). Its status is read from the element's live state, never inferred from event names.
+- `src/lib/audio-controller.ts` is the only code that drives the engine. `<AudioPlayer/>` (root layout) starts it once. UI surfaces, the lock screen and car controls only change store state or call its actions (`play`, `pause`, `togglePlay`, `seekTo`, `skipBackward`, `skipForward`, `playTrack`, `nextTrackOrSkip`, `previousTrackOrSkip`).
+- Resuming the loaded track never seeks; a start position is applied only when a different track loads.
+- Play/pause icons use `getTransportState()` (real element state), not the `isPlaying` intent.
+- Skip semantics are fixed: "back" = -15s (`RotateCcw`), "forward" = +30s (`RotateCw`), via `SkipButton` in `src/components/player/player-controls.tsx`. Render back → play → forward in DOM order and let `dir="rtl"` place them; never swap handlers or icons for RTL.
+- Car/headset next/previous go to the queue neighbour, else skip inside the lesson.
+
 Important files:
 
 ```text
+src/lib/audio-engine.ts
+src/lib/audio-controller.ts
+src/lib/audio-lifecycle.ts
+src/lib/audio-resume.ts
+src/stores/audio-store.ts
 src/hooks/use-audio-player.ts
 src/hooks/use-media-session.ts
-src/lib/audio-engine.ts
-src/lib/audio-lifecycle.ts
-src/stores/audio-store.ts
+src/components/player/player-controls.tsx
 src/components/player/full-player.tsx
 src/components/player/mini-player.tsx
 src/components/layout/header.tsx
