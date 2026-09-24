@@ -1,10 +1,10 @@
-# Local-only material that must never be uploaded to Vercel
-Lessons DB/
-.claude/
-.agents/
-.a5c/
-tests/
-scripts/
-supabase/
+# Local-only material that must never be uploaded to Vercel (anchored to repo root)
+/Lessons DB/
+/.claude/
+/.agents/
+/.a5c/
+/tests/
+/scripts/
+/supabase/
 *.zip
 *.xlsx
