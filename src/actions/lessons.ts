@@ -6,54 +6,8 @@ import { createAdminSupabaseClient } from '@/lib/supabase/admin';
 import { isAdmin, requireAdmin } from '@/lib/auth/admin';
 import { normalizeTags } from '@/lib/tags';
 import { notifyNewLesson } from '@/lib/notifications/notify';
-import { createLessonSchema, updateLessonSchema } from '@/lib/validators';
+import { updateLessonSchema } from '@/lib/validators';
 import type { Lesson, LessonWithRelations, LessonAudio, LessonImage } from '@/types/database';
-
-export async function createLesson(formData: FormData) {
-  if (!(await isAdmin())) {
-    return { error: { _form: ['Unauthorized'] } };
-  }
-  const supabase = createAdminSupabaseClient();
-
-  const raw = {
-    title: formData.get('title') as string,
-    hebrew_title: formData.get('hebrew_title') as string || undefined,
-    description: formData.get('description') as string || undefined,
-    date: formData.get('date') as string,
-    series_id: formData.get('series_id') as string || undefined,
-    part_number: formData.get('part_number') ? Number(formData.get('part_number')) : undefined,
-    parent_lesson_id: formData.get('parent_lesson_id') as string || undefined,
-    source_text: formData.get('source_text') as string || undefined,
-    source_type: (formData.get('source_type') as string) || 'upload',
-    // Metadata fields
-    hebrew_date: formData.get('hebrew_date') as string || undefined,
-    parsha: formData.get('parsha') as string || undefined,
-    teacher: formData.get('teacher') as string || undefined,
-    location: formData.get('location') as string || undefined,
-    summary: formData.get('summary') as string || undefined,
-    lesson_type: formData.get('lesson_type') as string || undefined,
-    seder_number: formData.get('seder_number') ? Number(formData.get('seder_number')) : undefined,
-    category_id: formData.get('category_id') as string || undefined,
-  };
-
-  const parsed = createLessonSchema.safeParse(raw);
-  if (!parsed.success) {
-    return { error: parsed.error.flatten().fieldErrors };
-  }
-
-  const { data, error } = await supabase
-    .from('lessons')
-    .insert(parsed.data)
-    .select()
-    .single();
-
-  if (error) {
-    return { error: { _form: [error.message] } };
-  }
-
-  revalidatePath('/[locale]', 'layout');
-  return { data: data as Lesson };
-}
 
 export async function updateLesson(id: string, formData: FormData) {
   if (!(await isAdmin())) {
