@@ -320,7 +320,7 @@ export async function getLessonsByIds(ids: string[]) {
   const supabase = await requireServerSupabaseClient();
   const { data, error } = await supabase
     .from('lessons')
-    .select('*, series(*), category:categories(id, hebrew_name)')
+    .select('*, series(*), category:categories(id, hebrew_name), audio_files:lesson_audio(*)')
     .in('id', ids)
     .eq('is_published', true);
   if (error || !data) return [];

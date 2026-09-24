@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MAX_NOTE_LENGTH } from '@/lib/note-rules';
 
 // Relaxed UUID pattern — accepts any 8-4-4-4-12 hex string
 // (Zod's .uuid() rejects non-RFC-4122 UUIDs like our category IDs)
@@ -202,6 +203,22 @@ export const progressSyncSchema = validItems(
   }),
   2000,
 );
+
+/** A personal note as sent by the device; `id` is the client-generated note id. */
+export const noteSchema = z.object({
+  id: uuidLike,
+  lesson_id: uuidLike,
+  audio_file_id: uuidLike.nullable(),
+  position_seconds: z.number().min(0).max(1_000_000).nullable(),
+  body: z.string().trim().min(1).max(MAX_NOTE_LENGTH),
+  created_at: z.iso.datetime({ offset: true }),
+  updated_at: z.iso.datetime({ offset: true }),
+});
+
+export const noteSyncSchema = z.object({
+  notes: validItems(noteSchema, 2000),
+  deletedIds: validItems(uuidLike, 1000),
+});
 
 // ==================== PUSH NOTIFICATIONS ====================
 

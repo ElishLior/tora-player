@@ -8,7 +8,7 @@ import { updateProfile } from '@/actions/account';
 import { signOutAndReset } from '@/lib/account/sync';
 import { PushToggle, Switch } from '@/components/notifications/push-toggle';
 
-interface AccountClientProps {
+interface AccountSettingsProps {
   locale: string;
   email: string;
   initialDisplayName: string;
@@ -16,13 +16,17 @@ interface AccountClientProps {
   isAdmin: boolean;
 }
 
-export function AccountClient({
+/**
+ * Signed-in account cards of the personal library: notification preferences
+ * (`#notifications`), profile (`#account`), admin shortcuts and sign-out.
+ */
+export function AccountSettings({
   locale,
   email,
   initialDisplayName,
   initialNotifyByEmail,
   isAdmin,
-}: AccountClientProps) {
+}: AccountSettingsProps) {
   const t = useTranslations('auth');
   const [displayName, setDisplayName] = useState(initialDisplayName);
   const [notifyByEmail, setNotifyByEmail] = useState(initialNotifyByEmail);
@@ -65,26 +69,45 @@ export function AccountClient({
     }
   }
 
-  const cardClass = 'rounded-2xl border border-border/50 bg-[hsl(var(--surface-elevated))] p-5';
+  const cardClass = 'scroll-mt-20 rounded-2xl border border-border/50 bg-[hsl(var(--surface-elevated))] p-5';
 
   return (
-    <div className="mx-auto max-w-lg space-y-4">
-      <h1 className="text-xl font-bold">{t('account.title')}</h1>
-
+    <div className="space-y-4">
       {errorCode && (
         <div role="alert" className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-400">
           {t.has(`errors.${errorCode}`) ? t(`errors.${errorCode}`) : t('errors.generic')}
         </div>
       )}
 
-      <section className={cardClass}>
+      <section id="notifications" className={`${cardClass} space-y-4`}>
+        <h2 className="flex items-center gap-2 text-sm font-bold">
+          <Bell className="h-4 w-4 text-primary" />
+          {t('account.notificationsTitle')}
+        </h2>
+        <PushToggle />
+        <div className="flex items-center justify-between gap-4 border-t border-border/40 pt-4">
+          <p className="text-sm font-medium">{t('account.emailToggle')}</p>
+          {saving === 'email' ? (
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          ) : (
+            <Switch checked={notifyByEmail} label={t('account.emailToggle')} onChange={handleEmailToggle} />
+          )}
+        </div>
+      </section>
+
+      <section id="account" className={cardClass}>
         <div className="mb-4 flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/15 text-primary">
             <UserRound className="h-5 w-5" />
           </div>
           <div className="min-w-0">
-            <p className="text-xs text-muted-foreground">{t('account.signedInAs')}</p>
-            <bdi dir="ltr" className="block truncate text-sm font-medium">{email}</bdi>
+            <h2 className="text-sm font-bold">{t('account.title')}</h2>
+            <p className="text-xs text-muted-foreground">
+              {t('account.signedInAs')}{' '}
+              <bdi dir="ltr" className="break-all">
+                {email}
+              </bdi>
+            </p>
           </div>
         </div>
 
@@ -116,22 +139,6 @@ export function AccountClient({
           </div>
         </form>
         <p className="mt-3 text-xs leading-relaxed text-muted-foreground">{t('account.syncNote')}</p>
-      </section>
-
-      <section className={`${cardClass} space-y-4`}>
-        <h2 className="flex items-center gap-2 text-sm font-bold">
-          <Bell className="h-4 w-4 text-primary" />
-          {t('account.notificationsTitle')}
-        </h2>
-        <PushToggle />
-        <div className="flex items-center justify-between gap-4 border-t border-border/40 pt-4">
-          <p className="text-sm font-medium">{t('account.emailToggle')}</p>
-          {saving === 'email' ? (
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          ) : (
-            <Switch checked={notifyByEmail} label={t('account.emailToggle')} onChange={handleEmailToggle} />
-          )}
-        </div>
       </section>
 
       {isAdmin && (
