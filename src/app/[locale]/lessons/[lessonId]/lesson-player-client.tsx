@@ -30,16 +30,17 @@ import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { SeekBar } from '@/components/player/seek-bar';
 import { SpeedControl } from '@/components/player/speed-control';
 import { handleCastClick } from '@/lib/cast-utils';
-import { getAudioDownloadUrl, sanitizeDownloadFilename } from '@/lib/audio-download';
+import { buildAudioDownloadFilename, getAudioDownloadUrl } from '@/lib/audio-download';
 import type { LessonWithRelations, LessonAudio, LessonImage } from '@/types/database';
 import { normalizeAudioUrl } from '@/lib/audio-url';
 import { getNotes, addNote, updateNote, deleteNote, type LocalNote } from '@/lib/local-notes';
-import { downloadLessonAudioFiles, getDownloadedLesson, getOfflineKey } from '@/lib/offline-storage';
+import { saveAudioFilesOffline, getDownloadedLesson, getOfflineKey } from '@/lib/offline-storage';
 import {
   OFFLINE_DOWNLOADS_CHANGED_EVENT,
   isOfflineDownloadsChangedEvent,
-  notifyOfflineDownloadsChanged,
 } from '@/lib/offline-events';
+import { handleDeviceDownloadClick } from '@/lib/device-download';
+import { useTranslations } from 'next-intl';
 import { useBookmarksStore } from '@/stores/bookmarks-store';
 import { submitSnippet } from '@/actions/snippets';
 
@@ -201,9 +202,7 @@ function getLessonAudioAssets(lesson: LessonWithRelations): LessonAudioAsset[] {
 function getAudioAssetFilename(lesson: LessonWithRelations, asset: LessonAudioAsset, index = 0): string {
   const baseTitle = asset.originalName || asset.title || lesson.hebrew_title || lesson.title || 'lesson';
   const suffix = asset.audioType ? ` - ${asset.audioType}` : index > 0 ? ` - ${index + 1}` : '';
-  const extension = decodeURIComponent(asset.audioUrl).split('?')[0]?.split('.').pop() || 'mp3';
-  const titleWithoutExtension = baseTitle.replace(/\.[a-z0-9]{2,5}$/i, '');
-  return sanitizeDownloadFilename(`${titleWithoutExtension}${suffix}.${extension}`, extension);
+  return buildAudioDownloadFilename(`${baseTitle}${suffix}`, asset.audioUrl);
 }
 
 // Inlined — cannot import separate 'use client' files into this component
@@ -688,6 +687,8 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
   const [dlProgress, setDlProgress] = useState<Record<string, number>>({});
   const [downloadedKeys, setDownloadedKeys] = useState<Set<string>>(new Set());
   const [downloadedAudioUrls, setDownloadedAudioUrls] = useState<Set<string>>(new Set());
+  const [offlineSaveError, setOfflineSaveError] = useState<'quota' | 'failed' | null>(null);
+  const tOffline = useTranslations('offline');
 
   const updateDownloadedRefs = useCallback((downloadedLesson: Awaited<ReturnType<typeof getDownloadedLesson>>) => {
     const files = downloadedLesson?.audioFiles ?? [];
@@ -757,7 +758,7 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
       setDlState((prev) => ({ ...prev, [stateKey]: 'downloading' }));
       setDlProgress((prev) => ({ ...prev, [stateKey]: 0 }));
 
-      const success = await downloadLessonAudioFiles(
+      const result = await saveAudioFilesOffline(
         lesson.id,
         assets.map((asset) => ({
           audioFileId: asset.audioFileId,
@@ -781,20 +782,23 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
         (pct) => setDlProgress((prev) => ({ ...prev, [stateKey]: pct })),
       );
 
-      if (success) {
+      // Saved files (also from a partial save) arrive via OFFLINE_DOWNLOADS_CHANGED_EVENT.
+      if (result.ok) {
         setDlState((prev) => {
           const next = { ...prev, [stateKey]: 'downloaded' as DownloadState };
           for (const asset of assets) next[asset.offlineKey] = 'downloaded';
           return next;
         });
-        await refreshDownloadedKeys();
-        notifyOfflineDownloadsChanged(lesson.id);
       } else {
         setDlState((prev) => ({ ...prev, [stateKey]: 'error' }));
-        setTimeout(() => setDlState((prev) => ({ ...prev, [stateKey]: 'idle' })), 3000);
+        setOfflineSaveError(result.reason);
+        setTimeout(() => {
+          setDlState((prev) => ({ ...prev, [stateKey]: 'idle' }));
+          setOfflineSaveError(null);
+        }, 5000);
       }
     },
-    [dlState, lesson, refreshDownloadedKeys],
+    [dlState, lesson],
   );
 
   const handleSaveLessonOffline = useCallback(() => {
@@ -1054,11 +1058,29 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
                     : 'Save offline'}
             </span>
           </button>
+          {offlineSaveError && (
+            <p
+              role="alert"
+              className="fixed inset-x-4 bottom-36 z-50 mx-auto max-w-md rounded-lg bg-destructive px-4 py-3 text-center text-sm text-destructive-foreground shadow-lg"
+            >
+              {tOffline(offlineSaveError === 'quota' ? 'storageFull' : 'saveFailed')}
+            </p>
+          )}
 
           {/* Device file download */}
           <a
             href={primaryDownloadUrl}
             download={primaryDownloadFilename}
+            onClick={(e) => {
+              if (!primaryAudioAsset) return;
+              handleDeviceDownloadClick(e, {
+                lessonId: lesson.id,
+                offlineKey: primaryAudioAsset.offlineKey,
+                audioUrl: primaryAudioAsset.audioUrl,
+                filename: primaryDownloadFilename,
+                savedOffline: isAssetDownloaded(primaryAudioAsset),
+              });
+            }}
             className={`flex flex-col items-center gap-1.5 transition-colors ${primaryAudioAsset ? 'text-muted-foreground hover:text-foreground' : 'pointer-events-none opacity-30'}`}
             aria-label={locale === 'he' ? 'הורדת קובץ למכשיר' : 'Download file to device'}
           >
@@ -1178,7 +1200,16 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
                   <a
                     href={getAudioDownloadUrl(asset.audioUrl, assetFilename)}
                     download={assetFilename}
-                    onClick={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeviceDownloadClick(e, {
+                        lessonId: lesson.id,
+                        offlineKey: asset.offlineKey,
+                        audioUrl: asset.audioUrl,
+                        filename: assetFilename,
+                        savedOffline: assetDownloadState === 'downloaded',
+                      });
+                    }}
                     className="h-8 w-8 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--surface-highlight))] transition-colors"
                     aria-label={locale === 'he' ? 'הורדת קובץ למכשיר' : 'Download file to device'}
                     title={locale === 'he' ? 'הורדת קובץ' : 'Download file'}
