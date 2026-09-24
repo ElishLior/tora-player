@@ -1,308 +1,139 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
-import { useAudioStore } from "@/stores/audio-store";
-import { audioEngine } from "@/lib/audio-engine";
-import { getOfflineAudioUrl } from "@/lib/offline-storage";
-import { resumeTrackPlayback } from "@/lib/audio-resume";
-import type { AudioTrack } from "@/stores/audio-store";
+import { useEffect } from "react";
+import {
+  nextTrackOrSkip,
+  pause,
+  play,
+  previousTrackOrSkip,
+  seekTo,
+  skipBy,
+} from "@/lib/audio-controller";
+import {
+  SKIP_BACK_SECONDS,
+  SKIP_FORWARD_SECONDS,
+} from "@/lib/player-track-actions";
+import {
+  getTransportState,
+  useAudioStore,
+  type AudioPlayerState,
+  type AudioTrack,
+} from "@/stores/audio-store";
 
-function isSameAudioTrack(
-  a: AudioTrack | null | undefined,
-  b: AudioTrack | null | undefined,
-) {
-  if (!a || !b) return false;
-  return (
-    (a.lessonId || a.id) === (b.lessonId || b.id) &&
-    a.audioUrl === b.audioUrl &&
-    (a.offlineKey || "") === (b.offlineKey || "")
-  );
+// Normal playback moves the position by < 1s per timeupdate even at 2x speed;
+// a bigger jump is a seek the OS must be told about.
+const SEEK_JUMP_SECONDS = 2;
+
+function toAbsoluteUrl(path: string) {
+  if (path.startsWith("http")) return path;
+  return `${window.location.origin}${path.startsWith("/") ? "" : "/"}${path}`;
 }
 
-function isLoadedUrlCurrentTrack(url: string, track: AudioTrack) {
-  if (url === track.audioUrl) return true;
-  const snapshot = audioEngine.getNativeAudioSnapshot();
-  const identity = snapshot?.loadedTrackIdentity;
-  if (!identity) return false;
+function buildMetadata(track: AudioTrack) {
+  const artwork: MediaImage[] = [
+    ...(track.artworkUrl
+      ? [{ src: toAbsoluteUrl(track.artworkUrl), sizes: "512x512", type: "image/png" }]
+      : []),
+    // Lock screens need absolute URLs.
+    { src: toAbsoluteUrl("/icons/icon-192.png"), sizes: "192x192", type: "image/png" },
+    { src: toAbsoluteUrl("/icons/icon-512.png"), sizes: "512x512", type: "image/png" },
+  ];
+  return new MediaMetadata({
+    title: track.hebrewTitle || track.title,
+    artist: track.seriesName || "נגן תורה",
+    album: "שיעורי תורה",
+    artwork,
+  });
+}
 
-  return (
-    (identity.lessonId || track.lessonId || track.id) ===
-      (track.lessonId || track.id) &&
-    (identity.audioFileId || "") === (track.audioFileId || "") &&
-    (identity.offlineKey || "") === (track.offlineKey || "") &&
-    (identity.sourceUrl === track.audioUrl ||
-      identity.resolvedUrl === audioEngine.getCurrentUrl())
-  );
+function updatePositionState(session: MediaSession, state: AudioPlayerState) {
+  if (state.duration <= 0) return;
+  try {
+    session.setPositionState({
+      duration: state.duration,
+      playbackRate: state.playbackSpeed || 1,
+      position: Math.max(0, Math.min(state.currentTime, state.duration)),
+    });
+  } catch {
+    // Older browsers without setPositionState.
+  }
 }
 
 /**
- * Integrates with the Media Session API for:
- * - Lock screen controls on mobile (iOS & Android)
- * - Bluetooth headphone buttons
- * - Browser notification area
- * - OS media overlays
- *
- * Also manages Wake Lock to prevent device sleep during playback.
+ * Lock screen, notification, headset and car controls. Mounted once by
+ * <AudioPlayer/>; it reads the store directly (no React re-render per tick).
  */
 export function useMediaSession() {
-  const {
-    currentTrack,
-    isPlaying,
-    currentTime,
-    duration,
-    playbackSpeed,
-    lastNativePlaybackState,
-  } = useAudioStore();
-  const lastPositionUpdate = useRef(0);
-  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
-  const actuallyPlaying = isPlaying && lastNativePlaybackState === "playing";
-
-  // Helper: get absolute URL from a path
-  const getAbsoluteUrl = useCallback((path: string) => {
-    if (typeof window === "undefined") return path;
-    if (path.startsWith("http")) return path;
-    return `${window.location.origin}${path.startsWith("/") ? "" : "/"}${path}`;
-  }, []);
-
-  // Set metadata when track changes
-  useEffect(() => {
-    if (!("mediaSession" in navigator) || !currentTrack) return;
-
-    const artworkList: MediaImage[] = [];
-
-    // Track-specific artwork (if available)
-    if (currentTrack.artworkUrl) {
-      artworkList.push({
-        src: getAbsoluteUrl(currentTrack.artworkUrl),
-        sizes: "512x512",
-        type: "image/png",
-      });
-    }
-
-    // App icon fallbacks — MUST be absolute URLs for lock screen
-    artworkList.push(
-      {
-        src: getAbsoluteUrl("/icons/icon-192.png"),
-        sizes: "192x192",
-        type: "image/png",
-      },
-      {
-        src: getAbsoluteUrl("/icons/icon-512.png"),
-        sizes: "512x512",
-        type: "image/png",
-      },
-    );
-
-    navigator.mediaSession.metadata = new MediaMetadata({
-      title: currentTrack.hebrewTitle || currentTrack.title,
-      artist: currentTrack.seriesName || "נגן תורה",
-      album: "שיעורי תורה",
-      artwork: artworkList,
-    });
-  }, [currentTrack, getAbsoluteUrl]);
-
-  // Set playback state and manage Wake Lock
   useEffect(() => {
     if (!("mediaSession" in navigator)) return;
-    navigator.mediaSession.playbackState = actuallyPlaying
-      ? "playing"
-      : "paused";
-
-    // Acquire Wake Lock when playing to prevent device sleep
-    if (isPlaying) {
-      acquireWakeLock();
-    } else {
-      releaseWakeLock();
-    }
-
-    async function acquireWakeLock() {
-      if (wakeLockRef.current) return; // Already held
-      try {
-        if ("wakeLock" in navigator) {
-          wakeLockRef.current = await navigator.wakeLock.request("screen");
-          wakeLockRef.current.addEventListener("release", () => {
-            wakeLockRef.current = null;
-          });
-        }
-      } catch {
-        // Wake Lock not supported or denied
-      }
-    }
-
-    function releaseWakeLock() {
-      if (wakeLockRef.current) {
-        wakeLockRef.current.release().catch(() => {});
-        wakeLockRef.current = null;
-      }
-    }
-
-    return () => {
-      releaseWakeLock();
-    };
-  }, [actuallyPlaying, isPlaying]);
-
-  // Re-acquire wake lock when page regains visibility (iOS/Android resume)
-  useEffect(() => {
-    function handleVisibilityChange() {
-      if (document.visibilityState === "visible" && isPlaying) {
-        // Re-acquire wake lock
-        if ("wakeLock" in navigator && !wakeLockRef.current) {
-          navigator.wakeLock
-            .request("screen")
-            .then((sentinel) => {
-              wakeLockRef.current = sentinel;
-              sentinel.addEventListener("release", () => {
-                wakeLockRef.current = null;
-              });
-            })
-            .catch(() => {});
-        }
-
-        // Re-set media session metadata (iOS sometimes loses it)
-        if ("mediaSession" in navigator && currentTrack) {
-          navigator.mediaSession.playbackState = actuallyPlaying
-            ? "playing"
-            : "paused";
-        }
-      }
-    }
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () =>
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [actuallyPlaying, isPlaying, currentTrack]);
-
-  // Set position state — throttled to every 5 seconds to prevent flicker
-  useEffect(() => {
-    if (!("mediaSession" in navigator) || !currentTrack) return;
-
-    const now = Date.now();
-    // Throttle: only update every 5 seconds (instead of every animation frame)
-    if (now - lastPositionUpdate.current < 5000) return;
-    lastPositionUpdate.current = now;
-
-    try {
-      const safeDuration = duration || 0;
-      const safePosition = Math.max(0, Math.min(currentTime, safeDuration));
-      if (safeDuration > 0) {
-        navigator.mediaSession.setPositionState({
-          duration: safeDuration,
-          playbackRate: playbackSpeed || 1,
-          position: safePosition,
-        });
-      }
-    } catch {
-      // Some browsers don't support setPositionState
-    }
-  }, [currentTime, duration, currentTrack, playbackSpeed]);
-
-  // Set action handlers — use audioEngine directly + getState() for fresh state
-  useEffect(() => {
-    if (!("mediaSession" in navigator)) return;
+    const session = navigator.mediaSession;
 
     const handlers: [MediaSessionAction, MediaSessionActionHandler][] = [
-      [
-        "play",
-        () => {
-          const state = useAudioStore.getState();
-          state.play();
-          void resumeTrackPlayback(
-            { track: state.currentTrack, currentTime: state.currentTime },
-            {
-              getOfflineAudioUrl: (track) =>
-                getOfflineAudioUrl(
-                  track.lessonId || track.id,
-                  track.audioUrl,
-                  track.offlineKey,
-                ),
-              ensurePlaying: audioEngine.ensurePlaying.bind(audioEngine),
-              markPlaying: () => useAudioStore.getState().play(),
-              isEngineLoaded: () => audioEngine.isLoaded(),
-              getCurrentEngineUrl: () => audioEngine.getCurrentUrl(),
-              isLoadedUrlCurrentTrack,
-              isStillCurrent: (track) => {
-                const currentTrack = useAudioStore.getState().currentTrack;
-                return isSameAudioTrack(currentTrack, track);
-              },
-              shouldResume: () => useAudioStore.getState().isPlaying,
-            },
-          );
-        },
-      ],
-      [
-        "pause",
-        () => {
-          audioEngine.pause();
-          const state = useAudioStore.getState();
-          state.pause();
-          state.setNativePlaybackState("paused");
-          state.setPlaybackRecoveryState("idle");
-        },
-      ],
-      [
-        "seekforward",
-        () => {
-          const newTime = Math.min(
-            audioEngine.getCurrentTime() + 15,
-            audioEngine.getDuration(),
-          );
-          audioEngine.seek(newTime);
-          useAudioStore.getState().setCurrentTime(newTime);
-        },
-      ],
-      [
-        "seekbackward",
-        () => {
-          const newTime = Math.max(audioEngine.getCurrentTime() - 15, 0);
-          audioEngine.seek(newTime);
-          useAudioStore.getState().setCurrentTime(newTime);
-        },
-      ],
-      [
-        "nexttrack",
-        () => {
-          useAudioStore.getState().nextTrack();
-        },
-      ],
-      [
-        "previoustrack",
-        () => {
-          const state = useAudioStore.getState();
-          if (audioEngine.getCurrentTime() > 3) {
-            audioEngine.seek(0);
-            state.setCurrentTime(0);
-          } else {
-            state.previousTrack();
-          }
-        },
-      ],
+      ["play", () => play()],
+      ["pause", () => pause()],
+      ["stop", () => pause()],
+      ["seekbackward", (details) => skipBy(-(details.seekOffset || SKIP_BACK_SECONDS))],
+      ["seekforward", (details) => skipBy(details.seekOffset || SKIP_FORWARD_SECONDS)],
       [
         "seekto",
         (details) => {
-          if (details.seekTime !== undefined) {
-            audioEngine.seek(details.seekTime);
-            useAudioStore.getState().setCurrentTime(details.seekTime);
-          }
+          if (details.seekTime !== undefined) seekTo(details.seekTime);
         },
       ],
+      // Steering-wheel and headset buttons send these; with a single lesson
+      // they skip inside it instead of doing nothing.
+      ["previoustrack", () => previousTrackOrSkip()],
+      ["nexttrack", () => nextTrackOrSkip()],
     ];
-
     for (const [action, handler] of handlers) {
       try {
-        navigator.mediaSession.setActionHandler(action, handler);
+        session.setActionHandler(action, handler);
       } catch {
-        // Action not supported on this browser
+        // Action not supported by this browser.
       }
     }
 
+    const sync = (state: AudioPlayerState, previous?: AudioPlayerState) => {
+      const track = state.currentTrack;
+      if (!track) {
+        session.metadata = null;
+        session.playbackState = "none";
+        return;
+      }
+
+      const trackChanged = track !== previous?.currentTrack;
+      // iOS can drop the now-playing info after an interruption; re-assert it
+      // whenever sound starts again.
+      const startedPlaying =
+        state.playbackStatus === "playing" && previous?.playbackStatus !== "playing";
+      if (trackChanged || startedPlaying) session.metadata = buildMetadata(track);
+
+      session.playbackState = getTransportState(state) === "paused" ? "paused" : "playing";
+
+      if (
+        !previous ||
+        trackChanged ||
+        state.playbackStatus !== previous.playbackStatus ||
+        state.playbackSpeed !== previous.playbackSpeed ||
+        state.duration !== previous.duration ||
+        Math.abs(state.currentTime - previous.currentTime) > SEEK_JUMP_SECONDS
+      ) {
+        updatePositionState(session, state);
+      }
+    };
+
+    sync(useAudioStore.getState());
+    const unsubscribe = useAudioStore.subscribe(sync);
+
     return () => {
+      unsubscribe();
       for (const [action] of handlers) {
         try {
-          navigator.mediaSession.setActionHandler(action, null);
+          session.setActionHandler(action, null);
         } catch {
-          // Cleanup failed
+          // Action not supported by this browser.
         }
       }
     };
-  }, []); // Empty deps — handlers use getState() so they always read fresh state
+  }, []);
 }

@@ -22,10 +22,11 @@ import {
   deleteImage,
   updateAudioType,
 } from '@/actions/lessons';
-import { useUpload, type FileWithMeta } from '@/hooks/use-upload';
+import { ImageUnreadableError, useUpload, uploadImageFile, type FileWithMeta } from '@/hooks/use-upload';
 import { UploadZone, type SelectedFile } from '@/components/upload/upload-zone';
 import type { LessonAudio, LessonImage, CategoryWithChildren } from '@/types/database';
 import { getCategories } from '@/actions/categories';
+import { generateLessonMetadata } from '@/lib/hebrew-date';
 
 interface MetadataSuggestion {
   title: string;
@@ -38,9 +39,15 @@ interface MetadataSuggestion {
   lessonType: string;
 }
 
+/** Next free sort_order after the existing rows (rows may have gaps after deletes). */
+function nextSortOrder(rows: Array<{ sort_order: number }>): number {
+  return rows.reduce((max, row) => Math.max(max, row.sort_order + 1), 0);
+}
+
 export default function EditLessonPage() {
   const t = useTranslations('lessons');
   const tCommon = useTranslations('common');
+  const tUpload = useTranslations('upload');
   const router = useRouter();
   const params = useParams();
   const lessonId = params.lessonId as string;
@@ -74,7 +81,6 @@ export default function EditLessonPage() {
 
   // Auto-metadata suggestion
   const [metadataSuggestion, setMetadataSuggestion] = useState<MetadataSuggestion | null>(null);
-  const [metadataLoading, setMetadataLoading] = useState(false);
 
   // Audio files state
   const [audioFiles, setAudioFiles] = useState<LessonAudio[]>([]);
@@ -90,7 +96,7 @@ export default function EditLessonPage() {
 
   // Image management
   const [images, setImages] = useState<LessonImage[]>([]);
-  const [newImageFiles, setNewImageFiles] = useState<File[]>([]);
+  const [newImageFiles, setNewImageFiles] = useState<Array<{ file: File; url: string }>>([]);
   const [uploadingImages, setUploadingImages] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
@@ -136,20 +142,9 @@ export default function EditLessonPage() {
 
   // --- Auto-metadata ---
 
-  const fetchMetadata = async () => {
-    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
-    setMetadataLoading(true);
-    try {
-      const res = await fetch(`/api/lesson-metadata?date=${date}`);
-      const data = await res.json();
-      if (!data.error) {
-        setMetadataSuggestion(data as MetadataSuggestion);
-      }
-    } catch {
-      // ignore
-    } finally {
-      setMetadataLoading(false);
-    }
+  const suggestMetadata = () => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+    setMetadataSuggestion(generateLessonMetadata(date));
   };
 
   const applyMetadata = () => {
@@ -205,22 +200,31 @@ export default function EditLessonPage() {
         return;
       }
 
-      // Upload new images if any
+      // Upload new images; failed ones stay queued so saving again retries them.
       if (newImageFiles.length > 0) {
         setUploadingImages(true);
-        const startOrder = images.length;
+        const startOrder = nextSortOrder(images);
+        const failed: typeof newImageFiles = [];
+        const errors: string[] = [];
         for (let i = 0; i < newImageFiles.length; i++) {
-          const imgForm = new FormData();
-          imgForm.append('file', newImageFiles[i]);
-          imgForm.append('lessonId', lessonId);
-          imgForm.append('sortOrder', String(startOrder + i));
+          const { file, url } = newImageFiles[i];
           try {
-            await fetch('/api/upload/image', { method: 'POST', body: imgForm });
+            await uploadImageFile(file, { lessonId, sortOrder: startOrder + i });
+            URL.revokeObjectURL(url);
           } catch (err) {
-            console.error(`Image upload ${i} failed:`, err);
+            failed.push(newImageFiles[i]);
+            const reason = err instanceof ImageUnreadableError ? tUpload('imageUnreadable') : err instanceof Error ? err.message : String(err);
+            errors.push(`\u2068${file.name}\u2069: \u2068${reason}\u2069`);
           }
         }
+        setNewImageFiles(failed);
+        const refreshed = await getImages(lessonId);
+        if (refreshed.data) setImages(refreshed.data);
         setUploadingImages(false);
+        if (errors.length > 0) {
+          setFormError(`${tUpload('imagesFailed')}\n${errors.join('\n')}`);
+          return;
+        }
       }
 
       setSuccessMsg('השיעור עודכן בהצלחה');
@@ -302,15 +306,20 @@ export default function EditLessonPage() {
   // --- Image management ---
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []).filter((f) => f.type.startsWith('image/'));
+    const files = Array.from(e.target.files || []).filter(
+      (f) => f.type.startsWith('image/') || /\.(heic|heif)$/i.test(f.name),
+    );
     if (files.length > 0) {
-      setNewImageFiles((prev) => [...prev, ...files]);
+      setNewImageFiles((prev) => [...prev, ...files.map((file) => ({ file, url: URL.createObjectURL(file) }))]);
     }
     if (imageInputRef.current) imageInputRef.current.value = '';
   };
 
   const removeNewImage = (index: number) => {
-    setNewImageFiles((prev) => prev.filter((_, i) => i !== index));
+    setNewImageFiles((prev) => {
+      URL.revokeObjectURL(prev[index].url);
+      return prev.filter((_, i) => i !== index);
+    });
   };
 
   const handleDeleteExistingImage = async (imageId: string) => {
@@ -332,23 +341,26 @@ export default function EditLessonPage() {
     setFormError(null);
 
     try {
-      // Assign sort_order starting after existing files
-      const startOrder = audioFiles.length;
-      const filesToUpload: FileWithMeta[] = pendingAudioFiles.map((sf, i) => ({
+      const filesToUpload: FileWithMeta[] = pendingAudioFiles.map((sf) => ({
         file: sf.file,
-        metadata: { ...sf.metadata, sortOrder: startOrder + i },
+        metadata: sf.metadata,
         transcodeEnabled: sf.transcodeEnabled,
       }));
 
-      await uploadMultiple(filesToUpload, lessonId);
+      const result = await uploadMultiple(filesToUpload, lessonId, nextSortOrder(audioFiles));
 
-      // Refresh audio files list from server
       const refreshed = await getAudioFiles(lessonId);
       if (refreshed.data) {
         setAudioFiles(refreshed.data);
       }
 
-      // Reset upload state
+      if (result.failed.length > 0) {
+        setFormError(
+          `${tUpload('audioFailed')}\n${result.failed.map((f) => `\u2068${f.fileName}\u2069: \u2068${f.error}\u2069`).join('\n')}`,
+        );
+        return;
+      }
+
       setPendingAudioFiles([]);
       setShowAudioUpload(false);
       resetUpload();
@@ -429,16 +441,13 @@ export default function EditLessonPage() {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={fetchMetadata}
-            disabled={!date || metadataLoading}
+            onClick={suggestMetadata}
+            disabled={!date}
             className="flex items-center gap-1.5 rounded-lg bg-[hsl(var(--surface-elevated))] px-3 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
           >
             <Sparkles className="h-3.5 w-3.5" />
             <span>הצע מטאדאטה מתאריך</span>
           </button>
-          {metadataLoading && (
-            <span className="text-xs text-muted-foreground animate-pulse">מחשב...</span>
-          )}
         </div>
 
         {/* Metadata suggestion preview */}
@@ -656,7 +665,7 @@ export default function EditLessonPage() {
           <p className="text-sm text-primary font-medium">{successMsg}</p>
         )}
         {formError && (
-          <p className="text-sm text-destructive">{formError}</p>
+          <p className="text-sm text-destructive whitespace-pre-line">{formError}</p>
         )}
 
         {/* Save button */}
@@ -710,10 +719,10 @@ export default function EditLessonPage() {
         {newImageFiles.length > 0 && (
           <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 mb-3">
             {newImageFiles.map((img, index) => (
-              <div key={`new-${index}`} className="relative group aspect-square">
+              <div key={img.url} className="relative group aspect-square">
                 <img
-                  src={URL.createObjectURL(img)}
-                  alt={img.name}
+                  src={img.url}
+                  alt={img.file.name}
                   className="w-full h-full object-cover rounded-lg opacity-70"
                 />
                 <div className="absolute inset-0 rounded-lg border-2 border-dashed border-primary/30" />
@@ -915,7 +924,7 @@ export default function EditLessonPage() {
                       <Check className="h-3.5 w-3.5 text-green-400" />
                     )}
                     {fp.status === 'error' && (
-                      <span className="text-destructive">שגיאה</span>
+                      <span className="text-destructive truncate max-w-[50%]" title={fp.error}><bdi>{fp.error || tCommon('error')}</bdi></span>
                     )}
                   </div>
                 ))}

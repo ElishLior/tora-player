@@ -1,97 +1,71 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireServerSupabaseClient } from '@/lib/supabase/server';
-import { uploadToR2 } from '@/lib/r2';
+import { createAdminSupabaseClient } from '@/lib/supabase/admin';
+import { deleteFromR2, uploadToR2 } from '@/lib/r2';
+import { sniffImage } from '@/lib/image-sniff';
+import { lessonExists, rejectNonAdmin, UUID_RE } from '@/lib/upload-server';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
 
+// Vercel caps request bodies at ~4.5 MB; the client downsizes larger photos.
+const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
+
 /**
- * Upload a single image for a lesson.
- * Stores the image in R2 under images/{lessonId}/ and creates a lesson_images record.
- *
- * Accepts multipart form data:
- *   - file: the image file
- *   - lessonId: the lesson UUID
- *   - sortOrder: optional sort position (defaults to 0)
+ * Upload one image for an existing lesson (multipart: file, lessonId, sortOrder).
+ * The format comes from the file's magic bytes, never from the client MIME type.
  */
 export async function POST(request: NextRequest) {
+  const denied = await rejectNonAdmin();
+  if (denied) return denied;
+
+  let fileKey: string | null = null;
   try {
     const formData = await request.formData();
-    const file = formData.get('file') as File | null;
-    const lessonId = formData.get('lessonId') as string | null;
+    const file = formData.get('file');
+    const lessonId = formData.get('lessonId');
     const sortOrder = Number(formData.get('sortOrder') || 0);
 
-    if (!file || !lessonId) {
-      return NextResponse.json(
-        { error: 'Missing required fields: file, lessonId' },
-        { status: 400 }
-      );
+    if (!(file instanceof File) || typeof lessonId !== 'string' || !UUID_RE.test(lessonId) ||
+      !Number.isInteger(sortOrder) || sortOrder < 0) {
+      return NextResponse.json({ error: 'Invalid image request' }, { status: 400 });
+    }
+    if (file.size === 0 || file.size > MAX_IMAGE_BYTES) {
+      return NextResponse.json({ error: 'Image too large' }, { status: 413 });
     }
 
-    // Validate it's an image
-    if (!file.type.startsWith('image/')) {
-      return NextResponse.json(
-        { error: 'File must be an image' },
-        { status: 400 }
-      );
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const image = sniffImage(buffer);
+    if (!image) {
+      return NextResponse.json({ error: 'Unsupported image format (JPEG, PNG, WebP or GIF only)' }, { status: 415 });
+    }
+    if (!(await lessonExists(lessonId))) {
+      return NextResponse.json({ error: 'Lesson not found' }, { status: 404 });
     }
 
-    // Max 20MB for images
-    if (file.size > 20 * 1024 * 1024) {
-      return NextResponse.json(
-        { error: 'Image too large. Maximum 20MB.' },
-        { status: 400 }
-      );
-    }
+    fileKey = `images/${lessonId}/${sortOrder}_${Date.now()}.${image.ext}`;
+    await uploadToR2(fileKey, buffer, image.mime);
 
-    // Read file into buffer
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    // Determine extension from content type
-    const ext = file.type.split('/').pop()?.replace('jpeg', 'jpg') || 'jpg';
-    const fileKey = `images/${lessonId}/${sortOrder}_${Date.now()}.${ext}`;
-
-    // Upload to R2
-    await uploadToR2(fileKey, buffer, file.type);
-
-    // Create image URL (via streaming proxy)
     const imageUrl = `/api/images/stream/${encodeURIComponent(fileKey)}`;
-
-    // Record in database
-    const supabase = await requireServerSupabaseClient();
-    const { data: imageRecord, error: dbError } = await supabase
+    const { data: imageRecord, error: dbError } = await createAdminSupabaseClient()
       .from('lesson_images')
       .insert({
         lesson_id: lessonId,
         file_key: fileKey,
         image_url: imageUrl,
-        original_name: file.name,
-        file_size: file.size,
+        source_filename: file.name.slice(0, 255),
+        file_size: buffer.length,
         sort_order: sortOrder,
       })
       .select()
       .single();
+    if (dbError) throw dbError;
 
-    if (dbError) {
-      console.error('DB error creating lesson_image:', dbError);
-      return NextResponse.json(
-        { error: 'Image uploaded but failed to save record' },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({
-      success: true,
-      fileKey,
-      imageUrl,
-      imageRecord,
-    });
+    return NextResponse.json({ success: true, fileKey, imageUrl, imageRecord });
   } catch (error) {
     console.error('Image upload error:', error);
-    return NextResponse.json(
-      { error: 'Failed to upload image' },
-      { status: 500 }
-    );
+    if (fileKey) {
+      try { await deleteFromR2(fileKey); } catch { /* best effort */ }
+    }
+    return NextResponse.json({ error: 'Failed to upload image' }, { status: 500 });
   }
 }

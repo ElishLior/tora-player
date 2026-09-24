@@ -3,13 +3,15 @@ export const dynamic = 'force-dynamic';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { getRecentLessons, getCategoriesTree, getCategoryLessonCounts } from '@/lib/supabase/queries';
+import { getShortLessons } from '@/lib/supabase/shorts';
+import { SHORTS_CATEGORY_ID } from '@/lib/upload-drafts';
 import { LessonCard } from '@/components/lessons/lesson-card';
 import { EmptyState } from '@/components/shared/empty-state';
 import { Link } from '@/i18n/routing';
 import { BookOpen, Wrench, Sparkles, Music, Scissors, FolderOpen, Plus, ChevronLeft } from 'lucide-react';
-import { isAdmin } from '@/actions/auth';
+import { isAdmin } from '@/lib/auth/admin';
 import { ContinueListeningSection } from '@/components/home/continue-listening-section';
-import type { CategoryWithChildren } from '@/types/database';
+import type { CategoryWithChildren, LessonWithRelations } from '@/types/database';
 
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   BookOpen,
@@ -43,23 +45,26 @@ export default async function HomePage({ params }: Props) {
   const { locale } = await params;
   setRequestLocale(locale);
   const t = await getTranslations('home');
+  const tShorts = await getTranslations('shorts');
 
   const supabase = await createServerSupabaseClient();
   const admin = await isAdmin();
 
-  let recentLessons: Awaited<ReturnType<typeof getRecentLessons>> = [];
+  let recentLessons: LessonWithRelations[] = [];
+  let recentShorts: LessonWithRelations[] = [];
   let categories: CategoryWithChildren[] = [];
   let counts: Record<string, number> = {};
 
   if (supabase) {
     try {
-      [recentLessons, categories, counts] = await Promise.all([
+      [recentLessons, categories, counts, { lessons: recentShorts }] = await Promise.all([
         getRecentLessons(supabase, 10),
         getCategoriesTree(supabase),
         getCategoryLessonCounts(supabase),
+        getShortLessons(supabase, 5),
       ]);
-    } catch {
-      // defaults already set
+    } catch (error) {
+      console.error('Home page: failed to load lessons', error);
     }
   }
 
@@ -100,7 +105,7 @@ export default async function HomePage({ params }: Props) {
             return (
               <Link
                 key={cat.id}
-                href={`/categories/${cat.id}`}
+                href={cat.id === SHORTS_CATEGORY_ID ? '/shorts' : `/categories/${cat.id}`}
                 className="flex items-center gap-3 rounded-md bg-[hsl(var(--surface-elevated))] p-3 hover:bg-[hsl(var(--surface-highlight))] transition-colors"
               >
                 <div className={`h-8 w-8 rounded bg-gradient-to-br ${gradient} flex items-center justify-center`}>
@@ -120,6 +125,30 @@ export default async function HomePage({ params }: Props) {
 
       {/* Continue Listening — client-side, reads from localStorage per device */}
       <ContinueListeningSection title={t('continueListening')} />
+
+      {/* Shorts */}
+      {recentShorts.length > 0 && (
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="flex items-center gap-2 text-lg font-bold">
+              <Scissors className="h-4 w-4 text-rose-400" />
+              {tShorts('title')}
+            </h2>
+            <Link
+              href="/shorts"
+              className="flex items-center gap-0.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {tShorts('showAll')}
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+          <div className="space-y-0.5">
+            {recentShorts.map((lesson) => (
+              <LessonCard key={lesson.id} lesson={lesson} />
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Recent Lessons */}
       <section>

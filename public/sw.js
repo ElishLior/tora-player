@@ -1,231 +1,239 @@
-// Tora Player Service Worker
-const CACHE_VERSION = 'tora-player-v7';
-const STATIC_CACHE = `${CACHE_VERSION}-static`;
-const DYNAMIC_CACHE = `${CACHE_VERSION}-dynamic`;
-const API_CACHE = `${CACHE_VERSION}-api`;
+// Tora Player service worker.
+//
+// The page registers `/sw.js?v=<build id>`. A new deploy changes the script
+// URL, so the browser installs a fresh worker whose caches are keyed by that
+// build id; activation deletes every cache from older builds.
+importScripts('/sw-push.js');
 
-// App shell resources to precache — these pages work offline after first visit
-const APP_SHELL = [
-  '/manifest.json',
-  '/he',
-  '/he/offline',
-  '/he/lessons',
-];
+const BUILD_ID = new URL(self.location.href).searchParams.get('v') || 'dev';
+const CACHE_PREFIX = 'tora-player-';
+const STATIC_CACHE = `${CACHE_PREFIX}${BUILD_ID}-static`;
+const PAGES_CACHE = `${CACHE_PREFIX}${BUILD_ID}-pages`;
+const SHARE_TARGET_CACHE = 'share-target-v1';
 
-// Static asset extensions
-const STATIC_EXTENSIONS = [
-  '.js', '.css', '.woff', '.woff2', '.ttf', '.otf',
-  '.png', '.jpg', '.jpeg', '.svg', '.ico', '.webp',
-];
+const DEFAULT_LOCALE = 'he';
+const LOCALES = ['he', 'en'];
+const offlinePath = (locale) => `/${locale}/offline`;
 
-// Install event - precache app shell
+// Pages that must never be stored: sign-in, admin screens and the upload flow.
+const UNCACHEABLE_PAGE_PREFIXES = LOCALES.flatMap((locale) => [
+  `/${locale}/auth`,
+  `/${locale}/admin`,
+  `/${locale}/lessons/upload`,
+]);
+
+// Matches hashed Next.js assets referenced from HTML, including the chunk
+// paths embedded in the RSC flight payload ("static/chunks/...js"). Only real
+// files (with an extension) match, never bare directory prefixes.
+const NEXT_ASSET_PATTERN =
+  /(?:\/_next\/)?static\/(?:chunks|css|media)\/[^"'\\\s)<>?]+\.(?:js|css|woff2?|ttf|otf)(?:\?[^"'\\\s)<>]*)?/g;
+
+function extractNextAssets(html) {
+  const assets = new Set();
+  for (const match of html.matchAll(NEXT_ASSET_PATTERN)) {
+    const path = match[0].startsWith('/_next/') ? match[0] : `/_next/${match[0]}`;
+    assets.add(path);
+  }
+  return [...assets];
+}
+
+// Cache an offline library page together with every JS/CSS chunk it needs to
+// hydrate, so it works with no network at all.
+async function precacheOfflineShell(locale) {
+  const pages = await caches.open(PAGES_CACHE);
+  const response = await fetch(offlinePath(locale), { cache: 'no-store', credentials: 'same-origin' });
+  if (!response.ok) throw new Error(`Offline shell ${locale} returned ${response.status}`);
+
+  const html = await response.clone().text();
+  const staticCache = await caches.open(STATIC_CACHE);
+  await staticCache.addAll(['/manifest.json', ...extractNextAssets(html)]);
+  await pages.put(offlinePath(locale), response);
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(STATIC_CACHE).then((cache) => {
-      // Cache each resource individually so one failure doesn't block others
-      return Promise.allSettled(
-        APP_SHELL.map((url) =>
-          cache.add(url).catch((err) => {
-            console.warn(`[SW] Failed to precache ${url}:`, err);
-          })
-        )
+    (async () => {
+      // The default locale's shell is required: if it can't be cached the
+      // install fails and the previous worker keeps serving.
+      await precacheOfflineShell(DEFAULT_LOCALE);
+      await Promise.allSettled(
+        LOCALES.filter((locale) => locale !== DEFAULT_LOCALE).map(precacheOfflineShell),
       );
-    })
+      // Activate right away. Open pages keep running their already-loaded
+      // code; the next full navigation picks up the new build. The page never
+      // force-reloads, so playback is not interrupted.
+      await self.skipWaiting();
+    })(),
   );
-  // Activate immediately
-  self.skipWaiting();
 });
 
-// Activate event - clean old caches
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames
-          .filter((name) => name.startsWith('tora-player-') && name !== STATIC_CACHE && name !== DYNAMIC_CACHE && name !== API_CACHE)
-          .map((name) => caches.delete(name))
+    (async () => {
+      const names = await caches.keys();
+      await Promise.all(
+        names
+          .filter((name) => name.startsWith(CACHE_PREFIX) && name !== STATIC_CACHE && name !== PAGES_CACHE)
+          .map((name) => caches.delete(name)),
       );
-    })
+      await self.clients.claim();
+    })(),
   );
-  // Take control of all clients immediately
-  self.clients.claim();
 });
 
-// Helper: is this a static asset request?
-function isStaticAsset(url) {
-  return STATIC_EXTENSIONS.some((ext) => url.pathname.endsWith(ext)) ||
-    url.pathname.startsWith('/_next/static/');
+// Sent by the sign-out flow: drop every stored page (they may contain the
+// previous account's data), then re-fetch the offline shell as the signed-out
+// user so offline fallback keeps working. Static assets stay cached.
+self.addEventListener('message', (event) => {
+  if (event.data?.type !== 'CLEAR_USER_CACHES') return;
+  event.waitUntil(
+    (async () => {
+      await caches.delete(PAGES_CACHE);
+      await Promise.allSettled(LOCALES.map(precacheOfflineShell));
+    })(),
+  );
+});
+
+function isPublicStaticFile(url) {
+  return (
+    url.pathname === '/manifest.json' ||
+    url.pathname.startsWith('/icons/') ||
+    /\.(?:png|jpe?g|svg|ico|webp|woff2?|ttf|otf)$/i.test(url.pathname)
+  );
 }
 
-// Helper: is this an API request?
-function isApiRequest(url) {
-  return url.pathname.startsWith('/api/') ||
-    url.hostname.includes('supabase');
+function localeOf(url) {
+  const segment = url.pathname.split('/')[1];
+  return LOCALES.includes(segment) ? segment : DEFAULT_LOCALE;
 }
 
-// Helper: is this a page navigation?
-function isPageRequest(request) {
-  return request.mode === 'navigate' ||
-    (request.method === 'GET' && request.headers.get('accept')?.includes('text/html'));
+// A page response may be stored only when it is public: Next.js marks
+// dynamic / per-user renders `private, no-store`.
+function isCacheablePage(url, response) {
+  if (response.status !== 200 || response.type !== 'basic' || response.redirected) return false;
+  if (UNCACHEABLE_PAGE_PREFIXES.some((prefix) => url.pathname.startsWith(prefix))) return false;
+  const cacheControl = response.headers.get('Cache-Control') || '';
+  return !/no-store|private/i.test(cacheControl);
 }
 
-// Fetch event - routing strategies
 self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
+  const { request } = event;
+  const url = new URL(request.url);
 
-  // Skip caching entirely in development (localhost)
-  if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
-    return; // Let the browser handle normally (no SW interception)
-  }
-
-  // Handle share target POST requests (from WhatsApp/other apps)
-  if (event.request.method === 'POST' && url.pathname.includes('/share-target')) {
-    event.respondWith(handleShareTarget(event.request));
+  // Share target POSTs from other apps (WhatsApp etc.).
+  if (request.method === 'POST' && url.origin === self.location.origin && url.pathname.includes('/share-target')) {
+    event.respondWith(handleShareTarget(request));
     return;
   }
 
-  // Skip non-GET requests
-  if (event.request.method !== 'GET') return;
+  if (request.method !== 'GET') return;
+  // Cross-origin (Supabase, R2, ...) is never intercepted or cached.
+  if (url.origin !== self.location.origin) return;
+  // In local development the worker stays out of the way.
+  if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') return;
+  // API routes (audio/image streams with Range, auth, data) go straight to the network.
+  if (url.pathname.startsWith('/api/')) return;
 
-  // Skip chrome-extension and other non-http(s) requests
-  if (!url.protocol.startsWith('http')) return;
-
-  // Skip audio/image streaming endpoints entirely — 206 partial responses can't be cached
-  if (url.pathname.startsWith('/api/audio/') || url.pathname.startsWith('/api/images/')) {
-    return; // Let browser handle natively (no SW interception)
-  }
-
-  // Strategy 1: Network-first for API calls (always need fresh data)
-  if (isApiRequest(url)) {
-    event.respondWith(networkFirst(event.request, API_CACHE));
+  if (request.mode === 'navigate') {
+    event.respondWith(handleNavigation(event));
     return;
   }
 
-  // Strategy 2: Cache-first for static assets (fingerprinted, safe to cache)
-  if (isStaticAsset(url)) {
-    event.respondWith(cacheFirst(event.request, STATIC_CACHE));
+  if (url.pathname.startsWith('/_next/static/')) {
+    event.respondWith(cacheFirst(request));
     return;
   }
 
-  // Strategy 3: Stale-while-revalidate for page navigations
-  // Shows cached page immediately (fast offline) while updating cache in background
-  if (isPageRequest(event.request)) {
-    event.respondWith(staleWhileRevalidate(event.request, DYNAMIC_CACHE));
-    return;
+  if (isPublicStaticFile(url)) {
+    event.respondWith(staleWhileRevalidate(event));
   }
-
-  // Default: stale-while-revalidate
-  event.respondWith(staleWhileRevalidate(event.request, DYNAMIC_CACHE));
+  // Everything else (RSC payloads, /_next/image, ...) uses the network only.
 });
 
-// Stale-while-revalidate strategy
-// Returns cached version immediately if available, fetches update in background
-async function staleWhileRevalidate(request, cacheName) {
-  const cache = await caches.open(cacheName);
-  const cached = await cache.match(request);
+async function handleNavigation(event) {
+  const { request } = event;
+  const url = new URL(request.url);
 
-  const fetchPromise = fetch(request)
-    .then((response) => {
-      // Only cache full 200 responses — 206 partial responses cannot be cached
-      if (response.ok && response.status === 200) {
-        cache.put(request, response.clone());
-      }
-      return response;
-    })
-    .catch(() => {
-      // Network failed — if we have no cache, show offline page for navigations
-      if (!cached && request.mode === 'navigate') {
-        return caches.match('/he/offline').then((offlinePage) => {
-          return offlinePage || new Response('אופליין — לא נמצא עמוד', {
-            status: 503,
-            statusText: 'Service Unavailable',
-            headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-          });
-        });
-      }
-      // For non-navigation requests without cache, return 503
-      if (!cached) {
-        return new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
-      }
-      return cached;
-    });
-
-  // Return cached version immediately if available, otherwise wait for network
-  return cached || fetchPromise;
-}
-
-// Network-first strategy (used for API calls)
-async function networkFirst(request, cacheName) {
   try {
     const response = await fetch(request);
-    // Only cache full 200 responses — 206 partial responses cannot be cached
-    if (response.ok && response.status === 200) {
-      const cache = await caches.open(cacheName);
-      cache.put(request, response.clone());
+    if (isCacheablePage(url, response)) {
+      const copy = response.clone();
+      event.waitUntil(caches.open(PAGES_CACHE).then((cache) => cache.put(request, copy)));
     }
     return response;
-  } catch (error) {
-    const cached = await caches.match(request);
+  } catch {
+    const pages = await caches.open(PAGES_CACHE);
+    const cached = await pages.match(request, { ignoreVary: true });
     if (cached) return cached;
-    // Return offline fallback for page requests
-    if (request.mode === 'navigate') {
-      const offlinePage = await caches.match('/he/offline');
-      if (offlinePage) return offlinePage;
+
+    const fallbackPath = offlinePath(localeOf(url));
+    if (url.pathname !== fallbackPath && (await pages.match(fallbackPath))) {
+      // Redirect so the offline library renders at its own URL and the router
+      // state matches the HTML.
+      return Response.redirect(fallbackPath, 302);
     }
-    return new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
+
+    const shell = await pages.match(fallbackPath);
+    if (shell) return shell;
+
+    return new Response('אין חיבור לרשת', {
+      status: 503,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    });
   }
 }
 
-// Cache-first strategy (used for static assets)
-async function cacheFirst(request, cacheName) {
-  const cached = await caches.match(request);
+async function cacheFirst(request) {
+  const cache = await caches.open(STATIC_CACHE);
+  const cached = await cache.match(request);
   if (cached) return cached;
 
-  try {
-    const response = await fetch(request);
-    // Only cache full 200 responses — 206 partial responses cannot be cached
-    if (response.ok && response.status === 200) {
-      const cache = await caches.open(cacheName);
-      cache.put(request, response.clone());
-    }
-    return response;
-  } catch (error) {
-    return new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
+  const response = await fetch(request);
+  if (response.status === 200) {
+    await cache.put(request, response.clone());
   }
+  return response;
 }
 
-// Handle share target POST - cache the form data and redirect to share-target page
+async function staleWhileRevalidate(event) {
+  const { request } = event;
+  const cache = await caches.open(STATIC_CACHE);
+  const cached = await cache.match(request);
+
+  const network = fetch(request).then(async (response) => {
+    if (response.status === 200) {
+      await cache.put(request, response.clone());
+    }
+    return response;
+  });
+
+  if (cached) {
+    event.waitUntil(network.catch(() => undefined));
+    return cached;
+  }
+  return network;
+}
+
+// Handle share target POST: stash the form data and redirect to the share-target page.
 async function handleShareTarget(request) {
   try {
     const formData = await request.formData();
+    const cache = await caches.open(SHARE_TARGET_CACHE);
 
-    // Store the shared data in a temporary cache for the page to read
-    const cache = await caches.open('share-target-v1');
-
-    // Create a synthetic Response with the form data
-    const headers = new Headers();
-    headers.set('Content-Type', request.headers.get('Content-Type') || 'multipart/form-data');
-
-    // Re-create FormData as a Response that can be cached
     const body = new FormData();
     for (const [key, value] of formData.entries()) {
       body.append(key, value);
     }
-
     await cache.put('/share-target-data', new Response(body));
 
-    // Build redirect URL with text params as fallback
-    const title = formData.get('title') || '';
-    const text = formData.get('text') || '';
-    const url = formData.get('url') || '';
     const params = new URLSearchParams();
-    if (title) params.set('title', title);
-    if (text) params.set('text', text);
-    if (url) params.set('url', url);
+    for (const key of ['title', 'text', 'url']) {
+      const value = formData.get(key);
+      if (value) params.set(key, value);
+    }
 
-    const redirectUrl = `/he/lessons/share-target${params.toString() ? '?' + params.toString() : ''}`;
-
-    return Response.redirect(redirectUrl, 303);
+    const query = params.toString();
+    return Response.redirect(`/he/lessons/share-target${query ? `?${query}` : ''}`, 303);
   } catch (err) {
     console.error('[SW] Share target error:', err);
     return Response.redirect('/he/lessons/upload', 303);

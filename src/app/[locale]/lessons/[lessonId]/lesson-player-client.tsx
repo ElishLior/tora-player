@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Play,
-  Pause,
   Cast,
   Volume2,
   X,
@@ -24,110 +23,27 @@ import {
   Bookmark,
   FileDown,
 } from 'lucide-react';
-import { useLocale } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { SeekBar } from '@/components/player/seek-bar';
 import { SpeedControl } from '@/components/player/speed-control';
+import { PlayPauseIcon, SkipButton } from '@/components/player/player-controls';
+import { BookmarkDialog } from '@/components/bookmarks/bookmark-dialog';
+import { BookmarkChips, BookmarkMarkers } from '@/components/bookmarks/lesson-bookmarks';
 import { handleCastClick } from '@/lib/cast-utils';
-import { getAudioDownloadUrl, sanitizeDownloadFilename } from '@/lib/audio-download';
+import { buildAudioDownloadFilename, getAudioDownloadUrl } from '@/lib/audio-download';
 import type { LessonWithRelations, LessonAudio, LessonImage } from '@/types/database';
 import { normalizeAudioUrl } from '@/lib/audio-url';
 import { getNotes, addNote, updateNote, deleteNote, type LocalNote } from '@/lib/local-notes';
-import { downloadLessonAudioFiles, getDownloadedLesson, getOfflineKey } from '@/lib/offline-storage';
+import { saveAudioFilesOffline, getDownloadedLesson, getOfflineKey } from '@/lib/offline-storage';
 import {
   OFFLINE_DOWNLOADS_CHANGED_EVENT,
   isOfflineDownloadsChangedEvent,
-  notifyOfflineDownloadsChanged,
 } from '@/lib/offline-events';
+import { handleDeviceDownloadClick } from '@/lib/device-download';
 import { useBookmarksStore } from '@/stores/bookmarks-store';
 import { submitSnippet } from '@/actions/snippets';
-
-// ---- Inlined bookmark dialog (webpack workaround: no separate 'use client' imports) ----
-const BOOKMARK_TAGS = [
-  {
-    value: 'important',
-    label: 'חשוב',
-    labelEn: 'Important',
-    color: 'bg-red-500/20 text-red-400 border-red-500/30',
-  },
-  {
-    value: 'review',
-    label: 'לחזור',
-    labelEn: 'Review',
-    color: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
-  },
-  {
-    value: 'quote',
-    label: 'ציטוט',
-    labelEn: 'Quote',
-    color: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  },
-  {
-    value: 'question',
-    label: 'שאלה',
-    labelEn: 'Question',
-    color: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-  },
-];
-
-function Skip15Back({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-    >
-      <path d="M12 5V1L7 5l5 4V5" />
-      <path d="M19.07 7.93A8 8 0 1 1 7 5.3" />
-      <text
-        x="12"
-        y="15.5"
-        textAnchor="middle"
-        fill="currentColor"
-        stroke="none"
-        fontSize="7.5"
-        fontWeight="bold"
-        fontFamily="system-ui"
-      >
-        15
-      </text>
-    </svg>
-  );
-}
-
-function Skip15Forward({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-    >
-      <path d="M12 5V1l5 4-5 4V5" />
-      <path d="M4.93 7.93A8 8 0 1 0 17 5.3" />
-      <text
-        x="12"
-        y="15.5"
-        textAnchor="middle"
-        fill="currentColor"
-        stroke="none"
-        fontSize="7.5"
-        fontWeight="bold"
-        fontFamily="system-ui"
-      >
-        15
-      </text>
-    </svg>
-  );
-}
 
 function formatDur(seconds: number): string {
   if (!seconds || seconds <= 0) return '';
@@ -199,109 +115,9 @@ function getLessonAudioAssets(lesson: LessonWithRelations): LessonAudioAsset[] {
 }
 
 function getAudioAssetFilename(lesson: LessonWithRelations, asset: LessonAudioAsset, index = 0): string {
-  const baseTitle = asset.originalName || asset.title || lesson.hebrew_title || lesson.title || 'lesson';
+  const baseTitle = asset.originalName || lesson.hebrew_title || lesson.title || asset.title || 'lesson';
   const suffix = asset.audioType ? ` - ${asset.audioType}` : index > 0 ? ` - ${index + 1}` : '';
-  const extension = decodeURIComponent(asset.audioUrl).split('?')[0]?.split('.').pop() || 'mp3';
-  const titleWithoutExtension = baseTitle.replace(/\.[a-z0-9]{2,5}$/i, '');
-  return sanitizeDownloadFilename(`${titleWithoutExtension}${suffix}.${extension}`, extension);
-}
-
-// Inlined — cannot import separate 'use client' files into this component
-function BookmarkDialogInline({
-  isRTL,
-  position,
-  lessonId,
-  onClose,
-}: {
-  isRTL: boolean;
-  position: number;
-  lessonId: string;
-  onClose: () => void;
-}) {
-  const [note, setNote] = useState('');
-  const [selectedTag, setSelectedTag] = useState('important');
-  const addBookmark = useBookmarksStore((s) => s.addBookmark);
-
-  const handleSave = () => {
-    addBookmark(lessonId, position, note, selectedTag);
-    setNote('');
-    setSelectedTag('important');
-    onClose();
-  };
-
-  return (
-    <div
-      className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div
-        className="w-full sm:max-w-md bg-[hsl(0,0%,12%)] rounded-t-2xl sm:rounded-2xl p-5 space-y-4"
-        dir={isRTL ? 'rtl' : 'ltr'}
-      >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Bookmark className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-bold">{isRTL ? 'הוסף סימניה' : 'Add Bookmark'}</h3>
-          </div>
-          <button
-            onClick={onClose}
-            className="rounded-full p-1.5 text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-        <div className="flex items-center gap-2 text-sm">
-          <span className="text-muted-foreground">{isRTL ? 'זמן:' : 'Time:'}</span>
-          <span className="font-mono text-primary font-bold text-base">
-            {formatDur(Math.round(position)) || '0:00'}
-          </span>
-        </div>
-        <div className="space-y-2">
-          <label className="text-sm text-muted-foreground font-medium">{isRTL ? 'סוג' : 'Tag'}</label>
-          <div className="flex flex-wrap gap-2">
-            {BOOKMARK_TAGS.map((tag) => (
-              <button
-                key={tag.value}
-                onClick={() => setSelectedTag(tag.value)}
-                className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-all ${selectedTag === tag.value ? `${tag.color} border-current ring-1 ring-current/30 scale-105` : 'bg-[hsl(var(--surface-elevated))] text-muted-foreground border-transparent hover:border-[hsl(0,0%,30%)]'}`}
-              >
-                {isRTL ? tag.label : tag.labelEn}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="space-y-2">
-          <label className="text-sm text-muted-foreground font-medium">
-            {isRTL ? 'הערה (אופציונלי)' : 'Note (optional)'}
-          </label>
-          <textarea
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder={isRTL ? 'כתוב הערה...' : 'Write a note...'}
-            className="w-full rounded-xl bg-[hsl(var(--surface-elevated))] border border-[hsl(0,0%,22%)] px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 resize-none"
-            rows={3}
-            dir={isRTL ? 'rtl' : 'ltr'}
-          />
-        </div>
-        <div className="flex gap-3 pt-1">
-          <button
-            onClick={onClose}
-            className="flex-1 rounded-xl bg-[hsl(var(--surface-elevated))] px-4 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-          >
-            {isRTL ? 'ביטול' : 'Cancel'}
-          </button>
-          <button
-            onClick={handleSave}
-            className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground hover:bg-primary/90 transition-colors"
-          >
-            {isRTL ? 'שמור' : 'Save'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+  return buildAudioDownloadFilename(`${baseTitle}${suffix}`, asset.audioUrl);
 }
 
 // ---- Inlined mark snippet dialog (webpack workaround) ----
@@ -564,21 +380,24 @@ interface LessonPlayerClientProps {
 
 export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) {
   const locale = useLocale();
+  const t = useTranslations('player');
   const router = useRouter();
   const searchParams = useSearchParams();
   const {
     currentTrack,
-    isPlaying,
     currentTime,
     duration,
     playbackSpeed,
+    playbackIssue,
+    transport,
     togglePlay,
+    play,
+    pause,
     skipForward,
     skipBackward,
     seekTo,
     setPlaybackSpeed,
     playTrack,
-    setTrack,
   } = useAudioPlayer();
 
   const currentLessonId = currentTrack?.lessonId || currentTrack?.id;
@@ -607,56 +426,70 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
     [lesson],
   );
 
-  // ── Clip mode: read start/end from URL search params ──
+  // All parts of the lesson form the queue, so a multi-part lesson plays through
+  // and car "next"/"previous" move between its parts.
+  const playAsset = useCallback(
+    (index: number, startAt?: number) => {
+      const tracks = lessonAudioAssets.map(createTrackFromAsset);
+      if (!tracks[index]) return;
+      playTrack(tracks[index], { queue: tracks, queueIndex: index, startAt });
+    },
+    [createTrackFromAsset, lessonAudioAssets, playTrack],
+  );
+
+  /** Jump to a position of the lesson's main file, starting the lesson if another one plays. */
+  const seekLesson = useCallback(
+    (position: number) => {
+      if (isCurrentLesson) seekTo(position);
+      else playAsset(0, position);
+    },
+    [isCurrentLesson, playAsset, seekTo],
+  );
+
+  // ── Deep links: ?start=&end= (shared clip) and ?t= (bookmark) ──
   const clipStartParam = searchParams.get('start');
   const clipEndParam = searchParams.get('end');
+  const timeParam = searchParams.get('t');
   const clipStart = clipStartParam ? parseFloat(clipStartParam) : null;
   const clipEnd = clipEndParam ? parseFloat(clipEndParam) : null;
+  const deepLinkTime = clipStart ?? (timeParam ? parseFloat(timeParam) : null);
   const isClipMode = clipStart !== null;
-  const clipSeekDoneRef = useRef(false);
+  const deepLinkHandledRef = useRef(false);
+  const clipEndHandledRef = useRef(false);
 
-  // Auto-seek to clip start when the track loads for this lesson
   useEffect(() => {
-    if (clipStart === null || clipSeekDoneRef.current) return;
-    if (!isCurrentLesson) return;
-    // Wait until duration is available (track loaded)
-    if (duration <= 0) return;
-
-    seekTo(clipStart);
-    clipSeekDoneRef.current = true;
-  }, [clipStart, isCurrentLesson, duration, seekTo]);
-
-  // Auto-play the lesson if clip link and not yet playing this lesson
-  useEffect(() => {
-    if (clipStart === null) return;
-    if (isCurrentLesson) return; // Already playing this lesson
-    if (clipSeekDoneRef.current) return; // Already handled
-
-    // Start playing the lesson so the seek effect above can fire
-    if (primaryAudioAsset) {
-      playTrack(createTrackFromAsset(primaryAudioAsset));
+    if (deepLinkHandledRef.current || deepLinkTime === null || !Number.isFinite(deepLinkTime)) return;
+    if (!primaryAudioAsset) return;
+    deepLinkHandledRef.current = true;
+    // Links point into the main file. If the browser refuses to autoplay, the
+    // player waits at this position with the play button showing.
+    if (isCurrentLesson && isFileActive(primaryAudioAsset)) {
+      seekTo(deepLinkTime);
+      play();
+    } else {
+      playAsset(0, deepLinkTime);
     }
-  }, [clipStart, isCurrentLesson, primaryAudioAsset, playTrack, createTrackFromAsset]);
+    // Runs once per page visit; isFileActive reads the current track.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepLinkTime, primaryAudioAsset]);
 
-  // Auto-pause at clip end
+  // Pause once at the end of a shared clip.
   useEffect(() => {
-    if (clipEnd === null || !isCurrentLesson || !isPlaying) return;
+    if (clipEnd === null || clipEndHandledRef.current || !isCurrentLesson) return;
     if (currentTime >= clipEnd) {
-      togglePlay();
+      clipEndHandledRef.current = true;
+      pause();
     }
-  }, [clipEnd, currentTime, isCurrentLesson, isPlaying, togglePlay]);
+  }, [clipEnd, currentTime, isCurrentLesson, pause]);
 
   const handlePlay = () => {
-    if (isCurrentLesson) {
-      togglePlay();
-    } else if (primaryAudioAsset) {
-      playTrack(createTrackFromAsset(primaryAudioAsset));
-    }
+    if (isCurrentLesson) togglePlay();
+    else playAsset(0);
   };
 
   // Audio file list helpers
   function isFileActive(asset: LessonAudioAsset): boolean {
-    if (!currentTrack) return false;
+    if (!currentTrack || !isCurrentLesson) return false;
     if (currentTrack.audioFileId && asset.audioFileId) {
       return currentTrack.audioFileId === asset.audioFileId;
     }
@@ -675,12 +508,9 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
     return sortedAudioFiles[0]?.id ?? null;
   }, [currentTrack, isCurrentLesson, lessonAudioAssets, sortedAudioFiles]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function handleFileClick(asset: LessonAudioAsset) {
-    if (isFileActive(asset)) {
-      togglePlay();
-      return;
-    }
-    setTrack(createTrackFromAsset(asset));
+  function handleFileClick(asset: LessonAudioAsset, index: number) {
+    if (isFileActive(asset)) togglePlay();
+    else playAsset(index);
   }
 
   // ---- Offline download state (inlined — webpack workaround) ----
@@ -688,6 +518,8 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
   const [dlProgress, setDlProgress] = useState<Record<string, number>>({});
   const [downloadedKeys, setDownloadedKeys] = useState<Set<string>>(new Set());
   const [downloadedAudioUrls, setDownloadedAudioUrls] = useState<Set<string>>(new Set());
+  const [offlineSaveError, setOfflineSaveError] = useState<'quota' | 'failed' | null>(null);
+  const tOffline = useTranslations('offline');
 
   const updateDownloadedRefs = useCallback((downloadedLesson: Awaited<ReturnType<typeof getDownloadedLesson>>) => {
     const files = downloadedLesson?.audioFiles ?? [];
@@ -757,7 +589,7 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
       setDlState((prev) => ({ ...prev, [stateKey]: 'downloading' }));
       setDlProgress((prev) => ({ ...prev, [stateKey]: 0 }));
 
-      const success = await downloadLessonAudioFiles(
+      const result = await saveAudioFilesOffline(
         lesson.id,
         assets.map((asset) => ({
           audioFileId: asset.audioFileId,
@@ -781,20 +613,23 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
         (pct) => setDlProgress((prev) => ({ ...prev, [stateKey]: pct })),
       );
 
-      if (success) {
+      // Saved files (also from a partial save) arrive via OFFLINE_DOWNLOADS_CHANGED_EVENT.
+      if (result.ok) {
         setDlState((prev) => {
           const next = { ...prev, [stateKey]: 'downloaded' as DownloadState };
           for (const asset of assets) next[asset.offlineKey] = 'downloaded';
           return next;
         });
-        await refreshDownloadedKeys();
-        notifyOfflineDownloadsChanged(lesson.id);
       } else {
         setDlState((prev) => ({ ...prev, [stateKey]: 'error' }));
-        setTimeout(() => setDlState((prev) => ({ ...prev, [stateKey]: 'idle' })), 3000);
+        setOfflineSaveError(result.reason);
+        setTimeout(() => {
+          setDlState((prev) => ({ ...prev, [stateKey]: 'idle' }));
+          setOfflineSaveError(null);
+        }, 5000);
       }
     },
-    [dlState, lesson, refreshDownloadedKeys],
+    [dlState, lesson],
   );
 
   const handleSaveLessonOffline = useCallback(() => {
@@ -810,24 +645,16 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
   );
 
   // ---- Bookmark state ----
-  const [showBookmarkDialog, setShowBookmarkDialog] = useState(false);
+  // Position captured when the dialog opens, so typing a note does not move it.
+  const [bookmarkPosition, setBookmarkPosition] = useState<number | null>(null);
   const [showShareClipDialog, setShowShareClipDialog] = useState(false);
   // Use stable selector (returns same reference between updates), then filter with useMemo
   const allBookmarks = useBookmarksStore((s) => s.bookmarks);
-  const removeBookmark = useBookmarksStore((s) => s.removeBookmark);
   const lessonBookmarks = useMemo(
     () => allBookmarks.filter((b) => b.lessonId === lesson.id).sort((a, b) => a.position - b.position),
     [allBookmarks, lesson.id],
   );
   const bookmarkCount = lessonBookmarks.length;
-
-  // Tag color map for bookmark markers on seek bar
-  const tagColorMap: Record<string, string> = {
-    important: 'bg-red-400',
-    review: 'bg-amber-400',
-    quote: 'bg-blue-400',
-    question: 'bg-purple-400',
-  };
 
   // ---- Notes state ----
   const [notes, setNotes] = useState<LocalNote[]>([]);
@@ -892,108 +719,71 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
     <div className="space-y-4">
       {/* Clip mode badge */}
       {isClipMode && clipStart !== null && clipEnd !== null && (
-        <div
-          className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary/10 border border-primary/20"
-          dir="rtl"
-        >
+        <div className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary/10 border border-primary/20">
           <Scissors className="h-4 w-4 text-primary flex-shrink-0" />
           <span className="text-sm font-medium text-primary">
-            מצב קטע: {formatDur(clipStart)} - {formatDur(clipEnd)}
+            {t('clipMode')}:{' '}
+            <bdi dir="ltr">
+              {formatDur(clipStart)}–{formatDur(clipEnd)}
+            </bdi>
           </span>
         </div>
       )}
 
       <div className="rounded-xl bg-[hsl(var(--surface-elevated))] p-5 space-y-4">
-        {/* Bookmark chips row */}
-        {lessonBookmarks.length > 0 && (
-          <div className="flex items-center gap-2 flex-wrap" dir={locale === 'he' ? 'rtl' : 'ltr'}>
-            {lessonBookmarks.map((bm) => (
-              <button
-                key={bm.id}
-                onClick={() => {
-                  if (isCurrentLesson) seekTo(bm.position);
-                }}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  removeBookmark(bm.id);
-                }}
-                className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 transition-colors"
-                title={
-                  bm.note || (locale === 'he' ? 'לחץ לדלג, לחץ ימני למחיקה' : 'Click to seek, right-click to delete')
-                }
-              >
-                <Bookmark className="h-3 w-3 fill-current" />
-                {formatDur(bm.position)}
-              </button>
-            ))}
-          </div>
-        )}
+        <BookmarkChips bookmarks={lessonBookmarks} onSeek={seekLesson} />
 
-        {/* Seek bar with bookmark markers */}
+        {/* Seek bar with bookmark markers; seeking another lesson's bar starts this one */}
         <div className="relative">
-          <SeekBar currentTime={displayTime} duration={displayDuration} onSeek={seekTo} />
-          {/* Bookmark markers overlay on seek bar */}
-          {displayDuration > 0 && lessonBookmarks.length > 0 && (
-            <div className="absolute top-0 inset-x-0 h-5 pointer-events-auto" style={{ zIndex: 1 }}>
-              {lessonBookmarks.map((bm) => {
-                const pct = (bm.position / displayDuration) * 100;
-                const colorClass = tagColorMap[bm.tag] || 'bg-primary';
-                return (
-                  <button
-                    key={bm.id}
-                    onClick={() => seekTo(bm.position)}
-                    className={`absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full ${colorClass} border border-black/30 shadow-sm hover:scale-150 transition-transform cursor-pointer`}
-                    style={{ left: `calc(${pct}% - 5px)` }}
-                    title={bm.note || ''}
-                  />
-                );
-              })}
-            </div>
-          )}
+          <SeekBar currentTime={displayTime} duration={displayDuration} onSeek={seekLesson} />
+          <BookmarkMarkers bookmarks={lessonBookmarks} duration={displayDuration} onSeek={seekLesson} />
         </div>
 
-        {/* Controls — dir="ltr" keeps standard media player layout (⏪ ▶ ⏩) */}
-        <div dir="ltr" className="flex items-center justify-center gap-6">
-          <SpeedControl speed={isCurrentLesson ? playbackSpeed : 1} onSpeedChange={setPlaybackSpeed} />
+        {isCurrentLesson && playbackIssue && (
+          <p role="status" className="text-center text-xs text-amber-300">
+            {t(`issue.${playbackIssue}`)}
+          </p>
+        )}
 
-          {/* RTL: left-arrow icon = skip FORWARD (Hebrew reads R→L, left = forward) */}
-          <button
-            onClick={() => skipForward(15)}
-            className="p-2 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30"
+        {/* Controls: back → play → forward in DOM order; RTL puts "back" on the right. */}
+        <div className="flex items-center justify-center gap-6">
+          <SpeedControl speed={playbackSpeed} onSpeedChange={setPlaybackSpeed} />
+
+          <SkipButton
+            direction="back"
+            onClick={skipBackward}
             disabled={!isCurrentLesson}
-          >
-            <Skip15Back className="h-7 w-7" />
-          </button>
+            className="p-2 text-muted-foreground hover:text-foreground"
+            iconClassName="h-7 w-7"
+          />
 
           <button
+            type="button"
             onClick={handlePlay}
             className="rounded-full p-4 bg-foreground text-background hover:scale-105 transition-transform shadow-lg"
+            aria-label={isCurrentLesson && transport !== 'paused' ? t('pause') : t('play')}
           >
-            {isCurrentLesson && isPlaying ? (
-              <Pause className="h-7 w-7 fill-current" />
-            ) : (
-              <Play className="h-7 w-7 fill-current ml-0.5" />
-            )}
+            <PlayPauseIcon transport={isCurrentLesson ? transport : 'paused'} className="h-7 w-7" />
           </button>
 
-          {/* RTL: right-arrow icon = skip BACKWARD (Hebrew reads R→L, right = backward) */}
-          <button
-            onClick={() => skipBackward(15)}
-            className="p-2 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30"
+          <SkipButton
+            direction="forward"
+            onClick={skipForward}
             disabled={!isCurrentLesson}
-          >
-            <Skip15Forward className="h-7 w-7" />
-          </button>
+            className="p-2 text-muted-foreground hover:text-foreground"
+            iconClassName="h-7 w-7"
+          />
 
-          {/* Spacer for symmetry */}
-          <div className="w-10" />
+          {/* Balances the speed control on the other side */}
+          <div className="w-12" aria-hidden />
         </div>
 
         {/* Secondary actions row */}
-        <div className="flex items-center justify-center gap-5 pt-1 flex-wrap" dir="rtl">
+        <div className="flex items-center justify-center gap-5 pt-1 flex-wrap">
           {/* Bookmark */}
           <button
-            onClick={() => setShowBookmarkDialog(true)}
+            type="button"
+            onClick={() => setBookmarkPosition(currentTime)}
             disabled={!isCurrentLesson}
             className={`flex flex-col items-center gap-1.5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${bookmarkCount > 0 ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
           >
@@ -1005,7 +795,7 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
                 </span>
               )}
             </div>
-            <span className="text-[10px]">{locale === 'he' ? 'סימניה' : 'Bookmark'}</span>
+            <span className="text-[10px]">{t('bookmark')}</span>
           </button>
 
           {/* Mark snippet — always enabled, not dependent on player state */}
@@ -1014,16 +804,20 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
             className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
           >
             <Scissors className="h-5 w-5" />
-            <span className="text-[10px]">{locale === 'he' ? 'סימון קטע' : 'Mark Snippet'}</span>
+            <span className="text-[10px]">{t('markSnippet')}</span>
           </button>
 
           {/* Driving mode */}
           <button
-            onClick={() => router.push(`/${locale}/driving`)}
+            onClick={() => {
+              // Driving mode controls the current lesson; start this one if another is loaded.
+              if (!isCurrentLesson) playAsset(0);
+              router.push(`/${locale}/driving`);
+            }}
             className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
           >
             <Car className="h-5 w-5" />
-            <span className="text-[10px]">{locale === 'he' ? 'מצב נהיגה' : 'Driving'}</span>
+            <span className="text-[10px]">{t('drivingMode')}</span>
           </button>
 
           {/* Save for offline playback */}
@@ -1033,7 +827,6 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
               lessonSaveState === 'downloaded' || lessonSaveState === 'downloading' || lessonAudioAssets.length === 0
             }
             className={`flex flex-col items-center gap-1.5 transition-colors disabled:cursor-not-allowed ${lessonSaveState === 'downloaded' ? 'text-green-400' : lessonSaveState === 'downloading' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
-            aria-label={locale === 'he' ? 'שמור להאזנה לא מקוונת' : 'Save for offline listening'}
           >
             {lessonSaveState === 'downloading' ? (
               <Loader2 className="h-5 w-5 animate-spin" />
@@ -1054,11 +847,29 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
                     : 'Save offline'}
             </span>
           </button>
+          {offlineSaveError && (
+            <p
+              role="alert"
+              className="fixed inset-x-4 bottom-36 z-50 mx-auto max-w-md rounded-lg bg-destructive px-4 py-3 text-center text-sm text-destructive-foreground shadow-lg"
+            >
+              {tOffline(offlineSaveError === 'quota' ? 'storageFull' : 'saveFailed')}
+            </p>
+          )}
 
           {/* Device file download */}
           <a
             href={primaryDownloadUrl}
             download={primaryDownloadFilename}
+            onClick={(e) => {
+              if (!primaryAudioAsset) return;
+              handleDeviceDownloadClick(e, {
+                lessonId: lesson.id,
+                offlineKey: primaryAudioAsset.offlineKey,
+                audioUrl: primaryAudioAsset.audioUrl,
+                filename: primaryDownloadFilename,
+                savedOffline: isAssetDownloaded(primaryAudioAsset),
+              });
+            }}
             className={`flex flex-col items-center gap-1.5 transition-colors ${primaryAudioAsset ? 'text-muted-foreground hover:text-foreground' : 'pointer-events-none opacity-30'}`}
             aria-label={locale === 'he' ? 'הורדת קובץ למכשיר' : 'Download file to device'}
           >
@@ -1075,7 +886,7 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
             className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
           >
             <Cast className="h-5 w-5" />
-            <span className="text-[10px]">{locale === 'he' ? 'שדר' : 'Cast'}</span>
+            <span className="text-[10px]">{t('cast')}</span>
           </button>
         </div>
       </div>
@@ -1084,12 +895,12 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
       {lessonAudioAssets.length > 1 && (
         <div className="rounded-xl bg-[hsl(var(--surface-elevated))] p-4">
           <h2 className="text-sm font-bold mb-3 text-muted-foreground uppercase tracking-wider">
-            {locale === 'he' ? 'קבצי שמע' : 'Audio Files'}
+            {t('audioFiles')}
           </h2>
           <div className="space-y-0.5">
             {lessonAudioAssets.map((asset, index) => {
               const active = isFileActive(asset);
-              const playing = active && isPlaying;
+              const activeTransport = active ? transport : 'paused';
               const assetDownloadState = getAssetDownloadState(asset);
               const assetProgress = dlProgress[asset.offlineKey] || 0;
               const assetFilename = getAudioAssetFilename(lesson, asset, index);
@@ -1100,15 +911,17 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
                 >
                   <button
                     type="button"
-                    onClick={() => handleFileClick(asset)}
+                    onClick={() => handleFileClick(asset, index)}
                     className="min-w-0 flex-1 flex items-center gap-3 text-start"
-                    aria-label={playing ? (locale === 'he' ? 'השהה' : 'Pause') : locale === 'he' ? 'נגן' : 'Play'}
+                    aria-label={activeTransport === 'paused' ? t('play') : t('pause')}
                   >
                     <span className="w-5 text-center flex-shrink-0">
-                      {playing ? (
+                      {activeTransport === 'playing' ? (
                         <Volume2 className="h-4 w-4 text-primary animate-pulse mx-auto" />
+                      ) : activeTransport === 'loading' ? (
+                        <Loader2 className="h-4 w-4 text-primary animate-spin mx-auto" />
                       ) : active ? (
-                        <Pause className="h-4 w-4 text-primary mx-auto" />
+                        <Play className="h-4 w-4 text-primary fill-current mx-auto" />
                       ) : (
                         <>
                           <span className="text-sm font-medium text-muted-foreground group-hover:hidden">
@@ -1120,8 +933,8 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
                     </span>
 
                     <div className="flex-1 min-w-0 flex items-center gap-2">
-                      <p className={`text-sm font-medium truncate ${active ? 'text-primary' : ''}`} dir="rtl">
-                        {asset.originalName || asset.title || `${locale === 'he' ? 'חלק' : 'Part'} ${index + 1}`}
+                      <p className={`text-sm font-medium truncate ${active ? 'text-primary' : ''}`} dir="auto">
+                        {asset.originalName || asset.title || t('part', { number: index + 1 })}
                       </p>
                       {asset.audioType && (
                         <span
@@ -1133,9 +946,9 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
                     </div>
 
                     {asset.duration > 0 && (
-                      <span className="text-xs text-muted-foreground tabular-nums flex-shrink-0">
+                      <bdi className="text-xs text-muted-foreground tabular-nums flex-shrink-0">
                         {formatDur(asset.duration)}
-                      </span>
+                      </bdi>
                     )}
                   </button>
 
@@ -1178,7 +991,16 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
                   <a
                     href={getAudioDownloadUrl(asset.audioUrl, assetFilename)}
                     download={assetFilename}
-                    onClick={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeviceDownloadClick(e, {
+                        lessonId: lesson.id,
+                        offlineKey: asset.offlineKey,
+                        audioUrl: asset.audioUrl,
+                        filename: assetFilename,
+                        savedOffline: assetDownloadState === 'downloaded',
+                      });
+                    }}
                     className="h-8 w-8 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--surface-highlight))] transition-colors"
                     aria-label={locale === 'he' ? 'הורדת קובץ למכשיר' : 'Download file to device'}
                     title={locale === 'he' ? 'הורדת קובץ' : 'Download file'}
@@ -1193,7 +1015,7 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
       )}
 
       {/* Image gallery */}
-      {images && images.length > 0 && <ImageGallerySection images={images} locale={locale} />}
+      {images && images.length > 0 && <ImageGallerySection images={images} locale={locale} lessonTitle={lesson.title} />}
 
       {/* ==================== Notes Section (inlined — local-first) ==================== */}
       <div className="rounded-xl bg-[hsl(var(--surface-elevated))]" dir={locale === 'he' ? 'rtl' : 'ltr'}>
@@ -1246,7 +1068,7 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
                   <Clock className="h-3 w-3" />
                   {locale === 'he' ? 'צרף זמן נוכחי' : 'Attach current time'}
                   {attachTimestamp && isCurrentLesson && (
-                    <span className="text-primary font-mono font-bold">{formatDur(currentTime)}</span>
+                    <bdi className="text-primary font-mono font-bold">{formatDur(currentTime)}</bdi>
                   )}
                 </label>
                 <button
@@ -1300,18 +1122,19 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
                           <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
                             {note.timestamp !== undefined && (
                               <button
-                                onClick={() => seekTo(note.timestamp!)}
+                                type="button"
+                                onClick={() => seekLesson(note.timestamp!)}
                                 className="flex items-center gap-1 text-primary hover:text-primary/80 font-mono font-bold"
                               >
                                 <Clock className="h-3 w-3" />
-                                {formatDur(note.timestamp)}
+                                <bdi>{formatDur(note.timestamp)}</bdi>
                               </button>
                             )}
                             <span>
                               {new Date(note.createdAt).toLocaleDateString(locale === 'he' ? 'he-IL' : 'en-US')}
                             </span>
                           </div>
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="flex items-center gap-1 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-within:opacity-100">
                             <button
                               onClick={() => handleStartEdit(note)}
                               className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--surface-highlight))] transition-colors"
@@ -1344,13 +1167,11 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
         )}
       </div>
 
-      {/* Bookmark dialog — inlined to avoid separate 'use client' import */}
-      {showBookmarkDialog && (
-        <BookmarkDialogInline
-          isRTL={locale === 'he'}
-          position={isCurrentLesson ? currentTime : 0}
+      {bookmarkPosition !== null && (
+        <BookmarkDialog
+          onClose={() => setBookmarkPosition(null)}
           lessonId={lesson.id}
-          onClose={() => setShowBookmarkDialog(false)}
+          position={bookmarkPosition}
         />
       )}
 
@@ -1374,7 +1195,15 @@ function getImageStreamUrl(fileKey: string) {
   return `/api/images/stream/${encodedKey}`;
 }
 
-function ImageGallerySection({ images, locale }: { images: LessonImage[]; locale: string }) {
+function ImageGallerySection({
+  images,
+  locale,
+  lessonTitle,
+}: {
+  images: LessonImage[];
+  locale: string;
+  lessonTitle: string;
+}) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const sorted = [...images].sort((a, b) => a.sort_order - b.sort_order);
 
@@ -1406,7 +1235,7 @@ function ImageGallerySection({ images, locale }: { images: LessonImage[]; locale
           >
             <img
               src={getImageStreamUrl(img.file_key)}
-              alt={img.caption || img.original_name || ''}
+              alt={img.caption || `${lessonTitle} – ${i + 1}`}
               className="w-full h-full object-cover"
               loading="lazy"
             />
@@ -1443,7 +1272,7 @@ function ImageGallerySection({ images, locale }: { images: LessonImage[]; locale
 
           <img
             src={getImageStreamUrl(sorted[lightboxIndex].file_key)}
-            alt={sorted[lightboxIndex].caption || sorted[lightboxIndex].original_name || ''}
+            alt={sorted[lightboxIndex].caption || `${lessonTitle} – ${lightboxIndex + 1}`}
             className="max-w-[90vw] max-h-[85vh] object-contain rounded-lg"
             onClick={(e) => e.stopPropagation()}
           />

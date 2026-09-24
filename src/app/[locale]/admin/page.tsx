@@ -1,21 +1,16 @@
 'use client';
 
-import { useParams, useRouter } from 'next/navigation';
-import { Shield, Upload, BarChart3, LogOut, BookOpen, ListMusic, Library, FolderTree, Scissors } from 'lucide-react';
+import { useParams } from 'next/navigation';
+import { useTranslations } from 'next-intl';
+import { Shield, Upload, BarChart3, LogOut, BookOpen, ListMusic, Library, FolderTree, Scissors, Bell } from 'lucide-react';
 import Link from 'next/link';
-import { logoutAdmin } from '@/actions/auth';
+import { signOutAndReset } from '@/lib/account/sync';
 
 export default function AdminDashboardPage() {
   const params = useParams();
-  const router = useRouter();
   const locale = params.locale as string;
   const isRTL = locale === 'he';
-
-  async function handleLogout() {
-    await logoutAdmin();
-    router.push(`/${locale}`);
-    router.refresh();
-  }
+  const tNotifications = useTranslations('notifications.admin');
 
   const adminLinks = [
     {
@@ -60,6 +55,12 @@ export default function AdminDashboardPage() {
       label: isRTL ? 'רשימות השמעה' : 'Playlists',
       description: isRTL ? 'ניהול רשימות השמעה' : 'Manage playlists',
     },
+    {
+      href: `/${locale}/admin/notifications`,
+      icon: Bell,
+      label: tNotifications('title'),
+      description: tNotifications('subtitle'),
+    },
   ];
 
   return (
@@ -81,7 +82,7 @@ export default function AdminDashboardPage() {
         </div>
 
         <button
-          onClick={handleLogout}
+          onClick={() => signOutAndReset(`/${locale}`)}
           className="flex items-center gap-2 rounded-lg border border-border/50 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:border-border transition-colors"
         >
           <LogOut className="h-4 w-4" />

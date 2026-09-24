@@ -6,7 +6,7 @@ import { notFound } from 'next/navigation';
 import { formatDuration } from '@/lib/utils';
 import { Link } from '@/i18n/routing';
 import { ArrowRight, Calendar, Clock, Edit, MapPin, User, BookOpen, Hash } from 'lucide-react';
-import { isAdmin } from '@/actions/auth';
+import { isAdmin } from '@/lib/auth/admin';
 import { ShareButton } from '@/components/shared/share-button';
 import { LessonPlayerClient } from './lesson-player-client';
 
@@ -191,25 +191,6 @@ export default async function LessonDetailPage({ params }: Props) {
                     {formatDuration(snippet.start_time)}
                   </p>
                 )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Bookmarks */}
-      {lesson.bookmarks && lesson.bookmarks.length > 0 && (
-        <div dir="rtl">
-          <h2 className="text-sm font-bold mb-3 text-muted-foreground uppercase tracking-wider">
-            {locale === 'he' ? 'סימניות' : 'Bookmarks'}
-          </h2>
-          <div className="space-y-1">
-            {lesson.bookmarks.map((bm) => (
-              <div key={bm.id} className="flex items-center gap-3 rounded-md p-2.5 hover:bg-[hsl(var(--surface-highlight))] transition-colors">
-                <span className="text-xs text-primary tabular-nums">
-                  {formatDuration(bm.position)}
-                </span>
-                <span className="text-sm">{bm.note}</span>
               </div>
             ))}
           </div>

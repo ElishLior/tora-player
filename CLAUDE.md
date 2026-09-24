@@ -19,7 +19,8 @@ Tora Player is a Hebrew Torah lesson audio player PWA. Treat the product like a 
 - Images streamed through `/api/images/stream/[fileKey]`
 - Zustand store plus browser audio lifecycle helpers
 - Hebrew RTL primary, `next-intl`
-- Cookie-based admin auth, no public user accounts
+- Supabase Auth user accounts (Google + email one-time code) via `@supabase/ssr`; admins are signed-in users listed in `ADMIN_EMAILS` or with `profiles.role = 'admin'` (optional `ADMIN_PASSWORD` + `ADMIN_SESSION_SECRET` fallback). The anon key can only read published content; server writes use the service-role client after `requireAdmin()`/`isAdmin()` (`src/lib/auth/admin.ts`). Bookmarks/progress are local-first and sync per user when signed in.
+- New-lesson notifications: Web Push (VAPID, `public/sw-push.js`) + optional Resend email, sent by `notifyNewLesson()` in `src/lib/notifications/notify.ts`
 
 ## Commands
 
@@ -79,14 +80,26 @@ Playback should behave like a music app:
 - mini player remains tappable and informative
 - controls must fit compact mobile screens without horizontal overflow
 
+How playback is wired (keep it this way):
+
+- `src/lib/audio-engine.ts` owns the one `HTMLAudioElement` (no Howler). Its status is read from the element's live state, never inferred from event names.
+- `src/lib/audio-controller.ts` is the only code that drives the engine. `<AudioPlayer/>` (root layout) starts it once. UI surfaces, the lock screen and car controls only change store state or call its actions (`play`, `pause`, `togglePlay`, `seekTo`, `skipBackward`, `skipForward`, `playTrack`, `nextTrackOrSkip`, `previousTrackOrSkip`).
+- Resuming the loaded track never seeks; a start position is applied only when a different track loads.
+- Play/pause icons use `getTransportState()` (real element state), not the `isPlaying` intent.
+- Skip semantics are fixed: "back" = -15s (`RotateCcw`), "forward" = +30s (`RotateCw`), via `SkipButton` in `src/components/player/player-controls.tsx`. Render back → play → forward in DOM order and let `dir="rtl"` place them; never swap handlers or icons for RTL.
+- Car/headset next/previous go to the queue neighbour, else skip inside the lesson.
+
 Important files:
 
 ```text
+src/lib/audio-engine.ts
+src/lib/audio-controller.ts
+src/lib/audio-lifecycle.ts
+src/lib/audio-resume.ts
+src/stores/audio-store.ts
 src/hooks/use-audio-player.ts
 src/hooks/use-media-session.ts
-src/lib/audio-engine.ts
-src/lib/audio-lifecycle.ts
-src/stores/audio-store.ts
+src/components/player/player-controls.tsx
 src/components/player/full-player.tsx
 src/components/player/mini-player.tsx
 src/components/layout/header.tsx
@@ -94,10 +107,11 @@ src/components/layout/header.tsx
 
 ### Offline And Download Behavior
 
-- Offline lesson cache uses IndexedDB.
-- Local file download uses the audio stream route with `download=1` and `filename=...`.
-- Download mode should ignore Range requests and return a full attachment response.
-- Validate download fixes with browser download tests and header checks.
+- Offline lesson cache uses IndexedDB (`src/lib/offline-storage.ts`); each saved file is a Blob, played through a blob URL.
+- Offline save and local file download both use `/api/audio/download/[fileKey]`, which 302-redirects to a short-lived presigned R2 URL (bytes never pass through a Vercel function). `?filename=` gives an attachment with an RFC 5987 UTF-8 filename; `?disposition=inline` is the raw audio for offline saving. Only `audio/…` keys with an audio extension are signed.
+- `/api/audio/stream/[fileKey]` is for playback only (Range → 206).
+- iOS home-screen apps can't save attachment downloads: `src/lib/device-download.ts` uses the share sheet (saved files) or opens the link in a Safari view.
+- The service worker is registered as `/sw.js?v=<NEXT_PUBLIC_BUILD_ID>`; each deploy installs a new worker, precaches `/he/offline` + its chunks, and deletes older caches. Navigations are network-first with the offline library as fallback; `/api/*` and cross-origin requests are never intercepted.
 
 Useful checks:
 
@@ -150,4 +164,4 @@ After the May 11, 2026 production release, these checks passed:
 - `curl https://tora-player.vercel.app/api/health`
 - production `/he`, `/he/lessons`, and exact lesson route smoke checks
 - Playwright production smoke: `offline-download.spec.ts` and `player-behavior.spec.ts`
-- exact lesson download header returned full `application/octet-stream` attachment with full content length
+- exact lesson download header returned full `application/octet-stream` attachment with full content length (before downloads moved to presigned R2 redirects)

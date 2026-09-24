@@ -2,15 +2,17 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireServerSupabaseClient } from '@/lib/supabase/server';
+import { createAdminSupabaseClient } from '@/lib/supabase/admin';
+import { isAdmin } from '@/lib/auth/admin';
+import { notifyNewLesson } from '@/lib/notifications/notify';
 import { createLessonSchema, updateLessonSchema } from '@/lib/validators';
-import { isAdmin } from '@/actions/auth';
 import type { Lesson, LessonWithRelations, LessonAudio, LessonImage } from '@/types/database';
 
 export async function createLesson(formData: FormData) {
   if (!(await isAdmin())) {
     return { error: { _form: ['Unauthorized'] } };
   }
-  const supabase = await requireServerSupabaseClient();
+  const supabase = createAdminSupabaseClient();
 
   const raw = {
     title: formData.get('title') as string,
@@ -56,7 +58,7 @@ export async function updateLesson(id: string, formData: FormData) {
   if (!(await isAdmin())) {
     return { error: { _form: ['Unauthorized'] } };
   }
-  const supabase = await requireServerSupabaseClient();
+  const supabase = createAdminSupabaseClient();
 
   const raw: Record<string, unknown> = {};
   const fields = [
@@ -93,6 +95,9 @@ export async function updateLesson(id: string, formData: FormData) {
     return { error: { _form: [error.message] } };
   }
 
+  // Publishing a draft from the edit page announces it (no-op if already announced).
+  if (parsed.data.is_published === true) await notifyNewLesson(id);
+
   revalidatePath('/[locale]', 'layout');
   return { data: data as Lesson };
 }
@@ -101,7 +106,7 @@ export async function deleteLesson(id: string) {
   if (!(await isAdmin())) {
     return { error: 'Unauthorized' };
   }
-  const supabase = await requireServerSupabaseClient();
+  const supabase = createAdminSupabaseClient();
 
   const { error } = await supabase
     .from('lessons')
@@ -120,7 +125,7 @@ export async function publishLesson(id: string, publish: boolean) {
   if (!(await isAdmin())) {
     return { error: 'Unauthorized' };
   }
-  const supabase = await requireServerSupabaseClient();
+  const supabase = createAdminSupabaseClient();
 
   const { error } = await supabase
     .from('lessons')
@@ -131,16 +136,26 @@ export async function publishLesson(id: string, publish: boolean) {
     return { error: error.message };
   }
 
+  if (publish) await notifyNewLesson(id);
+
   revalidatePath('/[locale]', 'layout');
   return { success: true };
 }
 
+/**
+ * Admins read with the service role so drafts (unpublished lessons, which RLS
+ * hides from everyone else) can be edited; everyone else gets the cookie client.
+ */
+async function lessonReadClient() {
+  return (await isAdmin()) ? createAdminSupabaseClient() : requireServerSupabaseClient();
+}
+
 export async function getLesson(id: string) {
-  const supabase = await requireServerSupabaseClient();
+  const supabase = await lessonReadClient();
 
   const { data, error } = await supabase
     .from('lessons')
-    .select('*, series(*), category:categories(id, hebrew_name), snippets(*), bookmarks(*), audio_files:lesson_audio(*), images:lesson_images(*)')
+    .select('*, series(*), category:categories(id, hebrew_name), snippets(*), audio_files:lesson_audio(*), images:lesson_images(*)')
     .eq('id', id)
     .single();
 
@@ -159,21 +174,13 @@ export async function getLesson(id: string) {
     data.parts = parts || [];
   }
 
-  // Get playback progress
-  const { data: progress } = await supabase
-    .from('playback_progress')
-    .select('*')
-    .eq('lesson_id', id)
-    .single();
-  data.progress = progress;
-
   return { data: data as LessonWithRelations };
 }
 
 // --- Audio file management ---
 
 export async function getAudioFiles(lessonId: string) {
-  const supabase = await requireServerSupabaseClient();
+  const supabase = await lessonReadClient();
 
   const { data, error } = await supabase
     .from('lesson_audio')
@@ -189,7 +196,7 @@ export async function renameAudioFile(fileId: string, newName: string) {
   if (!(await isAdmin())) {
     return { error: 'Unauthorized' };
   }
-  const supabase = await requireServerSupabaseClient();
+  const supabase = createAdminSupabaseClient();
 
   const { error } = await supabase
     .from('lesson_audio')
@@ -205,7 +212,7 @@ export async function updateAudioType(fileId: string, audioType: string | null) 
   if (!(await isAdmin())) {
     return { error: 'Unauthorized' };
   }
-  const supabase = await requireServerSupabaseClient();
+  const supabase = createAdminSupabaseClient();
 
   const { error } = await supabase
     .from('lesson_audio')
@@ -221,7 +228,7 @@ export async function reorderAudioFiles(lessonId: string, fileIds: string[]) {
   if (!(await isAdmin())) {
     return { error: 'Unauthorized' };
   }
-  const supabase = await requireServerSupabaseClient();
+  const supabase = createAdminSupabaseClient();
 
   // Update sort_order for each file based on its position in the array
   const updates = fileIds.map((id, index) =>
@@ -244,7 +251,7 @@ export async function deleteAudioFile(fileId: string) {
   if (!(await isAdmin())) {
     return { error: 'Unauthorized' };
   }
-  const supabase = await requireServerSupabaseClient();
+  const supabase = createAdminSupabaseClient();
 
   const { error } = await supabase
     .from('lesson_audio')
@@ -259,7 +266,7 @@ export async function deleteAudioFile(fileId: string) {
 // --- Image management ---
 
 export async function getImages(lessonId: string) {
-  const supabase = await requireServerSupabaseClient();
+  const supabase = await lessonReadClient();
 
   const { data, error } = await supabase
     .from('lesson_images')
@@ -275,7 +282,7 @@ export async function deleteImage(imageId: string) {
   if (!(await isAdmin())) {
     return { error: 'Unauthorized' };
   }
-  const supabase = await requireServerSupabaseClient();
+  const supabase = createAdminSupabaseClient();
 
   // Get the image record to find the R2 file key
   const { data: image, error: fetchError } = await supabase
@@ -343,7 +350,7 @@ export async function bulkUpdateLessonCategory(
   }
 
   try {
-    const supabase = await requireServerSupabaseClient();
+    const supabase = createAdminSupabaseClient();
 
     const { error } = await supabase
       .from('lessons')
@@ -359,22 +366,4 @@ export async function bulkUpdateLessonCategory(
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Failed to update lessons' };
   }
-}
-
-export async function searchLessons(query: string) {
-  const supabase = await requireServerSupabaseClient();
-
-  const { data, error } = await supabase
-    .from('lessons')
-    .select('*, series(name, hebrew_name), category:categories(id, hebrew_name)')
-    .eq('is_published', true)
-    .or(`title.ilike.%${query}%,hebrew_title.ilike.%${query}%,description.ilike.%${query}%`)
-    .order('date', { ascending: false })
-    .limit(50);
-
-  if (error) {
-    return { error: error.message };
-  }
-
-  return { data: data as LessonWithRelations[] };
 }

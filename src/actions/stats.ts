@@ -1,7 +1,7 @@
 'use server';
 
-import { requireServerSupabaseClient } from '@/lib/supabase/server';
-import { isAdmin } from '@/actions/auth';
+import { createAdminSupabaseClient } from '@/lib/supabase/admin';
+import { isAdmin } from '@/lib/auth/admin';
 
 export interface OverviewStats {
   totalLessons: number;
@@ -35,7 +35,7 @@ export async function getOverviewStats(): Promise<{ data?: OverviewStats; error?
     return { error: 'Unauthorized' };
   }
 
-  const supabase = await requireServerSupabaseClient();
+  const supabase = createAdminSupabaseClient();
 
   const [
     lessonsResult,
@@ -77,7 +77,7 @@ export async function getPopularLessons(
     return { error: 'Unauthorized' };
   }
 
-  const supabase = await requireServerSupabaseClient();
+  const supabase = createAdminSupabaseClient();
 
   // Get all playback progress records with lesson info
   const { data: progressData, error } = await supabase
@@ -130,7 +130,7 @@ export async function getRecentActivity(
     return { error: 'Unauthorized' };
   }
 
-  const supabase = await requireServerSupabaseClient();
+  const supabase = createAdminSupabaseClient();
 
   const sinceDate = new Date();
   sinceDate.setDate(sinceDate.getDate() - days);
@@ -177,7 +177,7 @@ export async function getCompletionStats(): Promise<{ data?: CompletionStats; er
     return { error: 'Unauthorized' };
   }
 
-  const supabase = await requireServerSupabaseClient();
+  const supabase = createAdminSupabaseClient();
 
   const [totalResult, completedResult] = await Promise.all([
     supabase.from('playback_progress').select('id', { count: 'exact', head: true }),

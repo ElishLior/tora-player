@@ -1,180 +1,132 @@
 "use client";
 
-import { useEffect, useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import {
   AlertTriangle,
   CloudDownload,
-  Pause,
-  Play,
   RefreshCw,
+  SkipBack,
+  SkipForward,
   X,
 } from "lucide-react";
-import { useLocale, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
+import { Link } from "@/i18n/routing";
 import { useAudioPlayer } from "@/hooks/use-audio-player";
 import { useIsDownloaded } from "@/hooks/use-offline";
+import { PlayPauseIcon, SkipButton } from "@/components/player/player-controls";
+import { formatDuration } from "@/lib/utils";
 
-/* ── Inline SVGs for skip icons (large, high-contrast) ── */
+const SPEED_STEPS = [1, 1.25, 1.5, 1.75, 2, 0.75];
 
-function Skip15BackLarge({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-    >
-      <path d="M12 5V1L7 5l5 4V5" />
-      <path d="M19.07 7.93A8 8 0 1 1 7 5.3" />
-      <text
-        x="12"
-        y="15.5"
-        textAnchor="middle"
-        fill="currentColor"
-        stroke="none"
-        fontSize="7.5"
-        fontWeight="bold"
-        fontFamily="system-ui"
-      >
-        15
-      </text>
-    </svg>
-  );
-}
+/** Keeps the screen on while driving mode is visible (released automatically when hidden). */
+function useScreenWakeLock() {
+  useEffect(() => {
+    if (!("wakeLock" in navigator)) return;
+    let sentinel: WakeLockSentinel | null = null;
+    let active = true;
 
-function Skip15ForwardLarge({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-    >
-      <path d="M12 5V1l5 4-5 4V5" />
-      <path d="M4.93 7.93A8 8 0 1 0 17 5.3" />
-      <text
-        x="12"
-        y="15.5"
-        textAnchor="middle"
-        fill="currentColor"
-        stroke="none"
-        fontSize="7.5"
-        fontWeight="bold"
-        fontFamily="system-ui"
-      >
-        15
-      </text>
-    </svg>
-  );
-}
+    const request = async () => {
+      if (document.visibilityState !== "visible" || sentinel) return;
+      try {
+        const lock = await navigator.wakeLock.request("screen");
+        if (!active) {
+          void lock.release();
+          return;
+        }
+        sentinel = lock;
+        lock.addEventListener("release", () => {
+          sentinel = null;
+        });
+      } catch {
+        // Denied (e.g. battery saver); the screen may dim normally.
+      }
+    };
 
-function formatTime(seconds: number): string {
-  if (!seconds || seconds <= 0) return "0:00";
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  if (h > 0) {
-    return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-  }
-  return `${m}:${s.toString().padStart(2, "0")}`;
+    void request();
+    document.addEventListener("visibilitychange", request);
+    return () => {
+      active = false;
+      document.removeEventListener("visibilitychange", request);
+      void sentinel?.release();
+    };
+  }, []);
 }
 
 export default function DrivingModePage() {
   const router = useRouter();
-  const locale = useLocale();
   const t = useTranslations("driving");
-  const isRTL = locale === "he";
+  const tPlayer = useTranslations("player");
   const {
     currentTrack,
-    isPlaying,
     currentTime,
     duration,
-    lastNativePlaybackState,
-    playbackRecoveryState,
+    playbackSpeed,
+    playbackIssue,
+    transport,
+    hasNextTrack,
+    hasPreviousTrack,
     togglePlay,
     skipForward,
     skipBackward,
-    resumePlayback,
+    nextTrack,
+    previousTrack,
+    setPlaybackSpeed,
   } = useAudioPlayer();
-  const currentLessonId = currentTrack?.lessonId || currentTrack?.id || "";
-  const isCurrentLessonDownloaded = useIsDownloaded(currentLessonId);
-  const showOfflineRecommendation =
-    Boolean(currentTrack) && !isCurrentLessonDownloaded;
-  const showRecoveryNotice =
-    lastNativePlaybackState === "stalled" ||
-    lastNativePlaybackState === "waiting" ||
-    playbackRecoveryState === "recovering" ||
-    playbackRecoveryState === "stalled";
+  const isCurrentLessonDownloaded = useIsDownloaded(
+    currentTrack?.lessonId || currentTrack?.id || "",
+  );
 
-  // Keep screen awake while driving mode is active
-  useEffect(() => {
-    let wakeLock: WakeLockSentinel | null = null;
-    async function requestWakeLock() {
-      try {
-        if ("wakeLock" in navigator) {
-          wakeLock = await navigator.wakeLock.request("screen");
-        }
-      } catch {
-        // Wake Lock not supported or permission denied
-      }
-    }
-    requestWakeLock();
+  useScreenWakeLock();
 
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") {
-        requestWakeLock();
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
+  const handleClose = useCallback(() => router.back(), [router]);
 
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibility);
-      wakeLock?.release();
-    };
-  }, []);
+  const cycleSpeed = () => {
+    const index = SPEED_STEPS.indexOf(playbackSpeed);
+    setPlaybackSpeed(SPEED_STEPS[(index + 1) % SPEED_STEPS.length]);
+  };
 
-  const handleClose = useCallback(() => {
-    router.back();
-  }, [router]);
+  const shellStyle = {
+    backgroundColor: "#000",
+    paddingTop: "env(safe-area-inset-top)",
+    paddingBottom: "env(safe-area-inset-bottom)",
+    paddingInlineStart: "env(safe-area-inset-left)",
+    paddingInlineEnd: "env(safe-area-inset-right)",
+  };
 
-  // No active track state
+  const closeButton = (
+    <button
+      type="button"
+      onClick={handleClose}
+      className="rounded-full p-4 bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition-colors"
+      aria-label={t("close")}
+    >
+      <X className="h-8 w-8" />
+    </button>
+  );
+
   if (!currentTrack) {
     return (
       <div
         role="dialog"
         aria-modal="true"
         aria-label={t("title")}
-        className="fixed inset-0 z-[200] flex flex-col items-center justify-center"
-        style={{
-          backgroundColor: "#000",
-          paddingTop: "env(safe-area-inset-top)",
-          paddingBottom: "env(safe-area-inset-bottom)",
-          paddingLeft: "env(safe-area-inset-left)",
-          paddingRight: "env(safe-area-inset-right)",
-        }}
+        className="fixed inset-0 z-[200] flex flex-col items-center justify-center gap-6 px-6 text-center"
+        style={shellStyle}
       >
-        <p
-          className="text-white text-2xl font-bold mb-8"
-          dir={isRTL ? "rtl" : "ltr"}
+        <p className="text-white text-2xl font-bold">{t("noActiveLesson")}</p>
+        <Link
+          href="/lessons"
+          className="rounded-full bg-white px-6 py-3 text-lg font-bold text-black"
         >
-          {t("noActiveLesson")}
-        </p>
-        <button
-          onClick={handleClose}
-          className="rounded-full p-4 bg-white/10 text-white hover:bg-white/20 transition-colors"
-          aria-label={t("back")}
-        >
-          <X className="h-10 w-10" />
-        </button>
+          {t("browseLessons")}
+        </Link>
+        {closeButton}
       </div>
     );
   }
+
+  const progress = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
 
   return (
     <div
@@ -182,144 +134,123 @@ export default function DrivingModePage() {
       aria-modal="true"
       aria-label={t("title")}
       className="fixed inset-0 z-[200] flex flex-col"
-      style={{
-        backgroundColor: "#000",
-        paddingTop: "env(safe-area-inset-top)",
-        paddingBottom: "env(safe-area-inset-bottom)",
-        paddingLeft: "env(safe-area-inset-left)",
-        paddingRight: "env(safe-area-inset-right)",
-      }}
+      style={shellStyle}
     >
-      {/* ── Top: Track title & series ── */}
-      <div
-        className="flex-shrink-0 pt-8 pb-4 px-6 text-center"
-        dir={isRTL ? "rtl" : "ltr"}
-      >
-        <h1 className="text-white text-2xl font-bold leading-tight truncate">
+      {/* Title */}
+      <div className="flex-shrink-0 px-6 pt-8 pb-4 text-center">
+        <h1 className="text-white text-2xl font-bold leading-tight line-clamp-2" dir="auto">
           {currentTrack.hebrewTitle || currentTrack.title}
         </h1>
         {currentTrack.seriesName && (
-          <p className="text-white/60 text-base mt-1 truncate">
+          <p className="text-white/60 text-base mt-1 truncate" dir="auto">
             {currentTrack.seriesName}
           </p>
         )}
       </div>
 
-      {(showOfflineRecommendation ||
-        showRecoveryNotice ||
-        playbackRecoveryState === "needs-user-gesture") && (
-        <div
-          className="mx-auto w-full max-w-3xl flex-shrink-0 space-y-2 px-4"
-          dir={isRTL ? "rtl" : "ltr"}
-        >
-          {showOfflineRecommendation && (
+      {(playbackIssue || !isCurrentLessonDownloaded) && (
+        <div className="mx-auto w-full max-w-3xl flex-shrink-0 space-y-2 px-4">
+          {playbackIssue && (
             <div
               role="status"
               aria-live="polite"
-              className="flex items-start gap-3 rounded-lg border border-amber-400/25 bg-amber-400/10 px-4 py-3 text-sm leading-6 text-amber-50"
+              className="flex items-start gap-3 rounded-lg border border-sky-400/25 bg-sky-400/10 px-4 py-3 text-base leading-6 text-sky-50"
             >
+              {playbackIssue === "retrying" ? (
+                <RefreshCw className="mt-0.5 h-5 w-5 flex-shrink-0 animate-spin text-sky-200" />
+              ) : (
+                <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-200" />
+              )}
+              <span>{tPlayer(`issue.${playbackIssue}`)}</span>
+            </div>
+          )}
+          {!playbackIssue && !isCurrentLessonDownloaded && (
+            <div className="flex items-start gap-3 rounded-lg border border-amber-400/25 bg-amber-400/10 px-4 py-3 text-sm leading-6 text-amber-50">
               <CloudDownload className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-200" />
               <span>{t("offlineRecommended")}</span>
             </div>
           )}
-
-          {showRecoveryNotice && (
-            <div
-              role="status"
-              aria-live="polite"
-              className="flex items-start gap-3 rounded-lg border border-sky-400/25 bg-sky-400/10 px-4 py-3 text-sm leading-6 text-sky-50"
-            >
-              <RefreshCw className="mt-0.5 h-5 w-5 flex-shrink-0 text-sky-200" />
-              <span>{t("playbackRecovering")}</span>
-            </div>
-          )}
-
-          {playbackRecoveryState === "needs-user-gesture" && (
-            <button
-              type="button"
-              onClick={() => {
-                void resumePlayback();
-              }}
-              className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-white/30 bg-white px-4 py-3 text-sm font-semibold text-black transition-transform active:scale-[0.98]"
-            >
-              <AlertTriangle className="h-5 w-5" />
-              <span>{t("tapToResume")}</span>
-            </button>
-          )}
         </div>
       )}
 
-      {/* ── Middle-top: Time display ── */}
-      <div className="flex-shrink-0 text-center py-6">
-        <p
-          className="text-white font-mono font-bold tabular-nums"
-          style={{ fontSize: "2.5rem", lineHeight: 1.2 }}
-        >
-          {formatTime(currentTime)}
+      {/* Position */}
+      <div className="flex-shrink-0 px-6 py-6 text-center">
+        <p className="text-white font-mono font-bold tabular-nums text-[2.5rem] leading-tight">
+          <bdi>{formatDuration(currentTime)}</bdi>
         </p>
         <p className="text-white/40 text-lg font-mono tabular-nums mt-1">
-          / {formatTime(duration)}
+          <bdi>{duration > 0 ? formatDuration(duration) : "--:--"}</bdi>
         </p>
-        {/* Simple progress bar */}
-        <div className="mx-auto mt-4 w-3/4 max-w-md h-1.5 bg-white/10 rounded-full overflow-hidden">
+        <div className="mx-auto mt-4 h-1.5 w-3/4 max-w-md overflow-hidden rounded-full bg-white/10">
           <div
-            className="h-full bg-white/70 rounded-full transition-[width] duration-300"
-            style={{
-              width: duration > 0 ? `${(currentTime / duration) * 100}%` : "0%",
-            }}
+            className="h-full rounded-full bg-white/70 transition-[width] duration-300"
+            style={{ width: `${progress}%` }}
           />
         </div>
       </div>
 
-      {/* ── Center: Main controls ── */}
-      <div className="flex-1 flex items-center justify-center">
-        <div
-          dir="ltr"
-          className="flex items-center justify-center gap-3 sm:gap-8 md:gap-10"
-        >
-          {/* Skip backward */}
-          <button
-            onClick={() => skipBackward(15)}
-            className="rounded-full p-4 bg-white/10 text-white transition-colors hover:bg-white/20 active:bg-white/30 sm:p-5"
-            aria-label={t("skipBackward")}
-          >
-            <Skip15BackLarge className="h-12 w-12 sm:h-14 sm:w-14" />
-          </button>
+      {/* Transport: back → play → forward; in Hebrew "back" sits on the right. */}
+      <div className="flex flex-1 flex-col items-center justify-center gap-8">
+        <div className="flex items-center justify-center gap-4 sm:gap-10">
+          <SkipButton
+            direction="back"
+            onClick={skipBackward}
+            className="rounded-full bg-white/10 p-4 text-white hover:bg-white/20 active:bg-white/30 sm:p-5"
+            iconClassName="h-12 w-12 sm:h-14 sm:w-14"
+            labelClassName="text-base"
+          />
 
-          {/* Play / Pause */}
           <button
+            type="button"
             onClick={togglePlay}
-            className="flex h-24 w-24 items-center justify-center rounded-full bg-white text-black shadow-2xl transition-transform hover:scale-105 active:scale-95 sm:h-[120px] sm:w-[120px]"
-            aria-label={isPlaying ? t("pause") : t("play")}
+            className="flex h-28 w-28 items-center justify-center rounded-full bg-white text-black shadow-2xl transition-transform active:scale-95 sm:h-32 sm:w-32"
+            aria-label={transport === "paused" ? t("play") : t("pause")}
           >
-            {isPlaying ? (
-              <Pause className="h-14 w-14 fill-current sm:h-16 sm:w-16" />
-            ) : (
-              <Play className="ml-1 h-14 w-14 fill-current sm:ml-2 sm:h-16 sm:w-16" />
-            )}
+            <PlayPauseIcon transport={transport} className="h-14 w-14 sm:h-16 sm:w-16" />
           </button>
 
-          {/* Skip forward */}
+          <SkipButton
+            direction="forward"
+            onClick={skipForward}
+            className="rounded-full bg-white/10 p-4 text-white hover:bg-white/20 active:bg-white/30 sm:p-5"
+            iconClassName="h-12 w-12 sm:h-14 sm:w-14"
+            labelClassName="text-base"
+          />
+        </div>
+
+        <div className="flex items-center justify-center gap-6">
           <button
-            onClick={() => skipForward(15)}
-            className="rounded-full p-4 bg-white/10 text-white transition-colors hover:bg-white/20 active:bg-white/30 sm:p-5"
-            aria-label={t("skipForward")}
+            type="button"
+            onClick={previousTrack}
+            disabled={!hasPreviousTrack}
+            className="rounded-full bg-white/10 p-4 text-white hover:bg-white/20 disabled:opacity-25"
+            aria-label={t("previousLesson")}
           >
-            <Skip15ForwardLarge className="h-12 w-12 sm:h-14 sm:w-14" />
+            <SkipBack className="h-8 w-8 fill-current rtl:-scale-x-100" />
+          </button>
+
+          <button
+            type="button"
+            onClick={cycleSpeed}
+            className="min-w-[5.5rem] rounded-full border-2 border-white/30 px-5 py-3 text-xl font-bold tabular-nums text-white"
+            aria-label={t("speed", { speed: playbackSpeed })}
+          >
+            <bdi>{playbackSpeed}x</bdi>
+          </button>
+
+          <button
+            type="button"
+            onClick={nextTrack}
+            disabled={!hasNextTrack}
+            className="rounded-full bg-white/10 p-4 text-white hover:bg-white/20 disabled:opacity-25"
+            aria-label={t("nextLesson")}
+          >
+            <SkipForward className="h-8 w-8 fill-current rtl:-scale-x-100" />
           </button>
         </div>
       </div>
 
-      {/* ── Bottom: Close button ── */}
-      <div className="flex-shrink-0 flex justify-center pb-10 pt-4">
-        <button
-          onClick={handleClose}
-          className="rounded-full p-4 bg-white/10 text-white/70 hover:bg-white/20 hover:text-white transition-colors"
-          aria-label={t("close")}
-        >
-          <X className="h-8 w-8" />
-        </button>
-      </div>
+      <div className="flex flex-shrink-0 justify-center pb-10 pt-4">{closeButton}</div>
     </div>
   );
 }

@@ -1,5 +1,7 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { createJSONStorage, persist, type PersistStorage } from "zustand/middleware";
+import { shallow } from "zustand/shallow";
+import type { AudioEngineStatus } from "@/lib/audio-engine";
 
 export interface AudioTrack {
   id: string;
@@ -20,243 +22,211 @@ export interface AudioTrack {
   mimeType?: string;
 }
 
-export interface PlaybackDiagnostic {
-  at: string;
-  event: string;
-  action: string;
-  trackId?: string;
-  audioFileId?: string;
-  offlineKey?: string;
-  currentTime: number;
-  result?:
-    | "attempted"
-    | "blocked"
-    | "cooldown"
-    | "succeeded"
-    | "failed"
-    | "ignored";
+/**
+ * Why the element is not playing although the listener asked for playback:
+ * - retrying: a network/decode failure is being retried automatically
+ * - blocked: the browser refused play() without a fresh tap
+ * - failed: retries are exhausted (or the device is offline)
+ */
+export type PlaybackIssue = "retrying" | "blocked" | "failed";
+
+/** Stable identity of one audio file of one lesson. */
+export function getTrackKey(track: AudioTrack | null | undefined): string | null {
+  if (!track) return null;
+  return [
+    track.lessonId || track.id,
+    track.audioFileId || "",
+    track.offlineKey || "",
+    track.audioUrl,
+  ].join("|");
 }
 
-interface AudioPlayerState {
-  // Current track
+export interface AudioPlayerState {
   currentTrack: AudioTrack | null;
+  queue: AudioTrack[];
+  queueIndex: number;
+  /** Playback the listener asked for. The controller keeps it in sync with the element. */
   isPlaying: boolean;
+  /** What the audio element is actually doing. */
+  playbackStatus: AudioEngineStatus;
+  playbackIssue: PlaybackIssue | null;
   currentTime: number;
   duration: number;
+  /** Last checkpointed position of currentTrack; restored after a reload. */
+  resumePosition: number;
   volume: number;
   playbackSpeed: number;
   isMiniPlayerExpanded: boolean;
-  lastNativePlaybackState:
-    | "unknown"
-    | "playing"
-    | "paused"
-    | "waiting"
-    | "stalled"
-    | "errored"
-    | "ended";
-  playbackRecoveryState:
-    | "idle"
-    | "recovering"
-    | "stalled"
-    | "resumed"
-    | "needs-user-gesture"
-    | "failed";
-  playbackDiagnostics: PlaybackDiagnostic[];
-  recoveryAttemptsByTrack: Record<
-    string,
-    { count: number; lastAttemptAt: number; playBlocked: boolean }
-  >;
 
-  // Queue
-  queue: AudioTrack[];
-  queueIndex: number;
-
-  // Actions
+  /** Plays a single track. Keeps the queue only when the track is part of it. */
   setTrack: (track: AudioTrack) => void;
+  setQueue: (tracks: AudioTrack[], startIndex?: number) => void;
+  nextTrack: () => void;
+  previousTrack: () => void;
   play: () => void;
   pause: () => void;
   togglePlay: () => void;
   setCurrentTime: (time: number) => void;
   setDuration: (duration: number) => void;
+  setResumePosition: (position: number) => void;
   setVolume: (volume: number) => void;
   setPlaybackSpeed: (speed: number) => void;
-  skipForward: (seconds?: number) => void;
-  skipBackward: (seconds?: number) => void;
-  nextTrack: () => void;
-  previousTrack: () => void;
-  setQueue: (tracks: AudioTrack[], startIndex?: number) => void;
-  addToQueue: (track: AudioTrack) => void;
-  removeFromQueue: (index: number) => void;
+  setPlaybackStatus: (status: AudioEngineStatus) => void;
+  setPlaybackIssue: (issue: PlaybackIssue | null) => void;
   toggleMiniPlayer: () => void;
-  setNativePlaybackState: (
-    state: AudioPlayerState["lastNativePlaybackState"],
-  ) => void;
-  setPlaybackRecoveryState: (
-    state: AudioPlayerState["playbackRecoveryState"],
-  ) => void;
-  addPlaybackDiagnostic: (diagnostic: PlaybackDiagnostic) => void;
-  clearPlaybackDiagnostics: () => void;
-  markPlaybackRecoveryAttempt: (trackKey: string) => void;
-  markPlaybackRecoverySucceeded: (trackKey: string) => void;
-  markPlaybackNeedsUserGesture: (trackKey: string) => void;
+}
+
+type PersistedAudioState = Pick<
+  AudioPlayerState,
+  "currentTrack" | "queue" | "queueIndex" | "resumePosition" | "volume" | "playbackSpeed"
+>;
+
+/** What the play/pause control shows: pause, a spinner (still pauses), or play. */
+export type TransportState = "playing" | "loading" | "paused";
+
+/**
+ * The element is the source of truth. A play request that is still loading or
+ * retrying counts as "loading" so a tap cancels it instead of re-requesting.
+ */
+export function getTransportState(
+  state: Pick<AudioPlayerState, "isPlaying" | "playbackStatus" | "playbackIssue">,
+): TransportState {
+  if (state.playbackStatus === "playing") return "playing";
+  if (state.playbackStatus === "buffering") return "loading";
+  if (!state.isPlaying || state.playbackStatus === "ended") return "paused";
+  return state.playbackStatus === "error" && state.playbackIssue !== "retrying"
+    ? "paused"
+    : "loading";
+}
+
+function startTrack(track: AudioTrack) {
+  return {
+    currentTrack: track,
+    currentTime: 0,
+    duration: track.duration || 0,
+    resumePosition: 0,
+    isPlaying: true,
+    // The element still reports the previous track until the new one loads.
+    playbackStatus: "idle" as const,
+    playbackIssue: null,
+  };
+}
+
+/**
+ * localStorage writes only when a persisted field actually changed, so the
+ * ~4 Hz currentTime updates never touch storage.
+ */
+function createAudioStorage(): PersistStorage<PersistedAudioState> | undefined {
+  const storage = createJSONStorage<PersistedAudioState>(() => window.localStorage);
+  if (!storage) return undefined;
+  let lastWritten: PersistedAudioState | null = null;
+  return {
+    ...storage,
+    setItem: (name, value) => {
+      if (lastWritten && shallow(lastWritten, value.state)) return;
+      lastWritten = value.state;
+      return storage.setItem(name, value);
+    },
+  };
 }
 
 export const useAudioStore = create<AudioPlayerState>()(
   persist(
     (set, get) => ({
       currentTrack: null,
+      queue: [],
+      queueIndex: -1,
       isPlaying: false,
+      playbackStatus: "idle",
+      playbackIssue: null,
       currentTime: 0,
       duration: 0,
+      resumePosition: 0,
       volume: 1,
       playbackSpeed: 1,
       isMiniPlayerExpanded: false,
-      lastNativePlaybackState: "unknown",
-      playbackRecoveryState: "idle",
-      playbackDiagnostics: [],
-      recoveryAttemptsByTrack: {},
-      queue: [],
-      queueIndex: -1,
 
-      setTrack: (track) =>
-        set({ currentTrack: track, currentTime: 0, isPlaying: true }),
+      setTrack: (track) => {
+        const key = getTrackKey(track);
+        const { currentTrack, queue } = get();
+        // Same file again (e.g. tapping it on the lesson page): keep its position.
+        if (getTrackKey(currentTrack) === key) {
+          set({ isPlaying: true, playbackIssue: null });
+          return;
+        }
+        const index = queue.findIndex((item) => getTrackKey(item) === key);
+        set({
+          ...startTrack(track),
+          ...(index >= 0 ? { queueIndex: index } : { queue: [track], queueIndex: 0 }),
+        });
+      },
 
-      play: () => set({ isPlaying: true }),
-      pause: () => set({ isPlaying: false }),
-      togglePlay: () => set((state) => ({ isPlaying: !state.isPlaying })),
-
-      setCurrentTime: (time) => set({ currentTime: time }),
-      setDuration: (duration) => set({ duration }),
-      setVolume: (volume) => set({ volume: Math.max(0, Math.min(1, volume)) }),
-
-      setPlaybackSpeed: (speed) => set({ playbackSpeed: speed }),
-
-      skipForward: (seconds = 15) =>
-        set((state) => ({
-          currentTime: Math.min(state.currentTime + seconds, state.duration),
-        })),
-
-      skipBackward: (seconds = 15) =>
-        set((state) => ({
-          currentTime: Math.max(state.currentTime - seconds, 0),
-        })),
+      setQueue: (tracks, startIndex = 0) => {
+        const track = tracks[startIndex];
+        if (!track) return;
+        set({ ...startTrack(track), queue: tracks, queueIndex: startIndex });
+      },
 
       nextTrack: () => {
         const { queue, queueIndex } = get();
-        if (queueIndex < queue.length - 1) {
-          const nextIndex = queueIndex + 1;
-          set({
-            currentTrack: queue[nextIndex],
-            queueIndex: nextIndex,
-            currentTime: 0,
-            isPlaying: true,
-          });
-        }
+        const next = queue[queueIndex + 1];
+        if (next) set({ ...startTrack(next), queueIndex: queueIndex + 1 });
       },
 
       previousTrack: () => {
-        const { queue, queueIndex, currentTime } = get();
-        // If more than 3 seconds in, restart current track
-        if (currentTime > 3) {
-          set({ currentTime: 0 });
-          return;
-        }
-        if (queueIndex > 0) {
-          const prevIndex = queueIndex - 1;
-          set({
-            currentTrack: queue[prevIndex],
-            queueIndex: prevIndex,
-            currentTime: 0,
-            isPlaying: true,
-          });
-        }
+        const { queue, queueIndex } = get();
+        const previous = queueIndex > 0 ? queue[queueIndex - 1] : undefined;
+        if (previous) set({ ...startTrack(previous), queueIndex: queueIndex - 1 });
       },
 
-      setQueue: (tracks, startIndex = 0) =>
-        set({
-          queue: tracks,
-          queueIndex: startIndex,
-          currentTrack: tracks[startIndex] || null,
-          currentTime: 0,
-          isPlaying: true,
-        }),
+      play: () => set({ isPlaying: true, playbackIssue: null }),
+      pause: () => set({ isPlaying: false, playbackIssue: null }),
+      togglePlay: () => {
+        if (getTransportState(get()) === "paused") set({ isPlaying: true, playbackIssue: null });
+        else set({ isPlaying: false });
+      },
 
-      addToQueue: (track) =>
-        set((state) => ({ queue: [...state.queue, track] })),
-
-      removeFromQueue: (index) =>
-        set((state) => ({
-          queue: state.queue.filter((_, i) => i !== index),
-        })),
-
+      setCurrentTime: (time) => set({ currentTime: time }),
+      setDuration: (duration) => set({ duration }),
+      setResumePosition: (position) => set({ resumePosition: position }),
+      setVolume: (volume) => set({ volume: Math.max(0, Math.min(1, volume)) }),
+      setPlaybackSpeed: (speed) => set({ playbackSpeed: speed }),
+      setPlaybackStatus: (status) => set({ playbackStatus: status }),
+      setPlaybackIssue: (issue) => set({ playbackIssue: issue }),
       toggleMiniPlayer: () =>
         set((state) => ({ isMiniPlayerExpanded: !state.isMiniPlayerExpanded })),
-
-      setNativePlaybackState: (state) =>
-        set({ lastNativePlaybackState: state }),
-      setPlaybackRecoveryState: (state) =>
-        set({ playbackRecoveryState: state }),
-      addPlaybackDiagnostic: (diagnostic) =>
-        set((state) => ({
-          playbackDiagnostics: [
-            ...state.playbackDiagnostics.slice(-19),
-            diagnostic,
-          ],
-        })),
-      clearPlaybackDiagnostics: () => set({ playbackDiagnostics: [] }),
-      markPlaybackRecoveryAttempt: (trackKey) =>
-        set((state) => {
-          const previous = state.recoveryAttemptsByTrack[trackKey];
-          return {
-            playbackRecoveryState: "recovering",
-            recoveryAttemptsByTrack: {
-              ...state.recoveryAttemptsByTrack,
-              [trackKey]: {
-                count: (previous?.count ?? 0) + 1,
-                lastAttemptAt: Date.now(),
-                playBlocked: previous?.playBlocked ?? false,
-              },
-            },
-          };
-        }),
-      markPlaybackRecoverySucceeded: (trackKey) =>
-        set((state) => {
-          const recoveryAttemptsByTrack = {
-            ...state.recoveryAttemptsByTrack,
-          };
-          delete recoveryAttemptsByTrack[trackKey];
-
-          return {
-            playbackRecoveryState: "resumed",
-            recoveryAttemptsByTrack,
-          };
-        }),
-      markPlaybackNeedsUserGesture: (trackKey) =>
-        set((state) => ({
-          playbackRecoveryState: "needs-user-gesture",
-          recoveryAttemptsByTrack: {
-            ...state.recoveryAttemptsByTrack,
-            [trackKey]: {
-              count: state.recoveryAttemptsByTrack[trackKey]?.count ?? 0,
-              lastAttemptAt:
-                state.recoveryAttemptsByTrack[trackKey]?.lastAttemptAt ?? 0,
-              playBlocked: true,
-            },
-          },
-        })),
     }),
     {
       name: "tora-player-audio",
-      partialize: (state) => ({
-        volume: state.volume,
-        playbackSpeed: state.playbackSpeed,
+      version: 1,
+      storage: createAudioStorage(),
+      // isPlaying is intentionally not persisted: a reload must never auto-play.
+      partialize: (state): PersistedAudioState => ({
         currentTrack: state.currentTrack,
-        currentTime: state.currentTime,
         queue: state.queue,
         queueIndex: state.queueIndex,
-        // NOTE: isPlaying intentionally excluded — persisting it caused
-        // phantom auto-resume on page refresh / rehydration
+        resumePosition: state.resumePosition,
+        volume: state.volume,
+        playbackSpeed: state.playbackSpeed,
       }),
+      // v0 persisted the live currentTime instead of a checkpoint.
+      migrate: (persisted, version) => {
+        const state = (persisted ?? {}) as Partial<PersistedAudioState> & { currentTime?: number };
+        if (version === 0) {
+          const { currentTime, ...rest } = state;
+          return { ...rest, resumePosition: currentTime ?? 0 } as PersistedAudioState;
+        }
+        return state as PersistedAudioState;
+      },
+      merge: (persisted, current) => {
+        const state = (persisted ?? {}) as Partial<PersistedAudioState>;
+        return {
+          ...current,
+          ...state,
+          currentTime: state.resumePosition ?? 0,
+          duration: state.currentTrack?.duration ?? 0,
+        };
+      },
     },
   ),
 );

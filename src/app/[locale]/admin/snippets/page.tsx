@@ -15,6 +15,12 @@ import {
 } from '@/actions/snippets';
 import { getCategories } from '@/actions/categories';
 import type { SnippetSubmissionWithLesson, CategoryWithChildren } from '@/types/database';
+import { createDraftLesson, publishUploadedLesson } from '@/actions/upload';
+import { uploadAudioFile } from '@/hooks/use-upload';
+import { shouldTranscode } from '@/lib/audio-transcode';
+import { generateLessonMetadata } from '@/lib/hebrew-date';
+import { SHORTS_AUDIO_TYPE } from '@/lib/lesson-naming';
+import { jerusalemToday, SHORT_LESSON_TYPE } from '@/lib/upload-drafts';
 
 // ---- Audio utility: WAV encoding ----
 
@@ -392,34 +398,34 @@ export default function AdminSnippetsPage() {
       const audioUrl = `/api/audio/stream/${encodeURIComponent(sub.audio_file.file_key)}`;
       const wav = await extractAudioSegment(audioUrl, sub.start_time, sub.end_time);
 
-      // 2. Create lesson first (need lessonId for upload)
-      const lessonForm = new FormData();
-      lessonForm.set('title', sub.title);
-      lessonForm.set('hebrew_title', sub.title);
-      lessonForm.set('date', new Date().toISOString().split('T')[0]);
-      lessonForm.set('source_type', 'upload');
-      if (categoryId) lessonForm.set('category_id', categoryId);
+      // 2. Create the short lesson as an unpublished draft (need lessonId for upload)
+      const date = jerusalemToday();
+      const meta = generateLessonMetadata(date);
+      const created = await createDraftLesson({
+        title: sub.title,
+        hebrew_title: sub.title,
+        date,
+        hebrew_date: meta.hebrewDate,
+        parsha: meta.parsha,
+        teacher: meta.teacher,
+        location: meta.location,
+        lesson_type: SHORT_LESSON_TYPE,
+        category_id: categoryId || null,
+      });
+      if (!created.data) throw new Error('יצירת השיעור נכשלה');
+      const newLessonId = created.data.id;
 
-      const { createLesson } = await import('@/actions/lessons');
-      const lessonResult = await createLesson(lessonForm);
-
-      if ('error' in lessonResult) throw new Error('יצירת השיעור נכשלה');
-
-      const newLessonId = lessonResult.data?.id;
-      if (!newLessonId) throw new Error('לא התקבל מזהה שיעור');
-
-      // 3. Upload WAV to R2 via existing upload API
-      const uploadForm = new FormData();
-      uploadForm.append('file', wav, `${sub.title || 'snippet'}.wav`);
-      uploadForm.append('lessonId', newLessonId);
-      uploadForm.append('fileName', `${sub.title || 'snippet'}.wav`);
-      uploadForm.append('contentType', 'audio/wav');
-      uploadForm.append('fileSize', String(wav.size));
-      uploadForm.append('sortOrder', '0');
-
-      const uploadResp = await fetch('/api/upload', { method: 'POST', body: uploadForm });
-      const uploadResult = await uploadResp.json();
-      if (!uploadResult.fileKey) throw new Error('העלאת הקובץ נכשלה');
+      // 3. Chunked upload (a single request would hit the 4.5MB body limit), then publish
+      const clipFile = new File([wav], `${sub.title || 'snippet'}.wav`, { type: 'audio/wav' });
+      await uploadAudioFile(clipFile, {
+        lessonId: newLessonId,
+        sortOrder: 0,
+        audioType: SHORTS_AUDIO_TYPE,
+        duration: sub.end_time - sub.start_time,
+        transcode: shouldTranscode(clipFile),
+      });
+      const published = await publishUploadedLesson(newLessonId);
+      if (!published.data) throw new Error('פרסום הקטע נכשל');
 
       // 4. Update snippet submission
       await updateSnippetSubmission(sub.id, {
