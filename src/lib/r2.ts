@@ -34,12 +34,26 @@ export async function getUploadPresignedUrl(key: string, contentType: string) {
   return getSignedUrl(r2Client, command, { expiresIn: 3600 });
 }
 
-export async function getDownloadPresignedUrl(key: string) {
+interface DownloadPresignOptions {
+  /** Seconds the URL stays valid (only checked when a request starts). */
+  expiresIn?: number;
+  /** Overrides the Content-Disposition R2 returns (e.g. an attachment filename). */
+  contentDisposition?: string;
+  /** Overrides the Content-Type R2 returns. */
+  contentType?: string;
+}
+
+export async function getDownloadPresignedUrl(
+  key: string,
+  { expiresIn = 7200, contentDisposition, contentType }: DownloadPresignOptions = {},
+) {
   const command = new GetObjectCommand({
     Bucket: BUCKET,
     Key: key,
+    ResponseContentDisposition: contentDisposition,
+    ResponseContentType: contentType,
   });
-  return getSignedUrl(r2Client, command, { expiresIn: 7200 });
+  return getSignedUrl(r2Client, command, { expiresIn });
 }
 
 export async function uploadToR2(key: string, body: Buffer | Uint8Array, contentType: string) {
