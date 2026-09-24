@@ -25,21 +25,26 @@ const r2Client = new S3Client({
 
 const BUCKET = getR2BucketName(process.env);
 
-export async function getUploadPresignedUrl(key: string, contentType: string) {
-  const command = new PutObjectCommand({
-    Bucket: BUCKET,
-    Key: key,
-    ContentType: contentType,
-  });
-  return getSignedUrl(r2Client, command, { expiresIn: 3600 });
+interface DownloadPresignOptions {
+  /** Seconds the URL stays valid (only checked when a request starts). */
+  expiresIn?: number;
+  /** Overrides the Content-Disposition R2 returns (e.g. an attachment filename). */
+  contentDisposition?: string;
+  /** Overrides the Content-Type R2 returns. */
+  contentType?: string;
 }
 
-export async function getDownloadPresignedUrl(key: string) {
+export async function getDownloadPresignedUrl(
+  key: string,
+  { expiresIn = 7200, contentDisposition, contentType }: DownloadPresignOptions = {},
+) {
   const command = new GetObjectCommand({
     Bucket: BUCKET,
     Key: key,
+    ResponseContentDisposition: contentDisposition,
+    ResponseContentType: contentType,
   });
-  return getSignedUrl(r2Client, command, { expiresIn: 7200 });
+  return getSignedUrl(r2Client, command, { expiresIn });
 }
 
 export async function uploadToR2(key: string, body: Buffer | Uint8Array, contentType: string) {
@@ -114,15 +119,6 @@ export async function configureBucketCors(allowedOrigins: string[] = ['*']) {
     },
   });
   await r2Client.send(command);
-}
-
-export function generateAudioKey(lessonId: string, format: string = 'mp3'): string {
-  return `audio/${lessonId}/lesson.${format}`;
-}
-
-export function generateOriginalKey(lessonId: string, originalName: string): string {
-  const ext = originalName.split('.').pop() || 'bin';
-  return `originals/${lessonId}/original.${ext}`;
 }
 
 // ─── S3 Multipart Upload API ───────────────────────────────────────

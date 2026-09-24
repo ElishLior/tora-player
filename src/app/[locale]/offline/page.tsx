@@ -1,52 +1,59 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useLocale, useTranslations } from 'next-intl';
-import { Download, Trash2, HardDrive, Wifi, WifiOff, Play } from 'lucide-react';
-import { getDownloadedLessons, deleteDownloadedLesson, getStorageUsage, type OfflineLessonMeta, type OfflineAudioFileMeta } from '@/lib/offline-storage';
+import { useCallback, useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
+import { Download, Trash2, HardDrive, Wifi, WifiOff, Play, Loader2 } from 'lucide-react';
+import {
+  getDownloadedLessons,
+  deleteDownloadedLesson,
+  getStorageUsage,
+  type OfflineLessonMeta,
+  type OfflineAudioFileMeta,
+} from '@/lib/offline-storage';
+import { OFFLINE_DOWNLOADS_CHANGED_EVENT } from '@/lib/offline-events';
 import { formatFileSize } from '@/lib/audio-utils';
 import { formatDuration } from '@/lib/utils';
 import { EmptyState } from '@/components/shared/empty-state';
 import { useAudioStore } from '@/stores/audio-store';
 
+/**
+ * Offline library. The service worker precaches this page and its chunks, and
+ * serves it for any navigation made without a network, so everything here
+ * comes from IndexedDB and plays from blob URLs.
+ */
 export default function OfflinePage() {
   const t = useTranslations('offline');
-  const locale = useLocale();
-  const isRTL = locale === 'he';
-  const [lessons, setLessons] = useState<OfflineLessonMeta[]>([]);
+  // null until IndexedDB has been read: the server-rendered HTML must not
+  // claim "no downloads" before the client knows.
+  const [lessons, setLessons] = useState<OfflineLessonMeta[] | null>(null);
   const [storage, setStorage] = useState({ used: 0, quota: 0 });
   const [isOnline, setIsOnline] = useState(true);
   const setTrack = useAudioStore((s) => s.setTrack);
 
+  const loadData = useCallback(async () => {
+    const [downloaded, storageInfo] = await Promise.all([getDownloadedLessons(), getStorageUsage()]);
+    setLessons(downloaded);
+    setStorage(storageInfo);
+  }, []);
+
   useEffect(() => {
-    loadData();
+    void loadData();
     setIsOnline(navigator.onLine);
 
+    const handleChange = () => void loadData();
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
+    window.addEventListener(OFFLINE_DOWNLOADS_CHANGED_EVENT, handleChange);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     return () => {
+      window.removeEventListener(OFFLINE_DOWNLOADS_CHANGED_EVENT, handleChange);
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, []);
+  }, [loadData]);
 
-  async function loadData() {
-    const [downloaded, storageInfo] = await Promise.all([
-      getDownloadedLessons(),
-      getStorageUsage(),
-    ]);
-    setLessons(downloaded);
-    setStorage(storageInfo);
-  }
-
-  async function handleDelete(lessonId: string) {
-    await deleteDownloadedLesson(lessonId);
-    loadData();
-  }
-
-  function handlePlay(lesson: OfflineLessonMeta, file: OfflineAudioFileMeta = lesson.audioFiles[0]) {
+  function handlePlay(lesson: OfflineLessonMeta, file: OfflineAudioFileMeta | undefined = lesson.audioFiles[0]) {
     if (!file) return;
     setTrack({
       id: lesson.lessonId,
@@ -64,28 +71,34 @@ export default function OfflinePage() {
     });
   }
 
-  const totalDownloaded = lessons.reduce((acc, l) => acc + l.fileSize, 0);
+  const totalDownloaded = lessons?.reduce((acc, lesson) => acc + lesson.fileSize, 0) ?? 0;
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">{t('title')}</h1>
 
-      {/* Status */}
-      <div className="flex items-center gap-2 text-sm">
+      <div className="flex items-center gap-2 text-sm" role="status">
         {isOnline ? (
-          <><Wifi className="h-4 w-4 text-green-500" /> <span className="text-green-600">מחובר</span></>
+          <>
+            <Wifi className="h-4 w-4 text-green-500" />
+            <span className="text-green-600">{t('online')}</span>
+          </>
         ) : (
-          <><WifiOff className="h-4 w-4 text-orange-500" /> <span className="text-orange-600">לא מקוון</span></>
+          <>
+            <WifiOff className="h-4 w-4 text-orange-500" />
+            <span className="text-orange-600">{t('offlineStatus')}</span>
+          </>
         )}
       </div>
 
-      {/* Storage info */}
       <div className="rounded-xl border bg-card p-4 space-y-2">
         <div className="flex items-center gap-2">
           <HardDrive className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm font-medium">{t('storageUsed')}</span>
         </div>
-        <div className="text-2xl font-bold">{formatFileSize(totalDownloaded)}</div>
+        <div className="text-2xl font-bold">
+          <bdi dir="ltr">{formatFileSize(totalDownloaded)}</bdi>
+        </div>
         {storage.quota > 0 && (
           <>
             <div className="h-2 rounded-full bg-muted overflow-hidden">
@@ -95,45 +108,44 @@ export default function OfflinePage() {
               />
             </div>
             <p className="text-xs text-muted-foreground">
-              {formatFileSize(storage.used)} / {formatFileSize(storage.quota)}
+              <bdi dir="ltr">
+                {formatFileSize(storage.used)} / {formatFileSize(storage.quota)}
+              </bdi>
             </p>
           </>
         )}
       </div>
 
-      {/* Downloaded lessons */}
-      {lessons.length > 0 ? (
+      {lessons === null ? (
+        <div className="flex justify-center py-16">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : lessons.length > 0 ? (
         <div className="space-y-3">
           {lessons.map((lesson) => (
-            <div
-              key={lesson.lessonId}
-              className="rounded-xl border bg-card p-4 space-y-3"
-            >
+            <div key={lesson.lessonId} className="rounded-xl border bg-card p-4 space-y-3">
               <div className="flex items-center gap-3">
-                <Download className="h-5 w-5 text-green-500 flex-shrink-0" />
                 <button
                   onClick={() => handlePlay(lesson)}
                   className="h-10 w-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center flex-shrink-0 hover:scale-105 transition-transform"
-                  aria-label={isRTL ? 'נגן שיעור שהורד' : 'Play downloaded lesson'}
+                  aria-label={t('play')}
                 >
                   <Play className="h-4 w-4 fill-current ms-0.5" />
                 </button>
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium truncate" dir="rtl">
-                    {lesson.hebrewTitle || lesson.title}
+                  <p className="font-medium truncate">
+                    <bdi>{lesson.hebrewTitle || lesson.title}</bdi>
                   </p>
                   <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                    <span>{formatDuration(lesson.duration)}</span>
+                    <span dir="ltr">{formatDuration(lesson.duration)}</span>
                     <span>·</span>
-                    <span>{formatFileSize(lesson.fileSize)}</span>
+                    <span dir="ltr">{formatFileSize(lesson.fileSize)}</span>
                     <span>·</span>
-                    <span>
-                      {lesson.audioFiles.length} {lesson.audioFiles.length === 1 ? 'קובץ' : 'קבצים'}
-                    </span>
+                    <span>{t('filesCount', { count: lesson.audioFiles.length })}</span>
                   </div>
                 </div>
                 <button
-                  onClick={() => handleDelete(lesson.lessonId)}
+                  onClick={() => void deleteDownloadedLesson(lesson.lessonId)}
                   className="rounded-full p-2 hover:bg-destructive/10 text-destructive transition-colors"
                   aria-label={t('remove')}
                 >
@@ -147,16 +159,14 @@ export default function OfflinePage() {
                       key={file.offlineKey}
                       onClick={() => handlePlay(lesson, file)}
                       className="w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--surface-highlight))] transition-colors"
-                      aria-label={isRTL ? 'נגן קובץ שהורד' : 'Play downloaded file'}
+                      aria-label={t('playFile')}
                     >
                       <Play className="h-3.5 w-3.5 fill-current" />
-                      <span className="flex-1 truncate text-start" dir="rtl">
-                        {file.originalName || file.title || `חלק ${index + 1}`}
+                      <span className="flex-1 truncate text-start">
+                        <bdi>{file.originalName || file.title || t('part', { number: index + 1 })}</bdi>
                       </span>
                       {file.duration > 0 && (
-                        <span className="text-xs tabular-nums">
-                          {formatDuration(file.duration)}
-                        </span>
+                        <span className="text-xs tabular-nums" dir="ltr">{formatDuration(file.duration)}</span>
                       )}
                     </button>
                   ))}
@@ -166,10 +176,7 @@ export default function OfflinePage() {
           ))}
         </div>
       ) : (
-        <EmptyState
-          icon={Download}
-          title={t('noDownloads')}
-        />
+        <EmptyState icon={Download} title={t('noDownloads')} description={t('noDownloadsHint')} />
       )}
     </div>
   );

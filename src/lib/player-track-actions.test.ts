@@ -50,7 +50,7 @@ describe('player track actions', () => {
   it('uses the active track filename for local file downloads', () => {
     expect(getTrackDownloadFilename(track)).toBe('WhatsApp Audio 1.opus');
     expect(getTrackDownloadUrl(track)).toBe(
-      '/api/audio/stream/audio%2Flesson-1%2Fpart-1.opus?download=1&filename=WhatsApp%20Audio%201.opus',
+      '/api/audio/download/audio%2Flesson-1%2Fpart-1.opus?filename=WhatsApp%20Audio%201.opus',
     );
   });
 

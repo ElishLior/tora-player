@@ -2,6 +2,8 @@
 
 import { openDB, type IDBPDatabase } from 'idb';
 import { normalizeAudioUrl } from '@/lib/audio-url';
+import { getAudioContentType, getAudioDirectUrl } from '@/lib/audio-download';
+import { notifyOfflineDownloadsChanged } from '@/lib/offline-events';
 
 const DB_NAME = 'tora-player-offline';
 const DB_VERSION = 2;
@@ -258,218 +260,176 @@ export function revokeOfflineAudioUrl(offlineKey: string) {
   }
 }
 
-/**
- * Revoke all cached blob URLs (e.g., on unload or track change).
- */
-export function revokeAllOfflineAudioUrls() {
-  for (const [, url] of blobUrlCache) {
-    URL.revokeObjectURL(url);
-  }
-  blobUrlCache.clear();
-}
+// ── Saving audio for offline listening ──
 
-// ── Download with retry and cleanup ──
+export type OfflineSaveResult = { ok: true } | { ok: false; reason: 'quota' | 'failed' };
 
-const MAX_RETRIES = 2;
-const RETRY_DELAY_MS = 500;
+const MAX_ATTEMPTS_PER_FILE = 3;
+const RETRY_DELAY_MS = 1000;
 
 async function requestPersistentStorage() {
   try {
-    if (
-      typeof navigator !== 'undefined' &&
-      'storage' in navigator &&
-      'persist' in navigator.storage
-    ) {
+    if (typeof navigator !== 'undefined' && navigator.storage?.persist && !(await navigator.storage.persisted())) {
       await navigator.storage.persist();
     }
   } catch {
-    // Persistence is a best-effort browser hint.
+    // Persistence is a browser hint; saving works without it.
   }
 }
 
-async function fetchAudioBlob(
-  url: string,
-  onProgress?: (percent: number) => void
-): Promise<{ blob: Blob; mimeType: string }> {
-  const response = await fetch(normalizedAudioUrl(url));
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-  const contentLength = Number(response.headers.get('content-length') || 0);
-  const mimeType = response.headers.get('content-type') || 'audio/mpeg';
-  const reader = response.body?.getReader();
-  if (!reader) throw new Error('No readable stream');
-
-  const chunks: Uint8Array[] = [];
-  let received = 0;
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-    received += value.length;
-    if (contentLength > 0) {
-      onProgress?.(Math.round((received / contentLength) * 100));
+async function fetchAudioResponse(audioUrl: string): Promise<Response> {
+  const directUrl = getAudioDirectUrl(audioUrl);
+  if (directUrl) {
+    try {
+      return await fetch(directUrl);
+    } catch (error) {
+      // The redirect goes to R2 cross-origin; if the bucket's CORS rules reject
+      // it, the same-origin stream proxy still serves the file.
+      console.warn('Direct R2 fetch failed, using the stream proxy:', error);
     }
   }
-
-  // Integrity check: if server told us content-length, verify we got it all.
-  if (contentLength > 0 && received < contentLength * 0.95) {
-    throw new Error(`Incomplete download: got ${received}/${contentLength} bytes`);
-  }
-
-  if (contentLength === 0) {
-    onProgress?.(100);
-  }
-
-  return {
-    blob: new Blob(chunks as BlobPart[], { type: mimeType }),
-    mimeType,
-  };
+  return fetch(audioUrl);
 }
 
-export async function downloadLessonAudioFiles(
+/**
+ * Download one audio file as a Blob. The body is counted as it streams into a
+ * single Blob (no second in-memory copy) and must match Content-Length exactly.
+ */
+async function fetchAudioBlob(audioUrl: string, onProgress: (fraction: number) => void): Promise<Blob> {
+  const response = await fetchAudioResponse(audioUrl);
+  if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
+
+  const encoding = response.headers.get('Content-Encoding');
+  // A compressed body's length differs from Content-Length, so it can't be checked.
+  const expectedBytes = !encoding || encoding === 'identity' ? Number(response.headers.get('Content-Length')) || 0 : 0;
+  const mimeType = response.headers.get('Content-Type') || getAudioContentType(audioUrl);
+
+  let received = 0;
+  const counted = response.body.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        received += chunk.byteLength;
+        if (expectedBytes > 0) onProgress(Math.min(received / expectedBytes, 1));
+        controller.enqueue(chunk);
+      },
+    }),
+  );
+  const blob = await new Response(counted, { headers: { 'Content-Type': mimeType } }).blob();
+
+  if (expectedBytes > 0 && blob.size !== expectedBytes) {
+    throw new Error(`Incomplete download: got ${blob.size}/${expectedBytes} bytes`);
+  }
+  return blob;
+}
+
+async function saveLessonMeta(
+  db: IDBPDatabase,
+  meta: OfflineLessonInput,
+  savedFile: OfflineAudioFileMeta,
+): Promise<void> {
+  const previous = normalizeLessonMeta(
+    await db.get(META_STORE, meta.lessonId) as Partial<OfflineLessonMeta> | undefined
+  );
+  const audioFiles = [
+    ...(previous?.audioFiles.filter((file) => file.offlineKey !== savedFile.offlineKey) ?? []),
+    savedFile,
+  ].sort((a, b) => a.sortOrder - b.sortOrder);
+
+  await db.put(META_STORE, {
+    ...meta,
+    audioUrl: audioFiles[0].audioUrl,
+    duration: meta.duration || audioFiles.reduce((total, file) => total + file.duration, 0),
+    fileSize: audioFiles.reduce((total, file) => total + file.fileSize, 0),
+    downloadedAt: savedFile.downloadedAt,
+    audioFiles,
+  });
+}
+
+/**
+ * Save a lesson's audio files to IndexedDB for offline listening.
+ *
+ * Each file is committed (blob + metadata) as soon as it is complete, so a
+ * failure keeps the files already saved and a retry only needs the rest.
+ * Network errors are retried per file; a full disk is reported immediately
+ * as `reason: 'quota'`.
+ */
+export async function saveAudioFilesOffline(
   lessonId: string,
   audioFiles: OfflineAudioDownloadInput[],
   meta: OfflineLessonInput,
   onProgress?: (percent: number) => void
-): Promise<boolean> {
-  if (audioFiles.length === 0) return false;
+): Promise<OfflineSaveResult> {
+  if (audioFiles.length === 0) return { ok: false, reason: 'failed' };
 
   await requestPersistentStorage();
-  const touchedKeys = new Set<string>();
+  const db = await getDB();
+  const lessonMeta = { ...meta, lessonId };
+  let result: OfflineSaveResult = { ok: true };
 
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    const downloadedKeys: string[] = [];
+  for (const [index, file] of audioFiles.entries()) {
+    const audioUrl = normalizedAudioUrl(file.audioUrl);
+    const reportProgress = (fraction: number) =>
+      onProgress?.(Math.round(((index + fraction) / audioFiles.length) * 100));
 
-    try {
-      if (attempt > 0) {
-        await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * attempt));
-        onProgress?.(0);
-      }
-
-      const db = await getDB();
-      const previousMeta = normalizeLessonMeta(
-        await db.get(META_STORE, lessonId) as Partial<OfflineLessonMeta> | undefined
-      );
-      const completedFiles: OfflineAudioFileMeta[] = [];
-      const downloadedAt = new Date().toISOString();
-
-      for (const [index, file] of audioFiles.entries()) {
+    let savedFile: OfflineAudioFileMeta | null = null;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_FILE && !savedFile; attempt++) {
+      try {
+        reportProgress(0);
+        const blob = await fetchAudioBlob(audioUrl, reportProgress);
         const offlineKey = getOfflineKey(lessonId, file);
-        const normalizedUrl = normalizedAudioUrl(file.audioUrl);
-        const { blob, mimeType } = await fetchAudioBlob(normalizedUrl, (filePercent) => {
-          const aggregate = Math.round(((index + filePercent / 100) / audioFiles.length) * 100);
-          onProgress?.(aggregate);
-        });
-
         await db.put(AUDIO_STORE, blob, offlineKey);
-        downloadedKeys.push(offlineKey);
-        touchedKeys.add(offlineKey);
 
-        completedFiles.push({
+        const fileMeta: OfflineAudioFileMeta = {
           offlineKey,
           lessonId,
           audioFileId: file.audioFileId,
           fileKey: file.fileKey,
-          audioUrl: normalizedUrl,
+          audioUrl,
           title: file.title || file.originalName || undefined,
           originalName: file.originalName,
           audioType: file.audioType,
-          mimeType,
+          mimeType: blob.type || getAudioContentType(audioUrl),
           duration: file.duration || 0,
           fileSize: blob.size,
           sortOrder: file.sortOrder ?? index,
-          downloadedAt,
-        });
-      }
-
-      const replacedKeys = new Set(completedFiles.map((file) => file.offlineKey));
-      const mergedFiles = [
-        ...(previousMeta?.audioFiles.filter((file) => !replacedKeys.has(file.offlineKey)) ?? []),
-        ...completedFiles,
-      ].sort((a, b) => a.sortOrder - b.sortOrder);
-
-      await db.put(META_STORE, {
-        ...meta,
-        lessonId,
-        audioUrl: mergedFiles[0]?.audioUrl || meta.audioUrl || '',
-        duration: meta.duration || mergedFiles.reduce((total, file) => total + file.duration, 0),
-        fileSize: mergedFiles.reduce((total, file) => total + file.fileSize, 0),
-        downloadedAt,
-        audioFiles: mergedFiles,
-      });
-
-      onProgress?.(100);
-      return true;
-    } catch (error) {
-      console.error(`Download attempt ${attempt + 1} failed:`, error);
-
-      try {
-        const db = await getDB();
-        for (const key of downloadedKeys) {
-          revokeOfflineAudioUrl(key);
-          await db.delete(AUDIO_STORE, key);
+          downloadedAt: new Date().toISOString(),
+        };
+        await saveLessonMeta(db, lessonMeta, fileMeta);
+        savedFile = fileMeta;
+      } catch (error) {
+        console.error(`Offline save of ${audioUrl} failed (attempt ${attempt}):`, error);
+        if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+          notifyOfflineDownloadsChanged(lessonId);
+          return { ok: false, reason: 'quota' };
         }
-      } catch {
-        // Retry/final cleanup below will make another best-effort pass.
-      }
-
-      if (attempt === MAX_RETRIES) {
-        try {
-          const db = await getDB();
-          for (const key of touchedKeys) {
-            revokeOfflineAudioUrl(key);
-            await db.delete(AUDIO_STORE, key);
-          }
-
-          const currentMeta = normalizeLessonMeta(
-            await db.get(META_STORE, lessonId) as Partial<OfflineLessonMeta> | undefined
-          );
-
-          if (currentMeta) {
-            const remainingFiles = currentMeta.audioFiles.filter((file) => !touchedKeys.has(file.offlineKey));
-            if (remainingFiles.length === 0) {
-              await db.delete(META_STORE, lessonId);
-            } else {
-              await db.put(META_STORE, {
-                ...currentMeta,
-                fileSize: remainingFiles.reduce((total, file) => total + file.fileSize, 0),
-                audioFiles: remainingFiles,
-              });
-            }
-          }
-        } catch {
-          // Cleanup itself failed — nothing more to do.
+        if (attempt < MAX_ATTEMPTS_PER_FILE) {
+          // Not Promise.withResolvers: it needs iOS 17.4+.
+          await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS * attempt));
         }
-        return false;
       }
     }
+
+    if (!savedFile) result = { ok: false, reason: 'failed' };
   }
 
-  return false;
+  if (result.ok) onProgress?.(100);
+  notifyOfflineDownloadsChanged(lessonId);
+  return result;
 }
 
-export async function downloadLesson(
+/** The stored audio Blob for a saved file, or null when it isn't saved. */
+export async function getOfflineAudioBlob(
   lessonId: string,
-  audioUrl: string,
-  meta: Omit<OfflineLessonMeta, 'downloadedAt' | 'audioFiles'>,
-  onProgress?: (percent: number) => void
-): Promise<boolean> {
-  return downloadLessonAudioFiles(
-    lessonId,
-    [{ audioUrl, duration: meta.duration, sortOrder: 0 }],
-    {
-      lessonId,
-      title: meta.title,
-      hebrewTitle: meta.hebrewTitle,
-      duration: meta.duration,
-      seriesName: meta.seriesName,
-      date: meta.date,
-      audioUrl,
-      fileSize: meta.fileSize,
-    },
-    onProgress
-  );
+  audioUrl?: string | null,
+  preferredOfflineKey?: string | null
+): Promise<Blob | null> {
+  try {
+    const db = await getDB();
+    const offlineKey = await resolveOfflineKey(db, lessonId, audioUrl, preferredOfflineKey);
+    return offlineKey ? ((await db.get(AUDIO_STORE, offlineKey)) as Blob | undefined) ?? null : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function isLessonDownloaded(lessonId: string): Promise<boolean> {
@@ -530,6 +490,11 @@ export async function getDownloadedLessons(): Promise<OfflineLessonMeta[]> {
   }
 }
 
+/**
+ * Remove a saved lesson. Blob URLs are left alone: the lesson may be playing
+ * right now, and lookups check IndexedDB before the URL cache, so the deleted
+ * files are no longer offered. The player revokes the URL when it moves on.
+ */
 export async function deleteDownloadedLesson(lessonId: string): Promise<void> {
   try {
     const db = await getDB();
@@ -537,13 +502,13 @@ export async function deleteDownloadedLesson(lessonId: string): Promise<void> {
     const keys = meta?.audioFiles.map((file) => file.offlineKey) ?? [lessonId];
 
     for (const key of keys) {
-      revokeOfflineAudioUrl(key);
       await db.delete(AUDIO_STORE, key);
     }
     await db.delete(META_STORE, lessonId);
-  } catch {
-    console.error('Delete offline lesson error');
+  } catch (error) {
+    console.error('Delete offline lesson error:', error);
   }
+  notifyOfflineDownloadsChanged(lessonId);
 }
 
 export async function getStorageUsage(): Promise<{ used: number; quota: number }> {

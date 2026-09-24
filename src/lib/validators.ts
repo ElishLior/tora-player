@@ -48,16 +48,48 @@ export const updateLessonSchema = z.object({
   category_id: uuidLike.optional().nullable(),
 });
 
+// ==================== UPLOADS ====================
+
+/** Body of POST /api/upload/complete (chunked audio upload). */
+export const completeAudioUploadSchema = z.object({
+  uploadId: uuidLike,
+  totalParts: z.number().int().min(1).max(200),
+  lessonId: uuidLike,
+  /** Name of the uploaded bytes (may be a transcoded .ogg); decides the stored format. */
+  fileName: z.string().min(1).max(255),
+  /** Name of the file the admin dropped, kept for traceability. */
+  originalName: z.string().min(1).max(255).optional(),
+  fileSize: z.number().int().min(1),
+  sortOrder: z.number().int().min(0).max(999).default(0),
+  duration: z.number().int().min(0).max(24 * 3600).default(0),
+  audioType: z.string().trim().min(1).max(50).optional().nullable(),
+});
+
+export const duplicateAudioCandidatesSchema = z
+  .array(
+    z.object({
+      fileId: z.string().min(1).max(100),
+      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      size: z.number().int().min(0),
+      name: z.string().max(255),
+    }),
+  )
+  .max(500);
+
 export const createPlaylistSchema = z.object({
   name: z.string().min(1, 'Playlist name is required'),
   hebrew_name: z.string().optional(),
   description: z.string().optional(),
 });
 
-export const createBookmarkSchema = z.object({
+/** A bookmark row; `id` is the client-generated local bookmark id. */
+export const bookmarkSchema = z.object({
+  id: uuidLike,
   lesson_id: uuidLike,
-  position: z.number().int().min(0),
-  note: z.string().optional(),
+  position: z.number().min(0),
+  note: z.string().max(2000).optional().nullable(),
+  tag: z.string().max(40).optional().nullable(),
+  audio_file_id: uuidLike.optional().nullable(),
 });
 
 export const createSeriesSchema = z.object({
@@ -68,7 +100,8 @@ export const createSeriesSchema = z.object({
 
 export const playbackProgressSchema = z.object({
   lesson_id: uuidLike,
-  position: z.number().int().min(0),
+  /** Seconds; stored rounded to an integer. */
+  position: z.number().min(0),
   completed: z.boolean().default(false),
 });
 
@@ -107,8 +140,8 @@ export const submitSnippetSchema = z
   .object({
     lesson_id: uuidLike,
     audio_file_id: uuidLike.optional().nullable(),
-    title: z.string().min(1, 'Title is required'),
-    description: z.string().optional().nullable(),
+    title: z.string().trim().min(1, 'Title is required').max(200),
+    description: z.string().max(2000).optional().nullable(),
     start_time: z.number().int().min(0),
     end_time: z.number().int().min(1),
   })
@@ -125,4 +158,70 @@ export const updateSnippetSubmissionSchema = z.object({
   status: z.enum(['pending', 'approved', 'rejected']).optional(),
   admin_notes: z.string().optional().nullable(),
   result_lesson_id: uuidLike.optional().nullable(),
+});
+
+// ==================== ACCOUNTS ====================
+
+export const emailSchema = z.string().trim().toLowerCase().pipe(z.email().max(254));
+
+/** Supabase email one-time codes are 6–10 digits depending on project settings. */
+export const otpCodeSchema = z.string().trim().regex(/^\d{6,10}$/);
+
+export const profileUpdateSchema = z.object({
+  display_name: z.string().trim().max(80).nullable(),
+  notify_new_lessons: z.boolean(),
+});
+
+/**
+ * Array of at most `max` items where entries failing `item` are dropped
+ * instead of rejecting the whole payload (old device data can be malformed).
+ */
+function validItems<T extends z.ZodType>(item: T, max: number) {
+  return z
+    .array(z.unknown())
+    .max(max)
+    .transform((entries) =>
+      entries.flatMap((entry) => {
+        const result = item.safeParse(entry);
+        return result.success ? [result.data as z.output<T>] : [];
+      }),
+    );
+}
+
+export const bookmarkSyncSchema = z.object({
+  bookmarks: validItems(bookmarkSchema, 2000),
+  deletedIds: validItems(uuidLike, 1000),
+});
+
+export const progressSyncSchema = validItems(
+  z.object({
+    lesson_id: uuidLike,
+    position: z.number().min(0),
+    completed: z.boolean(),
+    last_played_at: z.iso.datetime({ offset: true }),
+  }),
+  2000,
+);
+
+// ==================== PUSH NOTIFICATIONS ====================
+
+/** Push services of Chrome/Android (FCM), Firefox, Safari/iOS and Edge. */
+const PUSH_SERVICE_HOST = /(^|\.)(fcm\.googleapis\.com|android\.googleapis\.com|push\.services\.mozilla\.com|push\.apple\.com|notify\.windows\.com)$/;
+
+export const pushSubscriptionSchema = z.object({
+  endpoint: z
+    .string()
+    .max(1000)
+    .refine((value) => {
+      try {
+        const url = new URL(value);
+        return url.protocol === 'https:' && PUSH_SERVICE_HOST.test(url.hostname);
+      } catch {
+        return false;
+      }
+    }, 'Unsupported push endpoint'),
+  keys: z.object({
+    p256dh: z.string().min(1).max(200),
+    auth: z.string().min(1).max(100),
+  }),
 });

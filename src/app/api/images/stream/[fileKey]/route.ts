@@ -1,24 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDownloadPresignedUrl } from '@/lib/r2';
 
-/**
- * Detect MIME type from file extension for images.
- */
-function getContentType(key: string): string {
-  const ext = key.split('.').pop()?.toLowerCase();
-  switch (ext) {
-    case 'jpg': case 'jpeg': return 'image/jpeg';
-    case 'png':               return 'image/png';
-    case 'webp':              return 'image/webp';
-    case 'gif':               return 'image/gif';
-    case 'svg':               return 'image/svg+xml';
-    default:                  return 'image/jpeg';
-  }
-}
+const IMAGE_TYPES: Record<string, string> = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  gif: 'image/gif',
+  avif: 'image/avif',
+  heic: 'image/heic',
+  heif: 'image/heif',
+};
 
 /**
  * Image streaming proxy.
- * Serves lesson images from R2 via signed URLs with proper headers.
+ * Serves lesson images (R2 keys under `images/`) via signed URLs. Only raster
+ * formats are served — never SVG/HTML, which would execute script on the app
+ * origin — and responses carry nosniff + a sandboxing CSP.
  */
 export async function GET(
   request: NextRequest,
@@ -27,9 +25,15 @@ export async function GET(
   try {
     const { fileKey } = await params;
     const decodedKey = decodeURIComponent(fileKey);
+    const extension = decodedKey.split('.').pop()?.toLowerCase() ?? '';
+
+    if (!decodedKey.startsWith('images/') || decodedKey.includes('..') || /^(svgz?|xml|html?|xhtml)$/.test(extension)) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
 
     const signedUrl = await getDownloadPresignedUrl(decodedKey);
-    const contentType = getContentType(decodedKey);
+    // Legacy keys with unusual extensions were always served as JPEG.
+    const contentType = IMAGE_TYPES[extension] ?? 'image/jpeg';
 
     // Fetch image from R2
     const r2Response = await fetch(signedUrl);
@@ -45,6 +49,8 @@ export async function GET(
     const responseHeaders = new Headers();
     responseHeaders.set('Content-Type', contentType);
     responseHeaders.set('Cache-Control', 'public, max-age=604800, stale-while-revalidate=2592000');
+    responseHeaders.set('X-Content-Type-Options', 'nosniff');
+    responseHeaders.set('Content-Security-Policy', "default-src 'none'; sandbox");
 
     const contentLength = r2Response.headers.get('Content-Length');
     if (contentLength) responseHeaders.set('Content-Length', contentLength);

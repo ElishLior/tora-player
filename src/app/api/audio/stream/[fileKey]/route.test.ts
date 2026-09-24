@@ -29,43 +29,36 @@ describe('audio stream route', () => {
     );
   });
 
-  it('sets full attachment headers in download mode without forwarding range requests', async () => {
+  it('forwards range requests and answers 206 with the audio content type', async () => {
     const request = new NextRequest(
-      'http://localhost/api/audio/stream/folder%2Flesson.mp3?download=1&filename=%D7%A9%D7%99%D7%A2%D7%95%D7%A8.mp3',
+      'http://localhost/api/audio/stream/folder%2Flesson.m4a',
       { headers: { Range: 'bytes=0-10' } },
     );
 
     const response = await GET(request, {
-      params: Promise.resolve({ fileKey: 'folder%2Flesson.mp3' }),
-    });
-
-    expect(response.status).toBe(200);
-    expect(mockedGetDownloadPresignedUrl).toHaveBeenCalledWith('folder/lesson.mp3');
-    expect(fetch).toHaveBeenCalledWith('https://r2.example/audio.mp3', {
-      headers: {},
-    });
-    expect(response.headers.get('Content-Type')).toBe('application/octet-stream');
-    expect(response.headers.get('Content-Range')).toBeNull();
-    expect(response.headers.get('ETag')).toBe('"test-etag"');
-    expect(response.headers.get('Content-Disposition')).toContain('attachment;');
-    expect(response.headers.get('Content-Disposition')).toContain("filename*=UTF-8''");
-  });
-
-  it('keeps normal streaming mode inline and forwards range requests', async () => {
-    const request = new NextRequest(
-      'http://localhost/api/audio/stream/lesson.m4a',
-      { headers: { Range: 'bytes=0-10' } },
-    );
-
-    const response = await GET(request, {
-      params: Promise.resolve({ fileKey: 'lesson.m4a' }),
+      params: Promise.resolve({ fileKey: 'folder%2Flesson.m4a' }),
     });
 
     expect(response.status).toBe(206);
+    expect(mockedGetDownloadPresignedUrl).toHaveBeenCalledWith('folder/lesson.m4a');
     expect(fetch).toHaveBeenCalledWith('https://r2.example/audio.mp3', {
       headers: { Range: 'bytes=0-10' },
     });
     expect(response.headers.get('Content-Type')).toBe('audio/mp4');
+    expect(response.headers.get('Content-Range')).toBe('bytes 0-10/100');
+    expect(response.headers.get('Accept-Ranges')).toBe('bytes');
     expect(response.headers.get('Content-Disposition')).toBeNull();
+  });
+
+  it('returns the full file with 200 when no range is requested', async () => {
+    const request = new NextRequest('http://localhost/api/audio/stream/lesson.opus');
+
+    const response = await GET(request, {
+      params: Promise.resolve({ fileKey: 'lesson.opus' }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Content-Type')).toBe('audio/ogg');
+    expect(response.headers.get('Content-Length')).toBe('11');
   });
 });

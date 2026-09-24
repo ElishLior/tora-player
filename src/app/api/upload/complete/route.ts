@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireServerSupabaseClient } from '@/lib/supabase/server';
+import { createAdminSupabaseClient } from '@/lib/supabase/admin';
+import { completeAudioUploadSchema } from '@/lib/validators';
+import { audioFormatFor, lessonExists, rejectNonAdmin } from '@/lib/upload-server';
 import {
   uploadToR2,
   downloadFromR2,
   listR2Objects,
   deleteR2Prefix,
   deleteFromR2,
-  generateOriginalKey,
   getPublicAudioUrl,
   createMultipartUpload,
   uploadPart,
@@ -18,192 +19,109 @@ import {
 export const runtime = 'nodejs';
 export const maxDuration = 300; // 5 min for large file assembly
 
-// Threshold: files under this size use simple Buffer.concat (fast path)
-// Files above this use S3 Multipart Upload (memory-safe path)
-const SIMPLE_THRESHOLD = 10 * 1024 * 1024; // 10 MB
+// Files under this size are concatenated in memory; larger ones go through
+// S3 multipart so memory stays at ~one part.
+const SIMPLE_THRESHOLD = 10 * 1024 * 1024;
+// R2/S3 minimum part size for multipart upload (except the last part)
+const MIN_PART_SIZE = 5 * 1024 * 1024;
 
-// R2/S3 minimum part size for multipart upload (except last part)
-const MIN_PART_SIZE = 5 * 1024 * 1024; // 5 MB
+async function assembleChunks(chunkKeys: string[], fileKey: string, contentType: string, fileSize: number) {
+  if (fileSize < SIMPLE_THRESHOLD) {
+    const chunks: Buffer[] = [];
+    for (const key of chunkKeys) chunks.push(await downloadFromR2(key));
+    const completeFile = Buffer.concat(chunks);
+    await uploadToR2(fileKey, completeFile, contentType);
+    return completeFile.length;
+  }
+
+  const mpUploadId = await createMultipartUpload(fileKey, contentType);
+  const parts: MultipartPart[] = [];
+  let actualSize = 0;
+  try {
+    let accumulated = Buffer.alloc(0);
+    for (let i = 0; i < chunkKeys.length; i++) {
+      const chunkData = await downloadFromR2(chunkKeys[i]);
+      actualSize += chunkData.length;
+      accumulated = Buffer.concat([accumulated, chunkData]);
+      if (accumulated.length >= MIN_PART_SIZE || i === chunkKeys.length - 1) {
+        const partNumber = parts.length + 1;
+        const etag = await uploadPart(fileKey, mpUploadId, partNumber, accumulated);
+        parts.push({ ETag: etag, PartNumber: partNumber });
+        accumulated = Buffer.alloc(0);
+      }
+    }
+    await completeMultipartUpload(fileKey, mpUploadId, parts);
+  } catch (error) {
+    try { await abortMultipartUpload(fileKey, mpUploadId); } catch { /* already failing */ }
+    throw error;
+  }
+  return actualSize;
+}
 
 /**
- * Assemble previously uploaded chunks from R2 and upload the complete file.
- * Then record the upload in the database.
- *
- * Two paths:
- * - Fast path (< 10MB): Download all chunks → Buffer.concat → single PutObject
- * - Large file path (≥ 10MB): S3 Multipart Upload — stream chunks as parts
- *   Max memory usage: ~7MB (one accumulated buffer) instead of entire file
+ * Assemble the chunks of an admin audio upload into audio/{lessonId}/… and
+ * record it in lesson_audio with its duration, part type and sort order.
+ * The lesson_audio trigger keeps lessons.duration / audio_url in sync.
  */
 export async function POST(request: NextRequest) {
-  let chunkPrefix: string | null = null;
+  const denied = await rejectNonAdmin();
+  if (denied) return denied;
+
+  const parsed = completeAudioUploadSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'Invalid upload request' }, { status: 400 });
+  }
+  const { uploadId, totalParts, lessonId, fileName, originalName, fileSize, sortOrder, duration, audioType } =
+    parsed.data;
+  const format = audioFormatFor(fileName);
+  if (!format) {
+    return NextResponse.json({ error: 'Unsupported audio format' }, { status: 415 });
+  }
+
+  const chunkPrefix = `_chunks/${uploadId}/`;
+  let fileKey: string | null = null;
 
   try {
-    const {
-      uploadId,
-      totalParts,
-      lessonId,
-      fileName,
-      contentType,
-      fileSize,
-      sortOrder = 0,
-    } = await request.json();
-
-    if (!uploadId || !lessonId || !fileName) {
-      return NextResponse.json(
-        { error: 'Missing required fields: uploadId, lessonId, fileName' },
-        { status: 400 }
-      );
+    if (!(await lessonExists(lessonId))) {
+      return NextResponse.json({ error: 'Lesson not found' }, { status: 404 });
     }
 
-    chunkPrefix = `_chunks/${uploadId}/`;
-
-    // List all chunk objects in R2
     const chunkKeys = await listR2Objects(chunkPrefix);
-
-    if (chunkKeys.length === 0) {
-      return NextResponse.json(
-        { error: 'No chunks found. Upload may have expired — please retry.' },
-        { status: 404 }
-      );
-    }
-
-    if (totalParts && chunkKeys.length !== totalParts) {
+    if (chunkKeys.length !== totalParts) {
       return NextResponse.json(
         { error: `Expected ${totalParts} chunks but found ${chunkKeys.length}. Please retry.` },
-        { status: 400 }
+        { status: 409 },
       );
     }
 
-    // Determine final file key
-    const ext = fileName.split('.').pop() || 'mp3';
-    const fileKey = `audio/${lessonId}/${sortOrder}_${Date.now()}.${ext}`;
-    const ct = contentType || 'audio/mpeg';
+    fileKey = `audio/${lessonId}/${sortOrder}_${Date.now()}.${format.ext}`;
+    const actualSize = await assembleChunks(chunkKeys, fileKey, format.contentType, fileSize);
 
-    // Estimate total size from chunk count (each chunk ~3.5MB)
-    const estimatedSize = fileSize || chunkKeys.length * 3.5 * 1024 * 1024;
-
-    let actualFileSize: number;
-
-    if (estimatedSize < SIMPLE_THRESHOLD) {
-      // ═══ FAST PATH: small files — Buffer.concat ═══
-      const chunks: Buffer[] = [];
-      for (const key of chunkKeys) {
-        const data = await downloadFromR2(key);
-        chunks.push(data);
-      }
-      const completeFile = Buffer.concat(chunks);
-      actualFileSize = completeFile.length;
-      await uploadToR2(fileKey, completeFile, ct);
-
-      // Clean up chunks
-      try { await deleteR2Prefix(chunkPrefix); } catch { /* non-critical */ }
-    } else {
-      // ═══ LARGE FILE PATH: S3 Multipart Upload ═══
-      // Stream chunks as parts — max ~7MB in memory at any time
-      const mpUploadId = await createMultipartUpload(fileKey, ct);
-      const parts: MultipartPart[] = [];
-
-      try {
-        let partNumber = 1;
-        let accumulated = Buffer.alloc(0);
-        actualFileSize = 0;
-
-        for (let i = 0; i < chunkKeys.length; i++) {
-          // Download one chunk (~3.5MB)
-          const chunkData = await downloadFromR2(chunkKeys[i]);
-          actualFileSize += chunkData.length;
-
-          // Accumulate
-          accumulated = Buffer.concat([accumulated, chunkData]);
-
-          // Delete the chunk from R2 immediately to free storage
-          try { await deleteFromR2(chunkKeys[i]); } catch { /* non-critical */ }
-
-          const isLastChunk = i === chunkKeys.length - 1;
-
-          // Send as part when: accumulated >= 5MB OR this is the last chunk
-          if (accumulated.length >= MIN_PART_SIZE || isLastChunk) {
-            const etag = await uploadPart(fileKey, mpUploadId, partNumber, accumulated);
-            parts.push({ ETag: etag, PartNumber: partNumber });
-            partNumber++;
-            accumulated = Buffer.alloc(0); // release memory
-          }
-        }
-
-        // Complete the multipart upload
-        await completeMultipartUpload(fileKey, mpUploadId, parts);
-      } catch (mpError) {
-        // Abort multipart upload on failure
-        console.error('Multipart upload failed, aborting:', mpError);
-        try { await abortMultipartUpload(fileKey, mpUploadId); } catch { /* ignore */ }
-        // Clean up remaining chunks
-        try { await deleteR2Prefix(chunkPrefix); } catch { /* ignore */ }
-        throw mpError;
-      }
-
-      // Clean up any remaining chunks (some may already be deleted)
-      try { await deleteR2Prefix(chunkPrefix); } catch { /* non-critical */ }
-    }
-
-    const publicUrl = getPublicAudioUrl(fileKey);
-    const originalKey = generateOriginalKey(lessonId, `${sortOrder}_${fileName}`);
-
-    // Record in database
-    const supabase = await requireServerSupabaseClient();
-    const ctLower = ct.toLowerCase();
-    const extLower = ext.toLowerCase();
-    const codec = (ctLower.includes('mp3') || ctLower.includes('mpeg') || extLower === 'mp3') ? 'mp3'
-      : (ctLower.includes('mp4') || ctLower.includes('m4a') || extLower === 'm4a') ? 'aac'
-      : (ctLower.includes('ogg') || ctLower.includes('opus') || extLower === 'opus' || extLower === 'ogg') ? 'opus'
-      : (ctLower.includes('wav') || extLower === 'wav') ? 'wav'
-      : (ctLower.includes('flac') || extLower === 'flac') ? 'flac'
-      : 'unknown';
-
-    const { data: audioRecord, error: dbError } = await supabase
+    const { data: audioRecord, error: dbError } = await createAdminSupabaseClient()
       .from('lesson_audio')
       .insert({
         lesson_id: lessonId,
         file_key: fileKey,
-        audio_url: publicUrl,
-        original_name: fileName,
-        file_size: fileSize || actualFileSize,
-        codec,
+        audio_url: getPublicAudioUrl(fileKey),
+        source_filename: originalName ?? fileName,
+        file_size: actualSize,
+        duration,
+        codec: format.codec,
         sort_order: sortOrder,
+        audio_type: audioType ?? null,
       })
       .select()
       .single();
+    if (dbError) throw dbError;
 
-    if (dbError) {
-      console.error('DB error creating lesson_audio:', dbError);
-      // Fallback: update lesson directly
-      await supabase
-        .from('lessons')
-        .update({
-          audio_url: publicUrl,
-          audio_url_original: originalKey,
-          file_size: fileSize || actualFileSize,
-          codec,
-        })
-        .eq('id', lessonId);
-    }
-
-    return NextResponse.json({
-      success: true,
-      fileKey,
-      publicUrl,
-      audioRecord,
-    });
+    return NextResponse.json({ success: true, fileKey, publicUrl: audioRecord.audio_url, audioRecord });
   } catch (error) {
     console.error('Upload complete error:', error);
-
-    // Try to clean up chunks
-    if (chunkPrefix) {
-      try { await deleteR2Prefix(chunkPrefix); } catch { /* ignore */ }
+    if (fileKey) {
+      try { await deleteFromR2(fileKey); } catch { /* nothing stored yet */ }
     }
-
-    return NextResponse.json(
-      { error: 'Failed to complete upload' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to complete upload' }, { status: 500 });
+  } finally {
+    try { await deleteR2Prefix(chunkPrefix); } catch { /* stale chunks are harmless */ }
   }
 }

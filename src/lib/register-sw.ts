@@ -1,37 +1,34 @@
 /**
- * Register the service worker for PWA functionality.
- * Call this on the client side after the page loads.
+ * Service worker script URL for this build. Each deploy gets a distinct URL,
+ * which makes the browser install a fresh worker (and fresh caches) instead of
+ * keeping the previous deploy's precache forever.
+ */
+export function getServiceWorkerUrl(buildId: string | undefined = process.env.NEXT_PUBLIC_BUILD_ID): string {
+  return `/sw.js?v=${encodeURIComponent(buildId || 'dev')}`;
+}
+
+async function register(): Promise<void> {
+  try {
+    await navigator.serviceWorker.register(getServiceWorkerUrl(), { scope: '/' });
+  } catch (error) {
+    console.error('[SW] Service worker registration failed:', error);
+  }
+}
+
+/**
+ * Register the service worker. Safe to call from a React effect: if the
+ * window `load` event already fired, registration happens immediately.
+ *
+ * A new worker activates on its own (skipWaiting + clients.claim). The page is
+ * never force-reloaded, so audio playback continues; the next full navigation
+ * loads the new build.
  */
 export function registerServiceWorker(): void {
-  if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
 
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', async () => {
-      try {
-        const registration = await navigator.serviceWorker.register('/sw.js', {
-          scope: '/',
-        });
-
-        // Check for updates periodically
-        registration.addEventListener('updatefound', () => {
-          const newWorker = registration.installing;
-          if (newWorker) {
-            newWorker.addEventListener('statechange', () => {
-              if (
-                newWorker.state === 'activated' &&
-                navigator.serviceWorker.controller
-              ) {
-                // New service worker activated, content is cached
-                console.log('[SW] New content is available; please refresh.');
-              }
-            });
-          }
-        });
-
-        console.log('[SW] Service worker registered successfully.');
-      } catch (error) {
-        console.error('[SW] Service worker registration failed:', error);
-      }
-    });
+  if (document.readyState === 'complete') {
+    void register();
+  } else {
+    window.addEventListener('load', () => void register(), { once: true });
   }
 }

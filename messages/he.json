@@ -1,10 +1,11 @@
 {
   "common": {
     "appName": "נגן תורה",
+    "offline": "אופליין",
     "home": "בית",
     "lessons": "שיעורים",
     "playlists": "רשימות השמעה",
-    "series": "קטעים קצרים",
+    "series": "סדרות",
     "bookmarks": "סימניות",
     "search": "חיפוש",
     "settings": "הגדרות",
@@ -24,7 +25,8 @@
     "noResults": "לא נמצאו תוצאות",
     "error": "שגיאה",
     "retry": "נסה שוב",
-    "back": "חזרה"
+    "back": "חזרה",
+    "rateLimited": "יותר מדי ניסיונות. נסו שוב בעוד כמה דקות."
   },
   "home": {
     "title": "נגן תורה",
@@ -65,8 +67,8 @@
   "player": {
     "play": "נגן",
     "pause": "השהה",
-    "skipForward": "דלג 15 שניות קדימה",
-    "skipBackward": "דלג 15 שניות אחורה",
+    "skipForward": "דלג 30 שניות קדימה",
+    "skipBackward": "חזור 15 שניות אחורה",
     "speed": "מהירות",
     "volume": "עוצמה",
     "cast": "שדר",
@@ -83,20 +85,31 @@
     "shareClip": "שתף קטע",
     "openLesson": "פתח שיעור",
     "noActiveLesson": "אין שיעור פעיל",
-    "clipMode": "מצב קטע"
+    "clipMode": "מצב קטע",
+    "skipBackwardShort": "15-",
+    "skipForwardShort": "30+",
+    "seek": "מיקום בשיעור",
+    "closePlayer": "סגור נגן",
+    "lessonFallback": "שיעור תורה",
+    "audioFiles": "קבצי שמע",
+    "part": "חלק {number}",
+    "issue": {
+      "retrying": "החיבור נקטע, מנסה להמשיך…",
+      "blocked": "הדפדפן עצר את ההשמעה. הקש על נגן כדי להמשיך.",
+      "failed": "ההשמעה נעצרה. הקש על נגן כדי לנסות שוב."
+    }
   },
   "driving": {
     "title": "מצב נהיגה",
     "noActiveLesson": "אין שיעור פעיל",
-    "back": "חזרה",
     "close": "סגור מצב נהיגה",
     "play": "נגן",
     "pause": "השהה",
-    "skipForward": "15 שניות קדימה",
-    "skipBackward": "15 שניות אחורה",
     "offlineRecommended": "להאזנה יציבה בנהיגה או באזורים בלי קליטה, שמור את השיעור לאופליין לפני הנסיעה.",
-    "playbackRecovering": "הנגן זיהה עצירה זמנית ומנסה להמשיך את ההשמעה.",
-    "tapToResume": "הקש כדי להמשיך להשמיע"
+    "previousLesson": "השיעור הקודם",
+    "nextLesson": "השיעור הבא",
+    "speed": "מהירות השמעה {speed}",
+    "browseLessons": "לרשימת השיעורים"
   },
   "playlists": {
     "title": "רשימות השמעה",
@@ -117,15 +130,82 @@
     "emptyCategory": "ריק"
   },
   "series": {
-    "title": "קטעים קצרים",
-    "noSeries": "אין קטעים קצרים עדיין"
+    "title": "סדרות",
+    "noSeries": "אין סדרות עדיין"
+  },
+  "shorts": {
+    "title": "קצרים",
+    "subtitle": "שיעורים קצרים לפי נושא",
+    "searchPlaceholder": "חיפוש בקצרים...",
+    "all": "הכל",
+    "general": "כללי",
+    "empty": "אין עדיין שיעורים קצרים",
+    "noResults": "לא נמצאו קצרים",
+    "playAll": "נגן הכל",
+    "play": "נגן",
+    "pause": "השהה",
+    "showAll": "הצג הכל",
+    "count": "{count, plural, =1 {קצר אחד} other {# קצרים}}"
+  },
+  "upload": {
+    "title": "העלאת שיעורים",
+    "subtitle": "גררו לכאן את כל הקבצים של היום — הקלטות ותמונות. הקבצים מחולקים לשיעורים לפי התאריך שבשם הקובץ.",
+    "dropHere": "גררו קבצי שמע ותמונות לכאן או לחצו לבחירה",
+    "dropHint": "שמע: opus, mp3, m4a, ogg, wav · תמונות: jpg, png, webp, heic",
+    "analyzing": "קורא את הקבצים...",
+    "fallbackDate": "תאריך לקבצים בלי תאריך בשם",
+    "unsupported": "לא נתמך ולא יועלה: {names}",
+    "date": "תאריך",
+    "dateNotDetected": "לא זוהה תאריך בשם הקובץ — בדקו את התאריך",
+    "shortToggle": "קצר",
+    "lessonTitle": "כותרת",
+    "category": "קטגוריה",
+    "noCategory": "ללא קטגוריה",
+    "description": "תיאור (לא חובה)",
+    "audioParts": "קבצי שמע ({count})",
+    "images": "תמונות ({count})",
+    "noType": "ללא סוג",
+    "tooShort": "פחות מ-2 דקות — כנראה לא חלק מהשיעור",
+    "duplicate": "כבר קיים בשיעור: {title}",
+    "willTranscode": "יומר ל-Opus לפני ההעלאה",
+    "moveUp": "הזז למעלה",
+    "moveDown": "הזז למטה",
+    "remove": "הסר",
+    "removeDraft": "הסר שיעור זה",
+    "noAudio": "אין קובץ שמע מסומן — השיעור לא יועלה",
+    "uploadDraft": "העלה ופרסם",
+    "uploadAll": "העלה ופרסם הכל ({count})",
+    "uploading": "מעלה...",
+    "retryFailed": "נסה שוב",
+    "filesFailed": "חלק מהקבצים נכשלו. השיעור נשמר כטיוטה ולא פורסם.",
+    "createFailed": "יצירת השיעור נכשלה: {error}",
+    "publishFailed": "הפרסום נכשל: {error}",
+    "published": "פורסם",
+    "openLesson": "לשיעור",
+    "editLesson": "עריכה",
+    "leaveWarning": "העלאה בתהליך — לצאת בכל זאת?",
+    "back": "חזרה",
+    "imageUnreadable": "הדפדפן לא מצליח לקרוא את התמונה — המירו ל-JPEG ונסו שוב",
+    "imagesFailed": "השיעור נשמר, אבל העלאת חלק מהתמונות נכשלה:",
+    "audioFailed": "העלאת חלק מקבצי השמע נכשלה:"
   },
   "bookmarks": {
     "title": "סימניות",
+    "time": "זמן:",
+    "tag": "סוג",
+    "note": "הערה (אופציונלי)",
+    "notePlaceholder": "כתוב הערה...",
+    "save": "שמור",
+    "cancel": "ביטול",
+    "close": "סגור",
+    "jumpToTime": "קפוץ אל {time}",
+    "deleteBookmark": "מחק את הסימניה {time}",
+    "deleteSyncFailed": "הסימניה נמחקה מהמכשיר, אך המחיקה מהחשבון נכשלה.",
     "addBookmark": "הוסף סימניה",
     "bookmarkLabel": "תווית",
     "noBookmarks": "אין סימניות עדיין",
-    "jumpTo": "קפוץ אל"
+    "jumpTo": "קפוץ אל",
+    "syncFailed": "נשמר במכשיר, אך הסנכרון לחשבון נכשל. ננסה שוב בפתיחה הבאה."
   },
   "offline": {
     "title": "הורדות",
@@ -135,7 +215,16 @@
     "remove": "הסר הורדה",
     "storageUsed": "נפח בשימוש",
     "noDownloads": "אין הורדות עדיין",
-    "offlineReady": "מוכן להאזנה לא מקוונת"
+    "offlineReady": "מוכן להאזנה לא מקוונת",
+    "storageFull": "אין מספיק מקום פנוי במכשיר. מחק הורדות ישנות ונסה שוב.",
+    "saveFailed": "השמירה נכשלה. בדוק את החיבור ונסה שוב.",
+    "online": "מחובר",
+    "offlineStatus": "לא מקוון – ניתן להאזין לשיעורים שנשמרו",
+    "filesCount": "{count, plural, one {קובץ אחד} other {# קבצים}}",
+    "part": "חלק {number}",
+    "play": "נגן שיעור שמור",
+    "playFile": "נגן קובץ שמור",
+    "noDownloadsHint": "בדף שיעור, הקש על \"שמירה אופליין\" כדי להאזין גם בלי קליטה."
   },
   "settings": {
     "title": "הגדרות",
@@ -147,5 +236,127 @@
     "skipDuration": "משך דילוג",
     "autoPlay": "ניגון אוטומטי",
     "installApp": "התקן אפליקציה"
+  },
+  "nav": {
+    "home": "בית",
+    "lessons": "שיעורים",
+    "shorts": "קצרים",
+    "bookmarks": "סימניות",
+    "playlists": "רשימות",
+    "downloads": "הורדות",
+    "label": "ניווט ראשי"
+  },
+  "auth": {
+    "adminArea": "אזור ניהול",
+    "signIn": {
+      "title": "התחברות",
+      "subtitle": "שמרו סימניות והתקדמות בכל המכשירים, וקבלו עדכון כשעולה שיעור חדש.",
+      "google": "המשך עם Google",
+      "or": "או",
+      "emailLabel": "כתובת מייל",
+      "sendCode": "שלחו לי קוד כניסה",
+      "codeSentTo": "שלחנו קוד כניסה אל:",
+      "codeLabel": "הקוד מהמייל",
+      "verify": "כניסה",
+      "resend": "שליחת קוד חדש",
+      "changeEmail": "שינוי כתובת",
+      "linkHint": "אפשר גם ללחוץ על הקישור שבמייל. אם האפליקציה מותקנת במסך הבית של האייפון, עדיף להקליד את הקוד: הקישור נפתח בספארי ולא באפליקציה."
+    },
+    "account": {
+      "title": "החשבון שלי",
+      "signedInAs": "מחובר/ת בתור",
+      "displayName": "שם לתצוגה",
+      "displayNamePlaceholder": "איך לקרוא לך?",
+      "save": "שמירה",
+      "saved": "נשמר",
+      "syncNote": "הסימניות וההתקדמות בהאזנה נשמרות בחשבון ומסונכרנות בין המכשירים שלך.",
+      "notificationsTitle": "התראות על שיעורים חדשים",
+      "emailToggle": "מייל כשעולה שיעור חדש",
+      "pushToggle": "התראות במכשיר הזה",
+      "adminTitle": "ניהול",
+      "adminDashboard": "לוח הבקרה",
+      "adminNotifications": "בדיקת התראות",
+      "signOut": "התנתקות"
+    },
+    "adminLogin": {
+      "title": "כניסת מנהל",
+      "subtitle": "התחברו עם חשבון המנהל כדי להמשיך",
+      "accountButton": "התחברות עם Google או מייל",
+      "notAdmin": "החשבון המחובר אינו מוגדר כמנהל:",
+      "switchAccount": "התחברות עם חשבון אחר",
+      "passwordTitle": "או כניסה בסיסמת מנהל",
+      "passwordLabel": "סיסמה",
+      "passwordPlaceholder": "הזינו סיסמה...",
+      "login": "כניסה",
+      "showPassword": "הצגת הסיסמה",
+      "hidePassword": "הסתרת הסיסמה"
+    },
+    "errors": {
+      "invalid_email": "כתובת המייל אינה תקינה.",
+      "invalid_code": "הקוד אינו תקין.",
+      "rate_limited": "יותר מדי ניסיונות. נסו שוב בעוד כמה דקות.",
+      "unavailable": "ההתחברות אינה זמינה כרגע.",
+      "send_failed": "שליחת המייל נכשלה. נסו שוב בעוד רגע.",
+      "code_rejected": "הקוד שגוי או שפג תוקפו. בקשו קוד חדש.",
+      "google_unavailable": "ההתחברות עם Google אינה זמינה כרגע.",
+      "password_disabled": "כניסה בסיסמה אינה מופעלת. התחברו עם חשבון Google או במייל.",
+      "wrong_password": "סיסמה שגויה.",
+      "provider": "ההתחברות בוטלה או נכשלה. נסו שוב.",
+      "invalid_link": "הקישור אינו תקין. בקשו קוד חדש.",
+      "expired": "הקישור פג תוקף או נפתח בדפדפן אחר. הקלידו את הקוד מהמייל או בקשו קוד חדש.",
+      "invalid": "הנתונים אינם תקינים.",
+      "auth_required": "יש להתחבר מחדש.",
+      "save_failed": "השמירה נכשלה. נסו שוב.",
+      "generic": "משהו השתבש. נסו שוב."
+    }
+  },
+  "notifications": {
+    "bell": {
+      "turnOn": "הפעלת התראות על שיעורים חדשים",
+      "turnOff": "כיבוי התראות על שיעורים חדשים"
+    },
+    "on": "התראות פעילות במכשיר הזה",
+    "off": "ההתראות כבויות במכשיר הזה",
+    "iosInstall": "באייפון ובאייפד התראות פועלות רק מהאפליקציה המותקנת: בספארי לחצו על כפתור השיתוף ובחרו \"הוספה למסך הבית\", פתחו את האפליקציה מהמסך הראשי והפעילו שם את ההתראות (נדרש iOS 16.4 ומעלה).",
+    "denied": "ההתראות חסומות בדפדפן. אפשרו התראות לאתר בהגדרות הדפדפן ונסו שוב.",
+    "unavailable": "הדפדפן הזה לא תומך בהתראות.",
+    "errors": {
+      "failed": "הפעלת ההתראות נכשלה. נסו שוב.",
+      "swTimeout": "האפליקציה עדיין נטענת. רעננו את הדף ונסו שוב."
+    },
+    "push": {
+      "newLessonTitle": "שיעור חדש עלה",
+      "testTitle": "בדיקת התראה",
+      "testBody": "ההתראות פועלות במכשיר הזה."
+    },
+    "email": {
+      "appName": "נגן תורה",
+      "subject": "שיעור חדש: {title}",
+      "heading": "שיעור חדש עלה",
+      "cta": "להאזנה לשיעור",
+      "footer": "קיבלת את המייל כי ביקשת עדכונים על שיעורים חדשים.",
+      "manage": "לניהול ההתראות"
+    },
+    "admin": {
+      "title": "התראות",
+      "subtitle": "מצב ההתראות ושליחת התראת בדיקה",
+      "back": "חזרה ללוח הבקרה",
+      "pushStatus": "התראות Push",
+      "emailStatus": "התראות במייל",
+      "configured": "מוגדר",
+      "notConfigured": "לא מוגדר",
+      "subscribers": "מכשירים רשומים",
+      "linkedSubscribers": "מתוכם מחוברים לחשבון",
+      "emailRecipients": "נמענים במייל",
+      "thisDevice": "המכשיר הזה",
+      "sendTest": "שליחת התראת בדיקה למכשיר הזה",
+      "testSent": "התראת הבדיקה נשלחה.",
+      "testErrors": {
+        "unauthorized": "אין הרשאת מנהל.",
+        "not_configured": "מפתחות VAPID לא הוגדרו בשרת.",
+        "not_subscribed": "המכשיר הזה אינו רשום להתראות. הפעילו התראות ונסו שוב.",
+        "failed": "השליחה נכשלה. בדקו את לוגי השרת."
+      }
+    }
   }
 }

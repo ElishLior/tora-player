@@ -65,7 +65,11 @@ export interface LessonAudio {
   lesson_id: string;
   file_key: string;
   audio_url: string;
+  /** Optional admin-editable display name. */
   original_name: string | null;
+  /** File as uploaded/imported; traceability only, never displayed. */
+  source_filename: string | null;
+  content_sha1: string | null;
   file_size: number;
   duration: number;
   codec: string;
@@ -80,6 +84,8 @@ export interface LessonImage {
   file_key: string;
   image_url: string;
   original_name: string | null;
+  source_filename: string | null;
+  content_sha1: string | null;
   file_size: number;
   width: number | null;
   height: number | null;
@@ -138,19 +144,32 @@ export interface PlaylistLesson {
 
 export interface Bookmark {
   id: string;
+  user_id: string | null;
   lesson_id: string;
   position: number; // seconds
   note: string | null;
+  tag: string | null;
+  audio_file_id: string | null;
   created_at: string;
   lesson?: Lesson;
 }
 
 export interface PlaybackProgress {
   id: string;
+  user_id: string;
   lesson_id: string;
   position: number; // seconds
   completed: boolean;
   last_played_at: string;
+  updated_at: string;
+}
+
+export interface Profile {
+  id: string;
+  display_name: string | null;
+  role: 'user' | 'admin';
+  notify_new_lessons: boolean;
+  created_at: string;
   updated_at: string;
 }
 
@@ -182,12 +201,6 @@ export interface CreatePlaylistInput {
   name: string;
   hebrew_name?: string;
   description?: string;
-}
-
-export interface CreateBookmarkInput {
-  lesson_id: string;
-  position: number;
-  note?: string;
 }
 
 export interface CreateSeriesInput {

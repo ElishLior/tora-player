@@ -1,16 +1,16 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireServerSupabaseClient } from '@/lib/supabase/server';
+import { createAdminSupabaseClient } from '@/lib/supabase/admin';
 import { createSeriesSchema } from '@/lib/validators';
-import { isAdmin } from '@/actions/auth';
+import { isAdmin } from '@/lib/auth/admin';
 import type { Series } from '@/types/database';
 
 export async function createSeries(formData: FormData) {
   if (!(await isAdmin())) {
     return { error: { _form: ['Unauthorized'] } };
   }
-  const supabase = await requireServerSupabaseClient();
+  const supabase = createAdminSupabaseClient();
 
   const raw = {
     name: formData.get('name') as string,
@@ -41,7 +41,7 @@ export async function updateSeries(id: string, formData: FormData) {
   if (!(await isAdmin())) {
     return { error: { _form: ['Unauthorized'] } };
   }
-  const supabase = await requireServerSupabaseClient();
+  const supabase = createAdminSupabaseClient();
 
   const raw: Record<string, unknown> = {};
   for (const field of ['name', 'hebrew_name', 'description']) {
@@ -70,7 +70,7 @@ export async function deleteSeries(id: string) {
   if (!(await isAdmin())) {
     return { error: 'Unauthorized' };
   }
-  const supabase = await requireServerSupabaseClient();
+  const supabase = createAdminSupabaseClient();
 
   const { error } = await supabase
     .from('series')

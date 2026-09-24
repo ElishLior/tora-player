@@ -33,7 +33,7 @@ export function generateLessonMetadata(dateStr: string) {
   const hebrewDay = HEBREW_DAYS[dayOfWeek];
 
   // Get parsha (weekly Torah portion)
-  const sedra = new Sedra(hd.getFullYear(), false); // false = diaspora
+  const sedra = new Sedra(hd.getFullYear(), true); // true = Israel schedule (lessons are in Jerusalem)
   let parsha: string | null = null;
   try {
     const parshaResult = sedra.lookup(hd);
