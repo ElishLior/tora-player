@@ -1,73 +1,68 @@
 import createMiddleware from 'next-intl/middleware';
+import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextRequest, NextResponse } from 'next/server';
 import { routing } from '@/i18n/routing';
+import { ADMIN_SESSION_COOKIE, resolveAdminAccess } from '@/lib/auth/admin-access';
 
 const intlMiddleware = createMiddleware(routing);
 
-const COOKIE_NAME = 'tora-admin-token';
-
-// Check if a path requires admin auth
+// Admin-only pages (API routes and server actions authorize themselves).
 function isProtectedPath(pathname: string): boolean {
-  // Strip locale prefix (e.g., /he/ or /en/)
-  const pathWithoutLocale = pathname.replace(/^\/(he|en)/, '');
-
-  // Admin routes (except login)
-  if (pathWithoutLocale.startsWith('/admin') && !pathWithoutLocale.startsWith('/admin/login')) {
-    return true;
-  }
-
-  // Upload page
-  if (pathWithoutLocale.startsWith('/lessons/upload')) {
-    return true;
-  }
-
-  // Edit pages
-  if (pathWithoutLocale.endsWith('/edit')) {
-    return true;
-  }
-
-  return false;
-}
-
-// Extract locale from path
-function getLocaleFromPath(pathname: string): string {
-  const match = pathname.match(/^\/(he|en)/);
-  return match ? match[1] : 'he';
+  const path = pathname.replace(/^\/(he|en)(?=\/|$)/, '');
+  return (
+    (path.startsWith('/admin') && !path.startsWith('/admin/login')) ||
+    path.startsWith('/lessons/upload') ||
+    path.endsWith('/edit')
+  );
 }
 
 export default async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+  const refreshedCookies: { name: string; value: string; options: CookieOptions }[] = [];
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  // Check admin protection before i18n middleware
-  if (isProtectedPath(pathname)) {
-    const token = request.cookies.get(COOKIE_NAME)?.value;
+  // Refresh the Supabase session before rendering. Updated tokens are written
+  // to the request (next-intl forwards request headers to the page) and to the
+  // response (Set-Cookie for the browser).
+  const supabase =
+    supabaseUrl && supabaseKey
+      ? createServerClient(supabaseUrl, supabaseKey, {
+          cookies: {
+            getAll: () => request.cookies.getAll(),
+            setAll(cookiesToSet) {
+              for (const cookie of cookiesToSet) {
+                request.cookies.set(cookie.name, cookie.value);
+                refreshedCookies.push(cookie);
+              }
+            },
+          },
+        })
+      : null;
 
-    if (!token) {
-      const locale = getLocaleFromPath(pathname);
-      const loginUrl = new URL(`/${locale}/admin/login`, request.url);
-      loginUrl.searchParams.set('from', pathname);
-      return NextResponse.redirect(loginUrl);
-    }
+  // A Supabase outage must not take every page down; pages then render signed-out.
+  if (supabase) await supabase.auth.getClaims().catch(() => undefined);
 
-    // Token exists -- verify it matches the expected hash
-    // We use Web Crypto API since middleware runs in Edge runtime
-    const adminPassword = (process.env.ADMIN_PASSWORD || 'admin123').trim();
-    const encoder = new TextEncoder();
-    const data = encoder.encode(adminPassword);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const expectedToken = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-
-    if (token !== expectedToken) {
-      const locale = getLocaleFromPath(pathname);
-      const loginUrl = new URL(`/${locale}/admin/login`, request.url);
-      loginUrl.searchParams.set('from', pathname);
-      return NextResponse.redirect(loginUrl);
-    }
+  let response: NextResponse;
+  if (
+    isProtectedPath(request.nextUrl.pathname) &&
+    !(await resolveAdminAccess(request.cookies.get(ADMIN_SESSION_COOKIE)?.value, supabase))
+  ) {
+    const locale = request.nextUrl.pathname.match(/^\/(he|en)(?=\/|$)/)?.[1] ?? routing.defaultLocale;
+    const loginUrl = new URL(`/${locale}/admin/login`, request.url);
+    loginUrl.searchParams.set('from', `${request.nextUrl.pathname}${request.nextUrl.search}`);
+    response = NextResponse.redirect(loginUrl);
+  } else {
+    response = intlMiddleware(request);
   }
 
-  // Run i18n middleware for all matched routes
-  return intlMiddleware(request);
+  for (const { name, value, options } of refreshedCookies) {
+    response.cookies.set(name, value, options);
+  }
+  if (refreshedCookies.length > 0) {
+    // Never let a CDN cache a response that carries session cookies.
+    response.headers.set('Cache-Control', 'private, no-store');
+  }
+  return response;
 }
 
 export const config = {
