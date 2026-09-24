@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { LISTEN_MIN_SECONDS, LISTEN_SOURCES } from '@/lib/listen-tracking';
 
 // Relaxed UUID pattern — accepts any 8-4-4-4-12 hex string
 // (Zod's .uuid() rejects non-RFC-4122 UUIDs like our category IDs)
@@ -224,4 +225,17 @@ export const pushSubscriptionSchema = z.object({
     p256dh: z.string().min(1).max(200),
     auth: z.string().min(1).max(100),
   }),
+});
+
+// ==================== LISTEN STATISTICS ====================
+
+/** POST /api/listen. One session id per play session; heartbeats repeat it. */
+export const listenPayloadSchema = z.object({
+  sessionId: uuidLike,
+  lessonId: uuidLike,
+  audioFileId: uuidLike.optional(),
+  listenedSeconds: z.number().int().min(LISTEN_MIN_SECONDS).max(12 * 60 * 60),
+  /** Random per-browser id from localStorage (see listen-tracker.ts). */
+  deviceId: z.string().regex(/^[A-Za-z0-9-]{8,64}$/),
+  source: z.enum(LISTEN_SOURCES),
 });
