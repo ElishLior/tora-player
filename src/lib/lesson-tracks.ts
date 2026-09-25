@@ -1,11 +1,12 @@
 import { normalizeAudioUrl } from '@/lib/audio-url';
-import { getOfflineKey } from '@/lib/offline-storage';
+import { getOfflineKey, type OfflineLessonMeta } from '@/lib/offline-storage';
 import type { AudioTrack } from '@/stores/audio-store';
 import type { LessonAudio, LessonWithRelations } from '@/types/database';
 
 /*
  * A lesson's playable audio files and the player tracks made from them.
- * Shared by the lesson page and the personal library (resume).
+ * Every surface that starts a lesson builds its queue with getLessonTracks, so
+ * all parts play in order and each track knows its part.
  */
 
 export interface LessonAudioAsset {
@@ -68,11 +69,18 @@ export function getLessonAudioAssets(lesson: LessonWithRelations): LessonAudioAs
   ];
 }
 
-export function createLessonTrack(lesson: LessonWithRelations, asset: LessonAudioAsset): AudioTrack {
+function createLessonTrack(
+  lesson: LessonWithRelations,
+  asset: LessonAudioAsset,
+  partIndex: number,
+  partCount: number,
+): AudioTrack {
   return {
     id: lesson.id,
     lessonId: lesson.id,
     audioFileId: asset.audioFileId,
+    partIndex,
+    partCount,
     fileKey: asset.fileKey,
     offlineKey: asset.offlineKey,
     title: lesson.title,
@@ -85,6 +93,44 @@ export function createLessonTrack(lesson: LessonWithRelations, asset: LessonAudi
     description: lesson.description || lesson.summary || undefined,
     originalName: asset.originalName || asset.title,
   };
+}
+
+/** One track per part, in play order. Empty when the lesson has no audio. */
+export function getLessonTracks(lesson: LessonWithRelations): AudioTrack[] {
+  const assets = getLessonAudioAssets(lesson);
+  return assets.map((asset, index) => createLessonTrack(lesson, asset, index, assets.length));
+}
+
+/** The tracks of a lesson saved on this device (played from IndexedDB). */
+export function getOfflineLessonTracks(lesson: OfflineLessonMeta): AudioTrack[] {
+  const files = [...lesson.audioFiles].sort((a, b) => a.sortOrder - b.sortOrder);
+  return files.map((file, index) => ({
+    id: lesson.lessonId,
+    lessonId: lesson.lessonId,
+    audioFileId: file.audioFileId,
+    partIndex: index,
+    partCount: files.length,
+    fileKey: file.fileKey,
+    offlineKey: file.offlineKey,
+    title: lesson.title,
+    hebrewTitle: lesson.hebrewTitle || lesson.title,
+    audioUrl: file.audioUrl,
+    duration: file.duration || lesson.duration,
+    seriesName: lesson.seriesName,
+    date: lesson.date,
+    originalName: file.originalName || file.title,
+  }));
+}
+
+/**
+ * Whether a saved moment (bookmark, note) belongs to this part. Moments saved
+ * without an audio file id point into the main (first) part.
+ */
+export function isMomentInPart(
+  audioFileId: string | null | undefined,
+  part: { audioFileId?: string; partIndex?: number },
+): boolean {
+  return audioFileId ? audioFileId === part.audioFileId : (part.partIndex ?? 0) === 0;
 }
 
 /**

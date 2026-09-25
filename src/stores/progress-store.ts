@@ -1,8 +1,15 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+/**
+ * Listening progress of one lesson on this device: the part last heard
+ * (`audioFileId`, absent for single-file lessons and entries saved before
+ * parts were tracked) and the position inside it. `completed` reflects the
+ * latest listen, so starting a heard lesson again clears it.
+ */
 export interface LocalProgress {
   lessonId: string;
+  audioFileId?: string;
   position: number;
   lastPlayed: string;
   completed: boolean;
@@ -10,55 +17,21 @@ export interface LocalProgress {
 
 interface ProgressState {
   progressMap: Record<string, LocalProgress>;
-  updateProgress: (lessonId: string, position: number) => void;
-  markComplete: (lessonId: string) => void;
-  getProgress: (lessonId: string) => LocalProgress | undefined;
-  getRecentlyPlayed: (limit: number) => LocalProgress[];
+  saveProgress: (entry: Omit<LocalProgress, 'lastPlayed'>) => void;
 }
 
 export const useProgressStore = create<ProgressState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       progressMap: {},
 
-      updateProgress: (lessonId, position) => {
+      saveProgress: (entry) => {
         set((state) => ({
           progressMap: {
             ...state.progressMap,
-            [lessonId]: {
-              lessonId,
-              position,
-              lastPlayed: new Date().toISOString(),
-              completed: state.progressMap[lessonId]?.completed ?? false,
-            },
+            [entry.lessonId]: { ...entry, lastPlayed: new Date().toISOString() },
           },
         }));
-      },
-
-      markComplete: (lessonId) => {
-        set((state) => ({
-          progressMap: {
-            ...state.progressMap,
-            [lessonId]: {
-              ...state.progressMap[lessonId],
-              lessonId,
-              position: state.progressMap[lessonId]?.position ?? 0,
-              lastPlayed: new Date().toISOString(),
-              completed: true,
-            },
-          },
-        }));
-      },
-
-      getProgress: (lessonId) => {
-        return get().progressMap[lessonId];
-      },
-
-      getRecentlyPlayed: (limit) => {
-        const entries = Object.values(get().progressMap);
-        return entries
-          .sort((a, b) => new Date(b.lastPlayed).getTime() - new Date(a.lastPlayed).getTime())
-          .slice(0, limit);
       },
     }),
     {

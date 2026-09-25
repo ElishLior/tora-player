@@ -44,6 +44,7 @@ async function syncBookmarksNow(): Promise<void> {
 async function syncProgressNow(): Promise<void> {
   const entries = Object.values(useProgressStore.getState().progressMap).map((p) => ({
     lesson_id: p.lessonId,
+    audio_file_id: p.audioFileId ?? null,
     position: p.position,
     completed: p.completed,
     last_played_at: p.lastPlayed,

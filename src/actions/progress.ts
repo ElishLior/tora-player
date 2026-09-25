@@ -4,6 +4,8 @@ import { filterVisibleIds, getSignedInClient } from '@/lib/account/server';
 import { pickProgressToUpload, type ServerProgress } from '@/lib/account/merge';
 import { progressSyncSchema } from '@/lib/validators';
 
+const PROGRESS_COLUMNS = 'lesson_id, audio_file_id, position, completed, last_played_at';
+
 /**
  * Uploads device progress entries that are newer than the account's copy
  * (last-played wins) and returns the account's progress for every lesson.
@@ -22,12 +24,13 @@ export async function syncProgress(
   try {
     const { data: existing, error: readError } = await supabase
       .from('playback_progress')
-      .select('lesson_id, position, completed, last_played_at');
+      .select(PROGRESS_COLUMNS);
     if (readError) throw new Error(readError.message);
 
     const newer = pickProgressToUpload(
       parsed.data.map((row) => ({
         lessonId: row.lesson_id,
+        audioFileId: row.audio_file_id ?? undefined,
         position: row.position,
         completed: row.completed,
         lastPlayed: row.last_played_at,
@@ -42,6 +45,7 @@ export async function syncProgress(
         .map((entry) => ({
           user_id: userId,
           lesson_id: entry.lessonId,
+          audio_file_id: entry.audioFileId ?? null,
           position: Math.round(entry.position),
           completed: entry.completed,
           last_played_at: entry.lastPlayed,
@@ -56,7 +60,7 @@ export async function syncProgress(
 
     const { data, error } = await supabase
       .from('playback_progress')
-      .select('lesson_id, position, completed, last_played_at');
+      .select(PROGRESS_COLUMNS);
     if (error) throw new Error(error.message);
     return { data: data ?? [] };
   } catch (err) {

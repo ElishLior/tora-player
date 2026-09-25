@@ -20,8 +20,10 @@ import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { SeekBar } from './seek-bar';
 import { SpeedControl } from './speed-control';
 import { PlayPauseIcon, SkipButton } from './player-controls';
+import { SleepTimerControl } from './sleep-timer';
 import { handleCastClick } from '@/lib/cast-utils';
 import { useBookmarksStore } from '@/stores/bookmarks-store';
+import { isMomentInPart } from '@/lib/lesson-tracks';
 import { BookmarkDialog } from '@/components/bookmarks/bookmark-dialog';
 import { BookmarkChips, BookmarkMarkers } from '@/components/bookmarks/lesson-bookmarks';
 import { ShareClipDialog } from '@/components/player/share-clip-dialog';
@@ -124,6 +126,8 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
   if (!currentTrack) return null;
 
   const lessonBookmarks = bookmarks.filter((b) => b.lessonId === lessonId);
+  // This player seeks within the loaded file, so it lists only that part's bookmarks.
+  const partBookmarks = lessonBookmarks.filter((b) => isMomentInPart(b.audioFileId, currentTrack));
   const bookmarkCount = lessonBookmarks.length;
   const downloadFilename = getTrackDownloadFilename(currentTrack);
   const downloadUrl = getTrackDownloadUrl(currentTrack);
@@ -206,7 +210,7 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
           {/* Seek bar with bookmark markers */}
           <div className="w-full max-w-md relative flex-shrink-0">
             <SeekBar currentTime={currentTime} duration={duration} onSeek={seekTo} />
-            <BookmarkMarkers bookmarks={lessonBookmarks} duration={duration} onSeek={seekTo} />
+            <BookmarkMarkers bookmarks={partBookmarks} duration={duration} onSeek={(bookmark) => seekTo(bookmark.position)} />
           </div>
 
           {playbackIssue && (
@@ -247,7 +251,7 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
           </div>
 
           <div className="w-full max-w-md flex-shrink-0">
-            <BookmarkChips bookmarks={lessonBookmarks} onSeek={seekTo} />
+            <BookmarkChips bookmarks={partBookmarks} onSeek={(bookmark) => seekTo(bookmark.position)} />
           </div>
 
           {/* Secondary actions */}
@@ -280,6 +284,7 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
               <Car className="h-5 w-5" />
               <span className="text-[10px]">{t('drivingMode')}</span>
             </button>
+            <SleepTimerControl className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors" />
             <button
               onClick={handleSaveOffline}
               disabled={offlineSaveState === 'downloaded' || offlineSaveState === 'downloading'}
@@ -343,6 +348,7 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
         <BookmarkDialog
           onClose={() => setBookmarkPosition(null)}
           lessonId={lessonId}
+          audioFileId={currentTrack.audioFileId}
           position={bookmarkPosition}
         />
       )}

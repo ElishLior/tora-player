@@ -1,60 +1,73 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useProgressStore } from '@/stores/progress-store';
+import { useHydrated } from '@/hooks/use-hydrated';
 import { getLessonsByIds } from '@/actions/lessons';
 import { LessonCard } from '@/components/lessons/lesson-card';
+import { getLessonTracks } from '@/lib/lesson-tracks';
+import { getResumePoint } from '@/lib/lesson-progress';
 import type { LessonWithRelations } from '@/types/database';
 
 interface Props {
   title: string;
 }
 
+const SHELF_SIZE = 5;
+// Fetch a few extra: some candidates turn out to have nothing left to continue.
+const CANDIDATES = 10;
+
+/**
+ * Lessons the listener left in the middle, newest first. Their cards resume
+ * at the saved part and position. Follows the device progress store, so it
+ * updates after listening or an account sync.
+ */
 export function ContinueListeningSection({ title }: Props) {
+  const hydrated = useHydrated();
+  const progressMap = useProgressStore((s) => s.progressMap);
   const [lessons, setLessons] = useState<LessonWithRelations[]>([]);
-  const [mounted, setMounted] = useState(false);
+
+  // Only a change in which lessons are candidates refetches, not every checkpoint.
+  const idsKey = useMemo(
+    () =>
+      Object.values(progressMap)
+        .filter((entry) => entry?.lessonId && !entry.completed)
+        .sort((a, b) => Date.parse(b.lastPlayed) - Date.parse(a.lastPlayed))
+        .slice(0, CANDIDATES)
+        .map((entry) => entry.lessonId)
+        .join(','),
+    [progressMap],
+  );
 
   useEffect(() => {
-    setMounted(true);
-    const progressMap = useProgressStore.getState().progressMap;
+    if (!hydrated || !idsKey) {
+      setLessons([]);
+      return;
+    }
+    let cancelled = false;
+    const ids = idsKey.split(',');
+    getLessonsByIds(ids)
+      .then((rows) => {
+        if (cancelled) return;
+        const byId = new Map(rows.map((lesson) => [lesson.id, lesson]));
+        setLessons(ids.map((id) => byId.get(id)).filter((lesson): lesson is LessonWithRelations => !!lesson));
+      })
+      .catch(() => {
+        if (!cancelled) setLessons([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrated, idsKey]);
 
-    // Get recent non-completed lessons sorted by last played
-    const recent = Object.values(progressMap)
-      .filter((p) => !p.completed && p.position > 30) // at least 30s played
-      .sort((a, b) => new Date(b.lastPlayed).getTime() - new Date(a.lastPlayed).getTime())
-      .slice(0, 5);
+  const visible = lessons
+    .filter((lesson) => {
+      const point = getResumePoint(getLessonTracks(lesson), progressMap[lesson.id]);
+      return point.index > 0 || point.position > 0;
+    })
+    .slice(0, SHELF_SIZE);
 
-    if (!recent.length) return;
-
-    const ids = recent.map((r) => r.lessonId);
-    getLessonsByIds(ids).then((data) => {
-      // Sort by recency and inject local progress so the progress bar shows correctly
-      const sorted = ids
-        .map((id) => {
-          const lesson = data.find((l) => l.id === id);
-          if (!lesson) return null;
-          const lp = progressMap[id];
-          return {
-            ...lesson,
-            progress: lp
-              ? {
-                  id: '',
-                  lesson_id: id,
-                  position: lp.position,
-                  completed: lp.completed,
-                  last_played_at: lp.lastPlayed,
-                  created_at: lp.lastPlayed,
-                  updated_at: lp.lastPlayed,
-                }
-              : lesson.progress,
-          };
-        })
-        .filter(Boolean) as LessonWithRelations[];
-      setLessons(sorted);
-    });
-  }, []);
-
-  if (!mounted || !lessons.length) return null;
+  if (!hydrated || visible.length === 0) return null;
 
   return (
     <section>
@@ -62,7 +75,7 @@ export function ContinueListeningSection({ title }: Props) {
         <h2 className="text-lg font-bold">{title}</h2>
       </div>
       <div className="space-y-0.5">
-        {lessons.map((lesson) => (
+        {visible.map((lesson) => (
           <LessonCard key={lesson.id} lesson={lesson} showProgress />
         ))}
       </div>

@@ -28,12 +28,13 @@ export function hasSyncError(result: unknown): boolean {
 interface BookmarkDialogProps {
   onClose: () => void;
   lessonId: string;
-  /** Position when the dialog was opened; typing a note must not move it. */
+  /** Part (audio file) and position when the dialog was opened; typing a note must not move them. */
+  audioFileId: string | undefined;
   position: number;
 }
 
 /** Mount it only while open: the position is captured when it mounts. */
-export function BookmarkDialog({ onClose, lessonId, position }: BookmarkDialogProps) {
+export function BookmarkDialog({ onClose, lessonId, audioFileId, position }: BookmarkDialogProps) {
   const t = useTranslations('bookmarks');
   const isHebrew = useLocale() === 'he';
   const [bookmarkPosition] = useState(position);
@@ -44,7 +45,7 @@ export function BookmarkDialog({ onClose, lessonId, position }: BookmarkDialogPr
 
   const handleSave = async () => {
     setStatus('saving');
-    const result: unknown = await addBookmark(lessonId, bookmarkPosition, note, selectedTag);
+    const result: unknown = await addBookmark(lessonId, bookmarkPosition, note, selectedTag, { audioFileId });
     // The bookmark is already saved on the device; only the account sync failed.
     if (hasSyncError(result)) setStatus('sync-failed');
     else onClose();

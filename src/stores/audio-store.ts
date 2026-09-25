@@ -7,6 +7,9 @@ export interface AudioTrack {
   id: string;
   lessonId?: string;
   audioFileId?: string;
+  /** Position of this file among the lesson's parts (0-based) and how many there are. */
+  partIndex?: number;
+  partCount?: number;
   fileKey?: string;
   offlineKey?: string;
   title: string;
@@ -29,6 +32,16 @@ export interface AudioTrack {
  * - failed: retries are exhausted (or the device is offline)
  */
 export type PlaybackIssue = "retrying" | "blocked" | "failed";
+
+/**
+ * Stops playback after a number of minutes (wall clock, fading out at the
+ * end), at the end of the current part, or at the end of the lesson.
+ * Never persisted: a reload starts without a timer.
+ */
+export type SleepTimer =
+  | { kind: "minutes"; endsAt: number }
+  | { kind: "end-of-part" }
+  | { kind: "end-of-lesson" };
 
 /** Stable identity of one audio file of one lesson. */
 export function getTrackKey(track: AudioTrack | null | undefined): string | null {
@@ -57,6 +70,7 @@ export interface AudioPlayerState {
   volume: number;
   playbackSpeed: number;
   isMiniPlayerExpanded: boolean;
+  sleepTimer: SleepTimer | null;
 
   /** Plays a single track. Keeps the queue only when the track is part of it. */
   setTrack: (track: AudioTrack) => void;
@@ -74,6 +88,7 @@ export interface AudioPlayerState {
   setPlaybackStatus: (status: AudioEngineStatus) => void;
   setPlaybackIssue: (issue: PlaybackIssue | null) => void;
   toggleMiniPlayer: () => void;
+  setSleepTimer: (timer: SleepTimer | null) => void;
 }
 
 type PersistedAudioState = Pick<
@@ -145,6 +160,7 @@ export const useAudioStore = create<AudioPlayerState>()(
       volume: 1,
       playbackSpeed: 1,
       isMiniPlayerExpanded: false,
+      sleepTimer: null,
 
       setTrack: (track) => {
         const key = getTrackKey(track);
@@ -193,6 +209,7 @@ export const useAudioStore = create<AudioPlayerState>()(
       setPlaybackSpeed: (speed) => set({ playbackSpeed: speed }),
       setPlaybackStatus: (status) => set({ playbackStatus: status }),
       setPlaybackIssue: (issue) => set({ playbackIssue: issue }),
+      setSleepTimer: (timer) => set({ sleepTimer: timer }),
       toggleMiniPlayer: () =>
         set((state) => ({ isMiniPlayerExpanded: !state.isMiniPlayerExpanded })),
     }),

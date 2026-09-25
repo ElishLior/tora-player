@@ -1,12 +1,18 @@
 'use client';
 
-import { Play, Pause } from 'lucide-react';
+import { useMemo } from 'react';
+import { Check, Play, Pause } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/routing';
 import { Link } from '@/i18n/routing';
 import { formatDuration } from '@/lib/utils';
 import { useAudioStore } from '@/stores/audio-store';
-import { normalizeAudioUrl } from '@/lib/audio-url';
+import { useProgressStore } from '@/stores/progress-store';
 import { useIsDownloaded } from '@/hooks/use-offline';
+import { useHydrated } from '@/hooks/use-hydrated';
+import { getLessonTracks } from '@/lib/lesson-tracks';
+import { getListenedFraction } from '@/lib/lesson-progress';
+import { playLesson } from '@/lib/play-lesson';
 import type { LessonWithRelations } from '@/types/database';
 
 interface LessonCardProps {
@@ -18,18 +24,22 @@ interface LessonCardProps {
 }
 
 export function LessonCard({ lesson, showProgress, selectable, selected, onToggleSelect }: LessonCardProps) {
+  const t = useTranslations('player');
   const router = useRouter();
   const currentTrack = useAudioStore((s) => s.currentTrack);
   const isPlaying = useAudioStore((s) => s.isPlaying);
   const togglePlay = useAudioStore((s) => s.togglePlay);
-  const setTrack = useAudioStore((s) => s.setTrack);
+  const hydrated = useHydrated();
+  const saved = useProgressStore((s) => s.progressMap[lesson.id]);
+  const tracks = useMemo(() => getLessonTracks(lesson), [lesson]);
 
   const isCurrentlyPlaying = currentTrack?.id === lesson.id;
   const isOffline = useIsDownloaded(lesson.id);
 
-  const progressPercent = lesson.progress && lesson.duration > 0
-    ? Math.round((lesson.progress.position / lesson.duration) * 100)
-    : 0;
+  // Device-only progress: shown after hydration so the server HTML matches.
+  const progress = hydrated ? saved : undefined;
+  const isHeard = progress?.completed === true;
+  const progressPercent = isHeard ? 0 : Math.round(getListenedFraction(tracks, progress) * 100);
 
   const handlePlay = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -48,19 +58,9 @@ export function LessonCard({ lesson, showProgress, selectable, selected, onToggl
       return;
     }
 
-    // New track — start playing + navigate to lesson page
-    if (!lesson.audio_url) return;
-    setTrack({
-      id: lesson.id,
-      title: lesson.title,
-      hebrewTitle: lesson.hebrew_title || lesson.title,
-      audioUrl: normalizeAudioUrl(lesson.audio_url) || lesson.audio_url,
-      audioUrlFallback: normalizeAudioUrl(lesson.audio_url_fallback) || undefined,
-      duration: lesson.duration,
-      seriesName: lesson.series?.hebrew_name || lesson.series?.name || undefined,
-      date: lesson.date,
-      description: lesson.description || lesson.summary || undefined,
-    });
+    // New lesson — continue where the listener left it, then open its page
+    if (tracks.length === 0) return;
+    playLesson(tracks);
     router.push(`/lessons/${lesson.id}`);
   };
 
@@ -89,7 +89,7 @@ export function LessonCard({ lesson, showProgress, selectable, selected, onToggl
           <button
             onClick={handlePlay}
             className="flex-shrink-0 h-10 w-10 rounded-md bg-[hsl(var(--surface-elevated))] flex items-center justify-center transition-all group-hover:bg-primary group-hover:shadow-lg group-hover:shadow-primary/25"
-            aria-label="Play"
+            aria-label={t('play')}
           >
             {isCurrentlyPlaying && isPlaying ? (
               <div className="flex items-center gap-[2px] group-hover:hidden">
@@ -140,7 +140,12 @@ export function LessonCard({ lesson, showProgress, selectable, selected, onToggl
 
         {/* Offline badge */}
         {isOffline && !selectable && (
-          <span className="flex-shrink-0 h-2 w-2 rounded-full bg-green-500" title="הורד" />
+          <span className="flex-shrink-0 h-2 w-2 rounded-full bg-green-500" title={t('downloaded')} />
+        )}
+
+        {/* Heard to the end */}
+        {isHeard && !selectable && (
+          <Check className="h-4 w-4 flex-shrink-0 text-primary" aria-label={t('heard')} />
         )}
       </div>
 

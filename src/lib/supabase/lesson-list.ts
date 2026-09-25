@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Category, LessonWithRelations } from '@/types/database';
 import { matchTags, type TagCount } from '@/lib/tag-links';
 import { getAllCategories } from './queries';
+import { LESSON_AUDIO_FILES } from './lesson-selects';
 
 export const DEFAULT_LESSON_PAGE_SIZE = 20;
 
@@ -269,7 +270,7 @@ function throwIfError<T>(result: { data: T | null; error: unknown }) {
   return result.data;
 }
 
-const LESSON_LIST_SELECT = '*, series(name, hebrew_name), category:categories(id, hebrew_name)';
+const LESSON_LIST_SELECT = `*, series(name, hebrew_name), category:categories(id, hebrew_name), ${LESSON_AUDIO_FILES}`;
 export const SEARCH_RESULT_LIMIT = 50;
 
 /** The subset of the PostgREST filter builder the list filters use. */

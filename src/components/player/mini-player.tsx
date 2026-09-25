@@ -94,6 +94,7 @@ export function MiniPlayer() {
         <BookmarkDialog
           onClose={() => setBookmarkPosition(null)}
           lessonId={lessonId}
+          audioFileId={currentTrack.audioFileId}
           position={bookmarkPosition}
         />
       )}

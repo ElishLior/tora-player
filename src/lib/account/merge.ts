@@ -21,6 +21,7 @@ export interface ServerBookmark {
 
 export interface ServerProgress {
   lesson_id: string;
+  audio_file_id: string | null;
   position: number;
   completed: boolean;
   last_played_at: string;
@@ -89,6 +90,7 @@ export function applyServerProgress(
     if (!current || toMillis(row.last_played_at) > toMillis(current.lastPlayed)) {
       merged[row.lesson_id] = {
         lessonId: row.lesson_id,
+        audioFileId: row.audio_file_id ?? undefined,
         position: row.position,
         lastPlayed: row.last_played_at,
         completed: row.completed,
