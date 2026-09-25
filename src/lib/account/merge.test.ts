@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { getResumePoint } from '@/lib/lesson-progress';
 import {
   applyServerProgress,
   isNoteDirty,
@@ -99,6 +100,24 @@ describe('progress sync', () => {
       completed: false,
     });
     expect(merged.new.position).toBe(3);
+  });
+
+  it('keeps an observed file duration only when newer account progress is for that same file', () => {
+    const merged = applyServerProgress(
+      {
+        same: { lessonId: 'same', audioFileId: 'part-1', position: 300, duration: 600, completed: false, lastPlayed: at(1) },
+        changed: { lessonId: 'changed', audioFileId: 'part-1', position: 300, duration: 600, completed: false, lastPlayed: at(1) },
+      },
+      [
+        { lesson_id: 'same', audio_file_id: 'part-1', position: 600, completed: false, last_played_at: at(20) },
+        { lesson_id: 'changed', audio_file_id: 'part-2', position: 200, completed: false, last_played_at: at(20) },
+      ],
+    );
+    expect(getResumePoint([{ audioFileId: 'part-1', duration: 0 }, { audioFileId: 'part-2', duration: 900 }], merged.same)).toEqual({
+      index: 1,
+      position: 0,
+    });
+    expect(merged.changed.duration).toBeUndefined();
   });
 
   it('treats unparseable device timestamps as oldest', () => {

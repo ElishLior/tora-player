@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Moon } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { cn, formatDuration } from '@/lib/utils';
+import { getTrackLessonId } from '@/lib/player-track-actions';
 import { useAudioStore, type SleepTimer } from '@/stores/audio-store';
 
 const MINUTE_OPTIONS = [15, 30, 45, 60];
@@ -21,7 +22,14 @@ export function SleepTimerControl({ className }: SleepTimerControlProps) {
   const t = useTranslations('player');
   const sleepTimer = useAudioStore((s) => s.sleepTimer);
   const setSleepTimer = useAudioStore((s) => s.setSleepTimer);
-  const hasParts = useAudioStore((s) => (s.currentTrack?.partCount ?? 1) > 1);
+  const currentTrack = useAudioStore((s) => s.currentTrack);
+  const queue = useAudioStore((s) => s.queue);
+  const hasParts = !!currentTrack && (
+    (currentTrack.partCount ?? 0) > 1 ||
+    (currentTrack.partCount === undefined && !!currentTrack.audioFileId &&
+      queue.some((track) => !!track.audioFileId && track.audioFileId !== currentTrack.audioFileId &&
+        getTrackLessonId(track) === getTrackLessonId(currentTrack)))
+  );
   const [isOpen, setIsOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const menuRef = useRef<HTMLDivElement>(null);

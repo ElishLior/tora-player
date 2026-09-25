@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import he from '../../messages/he.json';
 
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000';
 
@@ -67,9 +68,28 @@ async function installMediaHarness(page: Page) {
 
 async function startFirstLesson(page: Page) {
   await page.goto(`${BASE_URL}/he/lessons`);
-  await page.locator('a[href*="/lessons/"] button[aria-label="Play"]').first().click();
-  await expect(page.locator('header').getByRole('button', { name: 'השהה' })).toBeVisible();
+  await page.getByRole('main').getByRole('button', { name: he.player.play, exact: true }).first().click();
+  await expect(page.locator('header').getByRole('button', { name: he.player.pause })).toBeVisible();
 }
+
+test('lesson details and playback are separate keyboard actions', async ({ page }) => {
+  await installMediaHarness(page);
+  await page.goto(`${BASE_URL}/he/lessons`);
+
+  const lessonLink = page.locator('main a[href*="/lessons/"]').first();
+  const href = await lessonLink.getAttribute('href');
+  expect(href).toBeTruthy();
+  await expect(lessonLink.locator('button, a, [role="button"]')).toHaveCount(0);
+
+  await lessonLink.focus();
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(`${BASE_URL}${href}`);
+
+  await page.goBack();
+  await page.getByRole('main').getByRole('button', { name: he.player.play, exact: true }).first().focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('header').getByRole('button', { name: he.player.pause })).toBeVisible();
+});
 
 test.describe('music app player behavior', () => {
   test('syncs the UI back to playing when native audio resumes outside React state', async ({ page }) => {

@@ -59,6 +59,7 @@ import { updateLessonTags } from '@/actions/lessons';
 import { TagInput } from '@/components/tags/tag-input';
 import { normalizeTags } from '@/lib/tags';
 import { tagPath } from '@/lib/tag-links';
+import { getImageStreamUrl } from '@/lib/image-keys';
 
 function formatDur(seconds: number): string {
   if (!seconds || seconds <= 0) return '';
@@ -549,6 +550,8 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
           duration: asset.duration,
           fileSize: asset.fileSize,
           sortOrder: asset.sortOrder,
+          partIndex: asset.partIndex,
+          partCount: asset.partCount,
         })),
         {
           lessonId: lesson.id,
@@ -1341,11 +1344,6 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
 
 // ==================== Image Gallery (inlined to share webpack chunk) ====================
 
-function getImageStreamUrl(fileKey: string) {
-  const encodedKey = encodeURIComponent(fileKey);
-  return `/api/images/stream/${encodedKey}`;
-}
-
 function ImageGallerySection({
   images,
   locale,
@@ -1384,11 +1382,15 @@ function ImageGallerySection({
             onClick={() => openLightbox(i)}
             className="relative aspect-square rounded-lg overflow-hidden bg-[hsl(var(--surface-elevated))] hover:opacity-80 transition-opacity focus:outline-none focus:ring-2 focus:ring-primary/50"
           >
+            {/* Grid shows the WebP thumbnail (original until backfilled); width/height give the intrinsic ratio. */}
             <img
-              src={getImageStreamUrl(img.file_key)}
+              src={getImageStreamUrl(img.thumb_key ?? img.file_key)}
               alt={img.caption || `${lessonTitle} – ${i + 1}`}
+              width={img.width ?? undefined}
+              height={img.height ?? undefined}
               className="w-full h-full object-cover"
               loading="lazy"
+              decoding="async"
             />
           </button>
         ))}

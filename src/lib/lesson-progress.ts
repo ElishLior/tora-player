@@ -22,6 +22,8 @@ export interface LessonPartRef {
 export interface SavedLessonProgress {
   audioFileId?: string;
   position: number;
+  /** Observed length of the saved audio file when its catalog duration is unknown. */
+  duration?: number;
   completed: boolean;
 }
 
@@ -38,10 +40,11 @@ export function isNearPartEnd(position: number, duration: number): boolean {
   return duration - position <= threshold;
 }
 
-/** Tracks without part information are single-file lessons. */
-export function isLastPart(part: { partIndex?: number; partCount?: number }): boolean {
-  if (part.partCount === undefined) return true;
-  return (part.partIndex ?? 0) >= part.partCount - 1;
+/** An unknown part count is only a single-file lesson without an audio file id. */
+export function isLastPart(part: { audioFileId?: string; partIndex?: number; partCount?: number }): boolean {
+  if (part.partCount === undefined) return !part.audioFileId;
+  return part.partIndex !== undefined && part.partCount > 0 &&
+    part.partIndex >= 0 && part.partIndex === part.partCount - 1;
 }
 
 /**
@@ -57,7 +60,7 @@ export function getResumePoint(parts: LessonPartRef[], progress: SavedLessonProg
   const found = progress.audioFileId ? parts.findIndex((part) => part.audioFileId === progress.audioFileId) : 0;
   if (found < 0) return start;
 
-  if (isNearPartEnd(progress.position, parts[found].duration)) {
+  if (isNearPartEnd(progress.position, parts[found].duration > 0 ? parts[found].duration : progress.duration ?? 0)) {
     return found + 1 < parts.length ? { index: found + 1, position: 0 } : start;
   }
   if (progress.position < MIN_RESUME_SECONDS) return { index: found, position: 0 };
@@ -68,12 +71,18 @@ export function getResumePoint(parts: LessonPartRef[], progress: SavedLessonProg
 export function getListenedFraction(parts: LessonPartRef[], progress: SavedLessonProgress | undefined): number {
   if (!progress) return 0;
   if (progress.completed) return 1;
-  const total = parts.reduce((sum, part) => sum + (part.duration || 0), 0);
-  if (!(total > 0)) return 0;
-
+  if (parts.length === 0) return 0;
   const found = progress.audioFileId ? parts.findIndex((part) => part.audioFileId === progress.audioFileId) : 0;
   if (found < 0) return 0;
-  const before = parts.slice(0, found).reduce((sum, part) => sum + (part.duration || 0), 0);
-  const inPart = Math.min(progress.position, parts[found].duration || progress.position);
+  const currentDuration = parts[found].duration || progress.duration || 0;
+  let before = 0;
+  let total = 0;
+  for (let index = 0; index < parts.length; index++) {
+    const duration = index === found ? currentDuration : parts[index].duration || 0;
+    if (!(duration > 0)) return 0;
+    if (index < found) before += duration;
+    total += duration;
+  }
+  const inPart = Math.min(progress.position, currentDuration || progress.position);
   return Math.min(1, Math.max(0, (before + inPart) / total));
 }

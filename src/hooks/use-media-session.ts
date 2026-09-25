@@ -19,6 +19,7 @@ import {
   type AudioPlayerState,
   type AudioTrack,
 } from "@/stores/audio-store";
+import { DEFAULT_LOCALE, SITE_NAME } from "@/config/site";
 
 // Normal playback moves the position by < 1s per timeupdate even at 2x speed;
 // a bigger jump is a seek the OS must be told about.
@@ -29,18 +30,36 @@ function toAbsoluteUrl(path: string) {
   return `${window.location.origin}${path.startsWith("/") ? "" : "/"}${path}`;
 }
 
-function buildMetadata(track: AudioTrack) {
-  const artwork: MediaImage[] = [
-    ...(track.artworkUrl
-      ? [{ src: toAbsoluteUrl(track.artworkUrl), sizes: "512x512", type: "image/png" }]
-      : []),
-    // Lock screens need absolute URLs.
+const IMAGE_TYPES: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  webp: "image/webp",
+  gif: "image/gif",
+  avif: "image/avif",
+  svg: "image/svg+xml",
+};
+
+/** Lesson or series art when the track has it, else the app icons. Lock screens need absolute URLs. */
+function buildArtwork(track: AudioTrack): MediaImage[] {
+  if (track.artworkUrl) {
+    const src = toAbsoluteUrl(track.artworkUrl);
+    const extension = new URL(src).pathname.match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase();
+    const type = extension ? IMAGE_TYPES[extension] : undefined;
+    // Size unknown: the OS measures the image itself.
+    return [type ? { src, type } : { src }];
+  }
+  return [
     { src: toAbsoluteUrl("/icons/icon-192.png"), sizes: "192x192", type: "image/png" },
     { src: toAbsoluteUrl("/icons/icon-512.png"), sizes: "512x512", type: "image/png" },
   ];
+}
+
+function buildMetadata(track: AudioTrack) {
+  const artwork = buildArtwork(track);
   return new MediaMetadata({
     title: track.hebrewTitle || track.title,
-    artist: track.seriesName || "נגן תורה",
+    artist: track.seriesName || SITE_NAME[DEFAULT_LOCALE],
     album: "שיעורי תורה",
     artwork,
   });

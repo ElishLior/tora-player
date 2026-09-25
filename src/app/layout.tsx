@@ -1,15 +1,19 @@
 import type { Metadata, Viewport } from "next";
+import { FEED_PATH, OG_LOCALE, SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "@/config/site";
 import "./globals.css";
 
+// Open Graph images come from ./opengraph-image.tsx (lesson pages have their
+// own); the manifest from ./manifest.ts. Pages set title/description, and the
+// title template appends the site name.
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://tora-player.vercel.app"),
-  title: "נגן תורה",
-  description: "שיעורי הרב אליהו מציון בניהו בן יהוידע — להאזנה, להורדה ולהאזנה לא מקוונת",
-  manifest: "/manifest.json",
+  metadataBase: new URL(SITE_URL),
+  title: { default: SITE_NAME.he, template: `%s · ${SITE_NAME.he}` },
+  description: SITE_DESCRIPTION.he,
+  applicationName: SITE_NAME.he,
   appleWebApp: {
     capable: true,
     statusBarStyle: "black",
-    title: "נגן תורה",
+    title: SITE_NAME.he,
   },
   icons: {
     icon: [
@@ -18,23 +22,21 @@ export const metadata: Metadata = {
     ],
     apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
   },
+  alternates: {
+    types: { "application/rss+xml": [{ url: FEED_PATH, title: SITE_NAME.he }] },
+  },
   openGraph: {
     type: "website",
-    locale: "he_IL",
-    siteName: "נגן תורה",
-    title: "נגן תורה",
-    description: "שיעורי הרב אליהו מציון בניהו בן יהוידע",
-    images: [{ url: "/brand/og.jpg", width: 1200, height: 630, alt: "נגן תורה" }],
+    locale: OG_LOCALE.he,
+    siteName: SITE_NAME.he,
   },
-  twitter: { card: "summary_large_image", images: ["/brand/og.jpg"] },
+  twitter: { card: "summary_large_image" },
 };
 
 export const viewport: Viewport = {
   themeColor: "#121212",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
 };
 
 export default function RootLayout({
@@ -43,6 +45,6 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   // Note: <html> and <body> are rendered in the locale layout (src/app/[locale]/layout.tsx)
-  // The root layout just passes children through to avoid duplicate html/body elements.
+  // and in src/app/not-found.tsx. The root layout just passes children through.
   return children;
 }

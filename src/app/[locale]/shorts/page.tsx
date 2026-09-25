@@ -1,8 +1,9 @@
 export const dynamic = 'force-dynamic';
 
 import { setRequestLocale } from 'next-intl/server';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { getShortLessons, type ShortLessons } from '@/lib/supabase/shorts';
+import { isSupabaseConfigured } from '@/lib/supabase/server';
+import { getCachedShortLessons } from '@/lib/supabase/anon';
+import type { ShortLessons } from '@/lib/supabase/shorts';
 import { tagFromSearchParam } from '@/lib/tag-links';
 import ShortsClient from './shorts-client';
 
@@ -18,10 +19,9 @@ export default async function ShortsPage({ params, searchParams }: Props) {
 
   let shorts: ShortLessons = { lessons: [], topics: [] };
   let failed = false;
-  const supabase = await createServerSupabaseClient();
-  if (supabase) {
+  if (isSupabaseConfigured()) {
     try {
-      shorts = await getShortLessons(supabase);
+      shorts = await getCachedShortLessons();
     } catch (error) {
       console.error('Failed to load short lessons:', error);
       failed = true;

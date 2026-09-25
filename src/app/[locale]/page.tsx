@@ -1,9 +1,13 @@
 export const dynamic = 'force-dynamic';
 
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { getRecentLessons, getCategoriesTree, getCategoryLessonCounts } from '@/lib/supabase/queries';
-import { getShortLessons } from '@/lib/supabase/shorts';
+import { isSupabaseConfigured } from '@/lib/supabase/server';
+import {
+  getCachedCategoriesTree,
+  getCachedCategoryLessonCounts,
+  getCachedRecentLessons,
+  getCachedShortLessons,
+} from '@/lib/supabase/anon';
 import { SHORTS_CATEGORY_ID } from '@/lib/upload-drafts';
 import { LessonCard } from '@/components/lessons/lesson-card';
 import { EmptyState } from '@/components/shared/empty-state';
@@ -11,6 +15,7 @@ import { Link } from '@/i18n/routing';
 import { BookOpen, Wrench, Sparkles, Music, Scissors, FolderOpen, ChevronLeft, Upload } from 'lucide-react';
 import { isAdmin } from '@/lib/auth/admin';
 import { ContinueListeningSection } from '@/components/home/continue-listening-section';
+import { LatestLessonHero } from '@/components/home/latest-lesson-hero';
 import type { CategoryWithChildren, LessonWithRelations } from '@/types/database';
 
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -48,7 +53,6 @@ export default async function HomePage({ params }: Props) {
   const tShorts = await getTranslations('shorts');
   const tUpload = await getTranslations('upload.entry');
 
-  const supabase = await createServerSupabaseClient();
   const admin = await isAdmin();
 
   let recentLessons: LessonWithRelations[] = [];
@@ -56,13 +60,13 @@ export default async function HomePage({ params }: Props) {
   let categories: CategoryWithChildren[] = [];
   let counts: Record<string, number> = {};
 
-  if (supabase) {
+  if (isSupabaseConfigured()) {
     try {
       [recentLessons, categories, counts, { lessons: recentShorts }] = await Promise.all([
-        getRecentLessons(supabase, 10),
-        getCategoriesTree(supabase),
-        getCategoryLessonCounts(supabase),
-        getShortLessons(supabase, 5),
+        getCachedRecentLessons(10),
+        getCachedCategoriesTree(),
+        getCachedCategoryLessonCounts(),
+        getCachedShortLessons(5),
       ]);
     } catch (error) {
       console.error('Home page: failed to load lessons', error);
@@ -76,6 +80,9 @@ export default async function HomePage({ params }: Props) {
     const childTotal = cat.children.reduce((sum, c) => sum + (counts[c.id] || 0), 0);
     return own + childTotal;
   }
+
+  // The newest lesson gets the hero card; the list continues from the next one.
+  const [latestLesson, ...olderLessons] = recentLessons;
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -100,15 +107,83 @@ export default async function HomePage({ params }: Props) {
         </Link>
       )}
 
+      {/* Continue Listening — client-side, reads from localStorage per device */}
+      <ContinueListeningSection title={t('continueListening')} />
+
+      {latestLesson && <LatestLessonHero title={t('latestLesson')} lesson={latestLesson} />}
+
+      {/* Shorts */}
+      {recentShorts.length > 0 && (
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="flex items-center gap-2 text-lg font-bold">
+              <Scissors className="h-4 w-4 text-rose-400" />
+              {tShorts('title')}
+            </h2>
+            <Link
+              href="/shorts"
+              className="flex items-center gap-0.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {tShorts('showAll')}
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+          <div className="space-y-0.5">
+            {recentShorts.map((lesson) => (
+              <LessonCard key={lesson.id} lesson={lesson} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Recent Lessons */}
+      {(olderLessons.length > 0 || !latestLesson) && (
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-bold">{t('recentLessons')}</h2>
+            <Link
+              href="/lessons"
+              className="flex items-center gap-0.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {t('showAll')}
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+          {latestLesson ? (
+            <div className="space-y-0.5">
+              {olderLessons.map((lesson) => (
+                <LessonCard key={lesson.id} lesson={lesson} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              icon={BookOpen}
+              title={isRTL ? 'אין שיעורים עדיין' : 'No lessons yet'}
+              description={isRTL ? (admin ? 'הוסף שיעור ראשון כדי להתחיל' : 'שיעורים יתווספו בקרוב') : (admin ? 'Add your first lesson to get started' : 'Lessons will be added soon')}
+              action={
+                admin ? (
+                  <Link
+                    href="/lessons/upload"
+                    className="rounded-full bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground hover:bg-primary/90 hover:scale-105 transition-all"
+                  >
+                    {isRTL ? 'הוספת שיעור' : 'Add Lesson'}
+                  </Link>
+                ) : undefined
+              }
+            />
+          )}
+        </section>
+      )}
+
       {/* Categories grid */}
       <section>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-bold">{isRTL ? 'קטגוריות' : 'Categories'}</h2>
+          <h2 className="text-lg font-bold">{t('categories')}</h2>
           <Link
             href="/categories"
             className="flex items-center gap-0.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors"
           >
-            {isRTL ? 'הצג הכל' : 'Show all'}
+            {t('showAll')}
             <ChevronLeft className="h-3.5 w-3.5" />
           </Link>
         </div>
@@ -138,70 +213,6 @@ export default async function HomePage({ params }: Props) {
             );
           })}
         </div>
-      </section>
-
-      {/* Continue Listening — client-side, reads from localStorage per device */}
-      <ContinueListeningSection title={t('continueListening')} />
-
-      {/* Shorts */}
-      {recentShorts.length > 0 && (
-        <section>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="flex items-center gap-2 text-lg font-bold">
-              <Scissors className="h-4 w-4 text-rose-400" />
-              {tShorts('title')}
-            </h2>
-            <Link
-              href="/shorts"
-              className="flex items-center gap-0.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {tShorts('showAll')}
-              <ChevronLeft className="h-3.5 w-3.5" />
-            </Link>
-          </div>
-          <div className="space-y-0.5">
-            {recentShorts.map((lesson) => (
-              <LessonCard key={lesson.id} lesson={lesson} />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Recent Lessons */}
-      <section>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-bold">{t('recentLessons')}</h2>
-          <Link
-            href="/lessons"
-            className="flex items-center gap-0.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors"
-          >
-            {isRTL ? 'הצג הכל' : 'Show all'}
-            <ChevronLeft className="h-3.5 w-3.5" />
-          </Link>
-        </div>
-        {recentLessons.length > 0 ? (
-          <div className="space-y-0.5">
-            {recentLessons.map((lesson) => (
-              <LessonCard key={lesson.id} lesson={lesson} />
-            ))}
-          </div>
-        ) : (
-          <EmptyState
-            icon={BookOpen}
-            title={isRTL ? 'אין שיעורים עדיין' : 'No lessons yet'}
-            description={isRTL ? (admin ? 'הוסף שיעור ראשון כדי להתחיל' : 'שיעורים יתווספו בקרוב') : (admin ? 'Add your first lesson to get started' : 'Lessons will be added soon')}
-            action={
-              admin ? (
-                <Link
-                  href="/lessons/upload"
-                  className="rounded-full bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground hover:bg-primary/90 hover:scale-105 transition-all"
-                >
-                  {isRTL ? 'הוספת שיעור' : 'Add Lesson'}
-                </Link>
-              ) : undefined
-            }
-          />
-        )}
       </section>
     </div>
   );

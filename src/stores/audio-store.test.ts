@@ -98,6 +98,95 @@ describe("audio store", () => {
   });
 });
 
+describe("queue editing", () => {
+  const [d, e] = ["d", "e"].map(makeTrack);
+  const ids = () => useAudioStore.getState().queue.map((track) => track.id);
+
+  beforeEach(() => {
+    useAudioStore.setState({ currentTrack: null, queue: [], queueIndex: -1 });
+    // Current track is "b" (index 1).
+    useAudioStore.getState().setQueue([first, second, third, d], 1);
+  });
+
+  it("never removes the current track", () => {
+    useAudioStore.getState().removeFromQueue(1);
+
+    const state = useAudioStore.getState();
+    expect(ids()).toEqual(["a", "b", "c", "d"]);
+    expect(state.currentTrack).toBe(second);
+    expect(state.queueIndex).toBe(1);
+  });
+
+  it("removes the last item and items before the current one", () => {
+    const { removeFromQueue } = useAudioStore.getState();
+    removeFromQueue(3);
+    expect(ids()).toEqual(["a", "b", "c"]);
+    expect(useAudioStore.getState().queueIndex).toBe(1);
+
+    removeFromQueue(0);
+    const state = useAudioStore.getState();
+    expect(ids()).toEqual(["b", "c"]);
+    expect(state.queueIndex).toBe(0);
+    expect(state.queue[state.queueIndex]).toBe(second);
+
+    removeFromQueue(5);
+    expect(ids()).toEqual(["b", "c"]);
+  });
+
+  it("keeps the current track when items move across it", () => {
+    const { moveInQueue } = useAudioStore.getState();
+
+    moveInQueue(3, 0);
+    expect(ids()).toEqual(["d", "a", "b", "c"]);
+    expect(useAudioStore.getState().queueIndex).toBe(2);
+
+    moveInQueue(0, 3);
+    expect(ids()).toEqual(["a", "b", "c", "d"]);
+    expect(useAudioStore.getState().queueIndex).toBe(1);
+
+    moveInQueue(1, 2);
+    const state = useAudioStore.getState();
+    expect(ids()).toEqual(["a", "c", "b", "d"]);
+    expect(state.queueIndex).toBe(2);
+    expect(state.currentTrack).toBe(second);
+    expect(state.isPlaying).toBe(true);
+  });
+
+  it("moves within the upcoming items without touching the index", () => {
+    useAudioStore.getState().moveInQueue(3, 2);
+    expect(ids()).toEqual(["a", "b", "d", "c"]);
+    expect(useAudioStore.getState().queueIndex).toBe(1);
+
+    useAudioStore.getState().moveInQueue(2, 9);
+    expect(ids()).toEqual(["a", "b", "d", "c"]);
+  });
+
+  it("queues tracks right after the current one without duplicates", () => {
+    const { playNext } = useAudioStore.getState();
+
+    playNext([e]);
+    expect(ids()).toEqual(["a", "b", "e", "c", "d"]);
+
+    // Already queued: moved up, not duplicated; the current track is skipped.
+    playNext([d, second]);
+    const state = useAudioStore.getState();
+    expect(ids()).toEqual(["a", "b", "d", "e", "c"]);
+    expect(state.queueIndex).toBe(1);
+    expect(state.currentTrack).toBe(second);
+
+    // An earlier (already played) copy moves too, shifting the current index.
+    playNext([first]);
+    expect(ids()).toEqual(["b", "a", "d", "e", "c"]);
+    expect(useAudioStore.getState().queueIndex).toBe(0);
+  });
+
+  it("does nothing without a loaded track", () => {
+    useAudioStore.setState({ currentTrack: null, queue: [], queueIndex: -1 });
+    useAudioStore.getState().playNext([e]);
+    expect(ids()).toEqual([]);
+  });
+});
+
 describe("getTransportState", () => {
   const base = { isPlaying: false, playbackStatus: "paused", playbackIssue: null } as const;
 

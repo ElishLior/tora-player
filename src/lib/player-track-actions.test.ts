@@ -14,6 +14,8 @@ const track: AudioTrack = {
   id: 'runtime-track',
   lessonId: 'lesson-1',
   audioFileId: 'audio-1',
+  partIndex: 2,
+  partCount: 3,
   fileKey: 'audio/lesson-1/part-1.opus',
   offlineKey: 'lesson-1:audio-1',
   title: 'Lesson',
@@ -35,7 +37,9 @@ describe('player track actions', () => {
       title: 'WhatsApp Audio 1.opus',
       originalName: 'WhatsApp Audio 1.opus',
       duration: 120,
-      sortOrder: 0,
+      sortOrder: 2,
+      partIndex: 2,
+      partCount: 3,
     });
     expect(getTrackOfflineLessonInput(track)).toEqual({
       lessonId: 'lesson-1',

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { X, Share2, Check, Scissors } from 'lucide-react';
+import { getLessonShareUrl } from '@/lib/share';
 
 function formatTimeMMSS(totalSeconds: number): { minutes: number; seconds: number } {
   const clamped = Math.max(0, Math.floor(totalSeconds));
@@ -68,10 +69,10 @@ export function ShareClipDialog({
   const clipDuration = Math.max(0, endTotal - startTotal);
   const isValid = endTotal > startTotal && startTotal >= 0 && endTotal <= Math.ceil(duration);
 
-  const generateUrl = useCallback(() => {
-    const base = `https://tora-player.vercel.app/he/lessons/${encodeURIComponent(lessonId)}`;
-    return `${base}?start=${startTotal}&end=${endTotal}`;
-  }, [lessonId, startTotal, endTotal]);
+  const generateUrl = useCallback(
+    () => `${getLessonShareUrl(lessonId)}?start=${startTotal}&end=${endTotal}`,
+    [lessonId, startTotal, endTotal],
+  );
 
   const shareText = useCallback(() => {
     return `${lessonTitle}\n${String.fromCodePoint(0x2702)} קטע: ${formatDisplay(startTotal)} - ${formatDisplay(endTotal)}\n${generateUrl()}`;

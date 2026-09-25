@@ -123,15 +123,6 @@ export const playbackProgressSchema = z.object({
   completed: z.boolean().default(false),
 });
 
-export const searchSchema = z.object({
-  query: z.string().min(1),
-  series_id: uuidLike.optional(),
-  date_from: z.string().optional(),
-  date_to: z.string().optional(),
-  limit: z.number().int().min(1).max(100).default(20),
-  offset: z.number().int().min(0).default(0),
-});
-
 // ==================== CATEGORIES ====================
 
 export const createCategorySchema = z.object({

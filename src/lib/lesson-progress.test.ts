@@ -41,6 +41,27 @@ describe('getResumePoint', () => {
   it('plays a part from its start when barely begun', () => {
     expect(getResumePoint(parts, { audioFileId: 'p2', position: 3, completed: false })).toEqual({ index: 1, position: 0 });
   });
+
+  it('advances after an unknown-duration part ends using the observed file duration', () => {
+    const unknownFirstPart = [{ audioFileId: 'p1', duration: 0 }, { audioFileId: 'p2', duration: 900 }];
+    expect(getResumePoint(unknownFirstPart, {
+      audioFileId: 'p1',
+      position: 600,
+      duration: 600,
+      completed: false,
+    })).toEqual({ index: 1, position: 0 });
+    expect(getResumePoint(unknownFirstPart, {
+      audioFileId: 'p1',
+      position: 300,
+      duration: 600,
+      completed: false,
+    })).toEqual({ index: 0, position: 300 });
+    expect(getResumePoint(unknownFirstPart, {
+      audioFileId: 'p1',
+      position: 600,
+      completed: false,
+    })).toEqual({ index: 0, position: 600 });
+  });
 });
 
 describe('completion', () => {
@@ -56,12 +77,34 @@ describe('completion', () => {
     expect(isLastPart({ partIndex: 0, partCount: 3 })).toBe(false);
     expect(isLastPart({ partIndex: 2, partCount: 3 })).toBe(true);
     expect(isLastPart({})).toBe(true);
+    expect(isLastPart({ audioFileId: 'p1' })).toBe(false);
+    expect(isLastPart({ audioFileId: 'p3', partIndex: 2 })).toBe(false);
   });
 });
 
 describe('getListenedFraction', () => {
   it('counts earlier parts as heard', () => {
     expect(getListenedFraction(parts, { audioFileId: 'p2', position: 900, completed: false })).toBeCloseTo(4500 / 6600);
+  });
+
+  it('uses the observed duration when computing progress in an unknown-length part', () => {
+    const lesson = [{ audioFileId: 'p1', duration: 0 }, { audioFileId: 'p2', duration: 900 }];
+    expect(getListenedFraction(lesson, {
+      audioFileId: 'p1',
+      position: 300,
+      duration: 600,
+      completed: false,
+    })).toBeCloseTo(300 / 1500);
+  });
+
+  it('does not show 100% when an unplayed part still has unknown length', () => {
+    const lesson = [{ audioFileId: 'p1', duration: 0 }, { audioFileId: 'p2', duration: 0 }];
+    expect(getListenedFraction(lesson, {
+      audioFileId: 'p1',
+      position: 600,
+      duration: 600,
+      completed: false,
+    })).toBe(0);
   });
 
   it('is full for a completed lesson and empty without progress', () => {

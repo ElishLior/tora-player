@@ -92,6 +92,9 @@ export function applyServerProgress(
         lessonId: row.lesson_id,
         audioFileId: row.audio_file_id ?? undefined,
         position: row.position,
+        ...(current?.duration && current.audioFileId === (row.audio_file_id ?? undefined)
+          ? { duration: current.duration }
+          : {}),
         lastPlayed: row.last_played_at,
         completed: row.completed,
       };

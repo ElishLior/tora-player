@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import he from '../../messages/he.json';
 
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000';
 
@@ -82,21 +83,21 @@ test.describe('Tora Player Smoke Tests', () => {
     expect(scrollWidth).toBeLessThanOrEqual(clientWidth + 5); // 5px tolerance
   });
 
-  test('Verify bottom navigation is visible', async ({ page }) => {
+  test('Bottom navigation opens the lessons catalog', async ({ page }) => {
     await page.goto(`${BASE_URL}/he`);
-    const nav = page.locator('nav[role="navigation"][aria-label="Main navigation"]');
-    await expect(nav).toBeVisible();
-    // Check nav items exist
-    const navLinks = nav.locator('a');
-    const count = await navLinks.count();
-    expect(count).toBeGreaterThanOrEqual(3);
+    const nav = page.getByRole('navigation', { name: he.nav.label });
+    await nav.getByRole('link', { name: he.nav.lessons }).click();
+    await expect(page).toHaveURL(`${BASE_URL}/he/lessons`);
+    await expect(page.getByRole('main').getByRole('heading', { name: he.lessons.title })).toBeVisible();
   });
 
-  test('Verify header with app title "נגן תורה" is present', async ({ page }) => {
+  test('Verify header links home with the app name', async ({ page }) => {
     await page.goto(`${BASE_URL}/he`);
     const header = page.locator('header');
     await expect(header).toBeVisible();
-    const title = header.locator('h1');
-    await expect(title).toContainText('נגן תורה');
+    const home = header.getByRole('link', { name: he.common.appName, exact: true });
+    await expect(home).toContainText(he.common.appName);
+    // Each page has its own <h1>; the header's app name is not a heading.
+    await expect(header.locator('h1')).toHaveCount(0);
   });
 });

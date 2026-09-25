@@ -5,7 +5,7 @@ import {
   getAudioContentType,
   getAudioExtension,
 } from '@/lib/audio-download';
-import { getDownloadPresignedUrl } from '@/lib/r2';
+import { getDownloadPresignedUrl, headR2Object } from '@/lib/r2';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -15,8 +15,8 @@ export const dynamic = 'force-dynamic';
 const PRESIGNED_URL_TTL_SECONDS = 300;
 
 /**
- * Redirects to a short-lived presigned R2 URL so audio bytes go straight from
- * R2 to the device instead of through a Vercel function.
+ * GET redirects to R2 so audio bytes never pass through a Vercel function;
+ * HEAD returns the matching metadata without transferring audio bytes.
  *
  * - default: `Content-Disposition: attachment` with an RFC 5987 UTF-8
  *   filename (`?filename=`), for saving the file to the device.
@@ -26,33 +26,37 @@ const PRESIGNED_URL_TTL_SECONDS = 300;
  * Only lesson audio objects (`audio/…` with an audio extension) can be signed,
  * never originals, images or arbitrary bucket keys.
  */
+function audioKey(fileKey: string): string | null {
+  const key = decodeURIComponent(fileKey);
+  return key.startsWith('audio/') && !key.includes('..') && getAudioExtension(key) ? key : null;
+}
+
+function audioRepresentation(request: NextRequest, key: string) {
+  if (request.nextUrl.searchParams.get('disposition') === 'inline') {
+    return { contentType: getAudioContentType(key), contentDisposition: undefined };
+  }
+  return {
+    contentType: 'application/octet-stream',
+    contentDisposition: buildContentDisposition(
+      buildAudioDownloadFilename(request.nextUrl.searchParams.get('filename') || key.split('/').pop(), key),
+    ),
+  };
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ fileKey: string }> },
 ) {
   const { fileKey } = await params;
-  const key = decodeURIComponent(fileKey);
+  const key = audioKey(fileKey);
+  if (!key) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  if (!key.startsWith('audio/') || key.includes('..') || !getAudioExtension(key)) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  }
-
-  const inline = request.nextUrl.searchParams.get('disposition') === 'inline';
-
+  const { contentType, contentDisposition } = audioRepresentation(request, key);
   try {
     const signedUrl = await getDownloadPresignedUrl(key, {
       expiresIn: PRESIGNED_URL_TTL_SECONDS,
-      ...(inline
-        ? { contentType: getAudioContentType(key) }
-        : {
-            contentType: 'application/octet-stream',
-            contentDisposition: buildContentDisposition(
-              buildAudioDownloadFilename(
-                request.nextUrl.searchParams.get('filename') || key.split('/').pop(),
-                key,
-              ),
-            ),
-          }),
+      contentType,
+      contentDisposition,
     });
 
     const response = NextResponse.redirect(signedUrl, 302);
@@ -61,5 +65,39 @@ export async function GET(
   } catch (error) {
     console.error('Audio download presign error:', error);
     return NextResponse.json({ error: 'Failed to prepare download' }, { status: 500 });
+  }
+}
+
+/** Podcast and download clients probe the actual representation before GET. */
+export async function HEAD(
+  request: NextRequest,
+  { params }: { params: Promise<{ fileKey: string }> },
+) {
+  const { fileKey } = await params;
+  const key = audioKey(fileKey);
+  if (!key) return new Response(null, { status: 404 });
+
+  try {
+    const object = await headR2Object(key);
+    if (object.ContentLength === undefined) throw new Error('R2 HEAD returned no content length');
+    const { contentType, contentDisposition } = audioRepresentation(request, key);
+    const headers = new Headers({
+      'Content-Length': String(object.ContentLength),
+      'Content-Type': contentType,
+      'Accept-Ranges': 'bytes',
+      'Cache-Control': 'no-store',
+    });
+    if (contentDisposition) headers.set('Content-Disposition', contentDisposition);
+    if (object.ETag) headers.set('ETag', object.ETag);
+    if (object.LastModified) headers.set('Last-Modified', object.LastModified.toUTCString());
+    return new Response(null, { headers });
+  } catch (error) {
+    if (error && typeof error === 'object' && '$metadata' in error &&
+      error.$metadata && typeof error.$metadata === 'object' &&
+      'httpStatusCode' in error.$metadata && error.$metadata.httpStatusCode === 404) {
+      return new Response(null, { status: 404 });
+    }
+    console.error('Audio HEAD metadata error:', error);
+    return new Response(null, { status: 500 });
   }
 }

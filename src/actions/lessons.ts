@@ -1,8 +1,9 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
+import { revalidateCatalog } from '@/lib/supabase/anon';
 import { requireServerSupabaseClient } from '@/lib/supabase/server';
 import { createAdminSupabaseClient } from '@/lib/supabase/admin';
+import { lessonReadClient } from '@/lib/supabase/admin-lesson';
 import { isAdmin, requireAdmin } from '@/lib/auth/admin';
 import { normalizeTags } from '@/lib/tags';
 import { notifyNewLesson } from '@/lib/notifications/notify';
@@ -60,7 +61,7 @@ export async function updateLesson(id: string, formData: FormData) {
   // Publishing a draft from the edit page announces it (no-op if already announced).
   if (parsed.data.is_published === true) await notifyNewLesson(id);
 
-  revalidatePath('/[locale]', 'layout');
+  revalidateCatalog();
   return { data: data as Lesson };
 }
 
@@ -95,7 +96,7 @@ export async function updateLessonTags(
 
   if (error) return { error: error.message };
 
-  revalidatePath('/[locale]', 'layout');
+  revalidateCatalog();
   return { tags: (data as { tags: string[] }).tags };
 }
 
@@ -114,7 +115,7 @@ export async function deleteLesson(id: string) {
     return { error: error.message };
   }
 
-  revalidatePath('/[locale]', 'layout');
+  revalidateCatalog();
   return { success: true };
 }
 
@@ -135,16 +136,8 @@ export async function publishLesson(id: string, publish: boolean) {
 
   if (publish) await notifyNewLesson(id);
 
-  revalidatePath('/[locale]', 'layout');
+  revalidateCatalog();
   return { success: true };
-}
-
-/**
- * Admins read with the service role so drafts (unpublished lessons, which RLS
- * hides from everyone else) can be edited; everyone else gets the cookie client.
- */
-async function lessonReadClient() {
-  return (await isAdmin()) ? createAdminSupabaseClient() : requireServerSupabaseClient();
 }
 
 export async function getLesson(id: string) {
@@ -201,7 +194,7 @@ export async function renameAudioFile(fileId: string, newName: string) {
     .eq('id', fileId);
 
   if (error) return { error: error.message };
-  revalidatePath('/[locale]', 'layout');
+  revalidateCatalog();
   return { success: true };
 }
 
@@ -217,7 +210,7 @@ export async function updateAudioType(fileId: string, audioType: string | null) 
     .eq('id', fileId);
 
   if (error) return { error: error.message };
-  revalidatePath('/[locale]', 'layout');
+  revalidateCatalog();
   return { success: true };
 }
 
@@ -240,7 +233,7 @@ export async function reorderAudioFiles(lessonId: string, fileIds: string[]) {
   const err = results.find((r) => r.error);
   if (err?.error) return { error: err.error.message };
 
-  revalidatePath('/[locale]', 'layout');
+  revalidateCatalog();
   return { success: true };
 }
 
@@ -256,7 +249,7 @@ export async function deleteAudioFile(fileId: string) {
     .eq('id', fileId);
 
   if (error) return { error: error.message };
-  revalidatePath('/[locale]', 'layout');
+  revalidateCatalog();
   return { success: true };
 }
 
@@ -284,7 +277,7 @@ export async function deleteImage(imageId: string) {
   // Get the image record to find the R2 file key
   const { data: image, error: fetchError } = await supabase
     .from('lesson_images')
-    .select('file_key')
+    .select('file_key, thumb_key')
     .eq('id', imageId)
     .single();
 
@@ -296,6 +289,7 @@ export async function deleteImage(imageId: string) {
   try {
     const { deleteFromR2 } = await import('@/lib/r2');
     await deleteFromR2(image.file_key);
+    if (image.thumb_key) await deleteFromR2(image.thumb_key);
   } catch (err) {
     console.error('R2 delete failed for image:', err);
     // Continue to delete DB record even if R2 fails
@@ -308,7 +302,7 @@ export async function deleteImage(imageId: string) {
     .eq('id', imageId);
 
   if (error) return { error: error.message };
-  revalidatePath('/[locale]', 'layout');
+  revalidateCatalog();
   return { success: true };
 }
 
@@ -358,7 +352,7 @@ export async function bulkUpdateLessonCategory(
       return { error: error.message };
     }
 
-    revalidatePath('/[locale]', 'layout');
+    revalidateCatalog();
     return { success: true };
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Failed to update lessons' };

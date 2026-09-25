@@ -4,6 +4,7 @@ import {
   loadInitialLessonList,
   loadPaginatedLessonList,
   mergeSearchResults,
+  normalizeSearchQuery,
   type LessonFilterableQuery,
   type LessonListReader,
 } from './lesson-list';
@@ -56,7 +57,6 @@ const lesson: LessonWithRelations = {
 function createReader(overrides: Partial<LessonListReader> = {}): LessonListReader {
   return {
     getAllCategories: vi.fn(async () => [category]),
-    getAudioLessonIds: vi.fn(async () => ['lesson-1']),
     getChildCategoryIds: vi.fn(async () => []),
     getTagCounts: vi.fn(async () => [
       { tag: 'אמונה ובטחון', lesson_count: 4 },
@@ -148,28 +148,15 @@ describe('loadInitialLessonList', () => {
       isSearchMode: false,
     });
   });
-
-  it('does not query lessons when an audio type filter has no matching lesson ids', async () => {
-    const getLessonsPage = vi.fn(async () => [lesson]);
-    const reader = createReader({
-      getAudioLessonIds: vi.fn(async () => []),
-      getLessonsPage,
-    });
-
-    const result = await loadInitialLessonList(reader, { audioTypeFilter: 'סידור' });
-
-    expect(result).toMatchObject({
-      ok: true,
-      lessons: [],
-      hasMore: false,
-    });
-    expect(getLessonsPage).not.toHaveBeenCalled();
-  });
 });
 
 /** Records the filter calls a PostgREST builder would receive. */
 class RecordingQuery implements LessonFilterableQuery<RecordingQuery> {
-  calls: Array<[string, string, readonly string[]]> = [];
+  calls: Array<[string, string, string | readonly string[]]> = [];
+  eq(column: string, value: string) {
+    this.calls.push(['eq', column, value]);
+    return this;
+  }
   in(column: string, values: readonly string[]) {
     this.calls.push(['in', column, values]);
     return this;
@@ -183,13 +170,13 @@ class RecordingQuery implements LessonFilterableQuery<RecordingQuery> {
 describe('lesson list tag filter', () => {
   it('filters by tag with array containment, combined with the other filters', () => {
     const query = applyLessonFilters(new RecordingQuery(), {
-      lessonIds: ['lesson-1'],
+      audioType: 'סידור',
       categoryIds: ['cat-1', 'cat-2'],
       tag: 'אמונה ובטחון',
     });
 
     expect(query.calls).toEqual([
-      ['in', 'id', ['lesson-1']],
+      ['eq', 'audio_type_match.audio_type', 'סידור'],
       ['in', 'category_id', ['cat-1', 'cat-2']],
       ['contains', 'tags', ['אמונה ובטחון']],
     ]);
@@ -199,20 +186,20 @@ describe('lesson list tag filter', () => {
     expect(applyLessonFilters(new RecordingQuery(), {}).calls).toEqual([]);
   });
 
-  it('passes the tag param to both the first page and later pages', async () => {
+  it('passes the tag and audio type params to both the first page and later pages', async () => {
     const getLessonsPage = vi.fn(async () => [lesson]);
     const reader = createReader({ getLessonsPage });
 
-    await loadInitialLessonList(reader, { tagFilter: 'שבת', categoryFilter: 'cat-1' });
+    await loadInitialLessonList(reader, { tagFilter: 'שבת', categoryFilter: 'cat-1', audioTypeFilter: 'סידור' });
     await loadPaginatedLessonList(reader, { offset: 20, limit: 20, tagFilter: 'שבת' });
 
     expect(getLessonsPage).toHaveBeenNthCalledWith(1, 0, 20, {
-      lessonIds: undefined,
+      audioType: 'סידור',
       categoryIds: ['cat-1'],
       tag: 'שבת',
     });
     expect(getLessonsPage).toHaveBeenNthCalledWith(2, 20, 20, {
-      lessonIds: undefined,
+      audioType: undefined,
       categoryIds: undefined,
       tag: 'שבת',
     });
@@ -228,6 +215,50 @@ describe('lesson list tag filter', () => {
       'אמונה ובטחון',
     ]);
     expect(result).toMatchObject({ ok: true, isSearchMode: true, matchedTags: ['אמונה ובטחון'] });
+  });
+});
+
+describe('normalizeSearchQuery', () => {
+  it('strips niqqud and cantillation so pointed input matches unpointed titles', () => {
+    expect(normalizeSearchQuery('בְּרֵאשִׁ֖ית')).toBe('בראשית');
+    expect(normalizeSearchQuery('עֵץ חַיִּים')).toBe('עץ חיים');
+  });
+
+  it('strips the marks of pointed presentation forms', () => {
+    // U+FB2A is shin with shin dot as a single code point.
+    expect(normalizeSearchQuery('\uFB2Aבת')).toBe('שבת');
+  });
+
+  it('keeps Hebrew punctuation and accented Latin text intact', () => {
+    expect(normalizeSearchQuery('בית־המקדש')).toBe('בית־המקדש');
+    expect(normalizeSearchQuery('café')).toBe('café');
+  });
+
+  it('trims and collapses whitespace; missing or empty input is empty', () => {
+    expect(normalizeSearchQuery('  אמונה \n  ובטחון ')).toBe('אמונה ובטחון');
+    expect(normalizeSearchQuery(undefined)).toBe('');
+    expect(normalizeSearchQuery('ְ ')).toBe('');
+  });
+
+  it('searches and matches tags with the normalized query', async () => {
+    const searchLessons = vi.fn(async () => [lesson]);
+    const reader = createReader({ searchLessons });
+
+    const result = await loadInitialLessonList(reader, { q: ' בִּטָּחוֹן ' });
+
+    expect(searchLessons).toHaveBeenCalledWith('בטחון', expect.any(Object), ['אמונה ובטחון']);
+    expect(result).toMatchObject({ ok: true, isSearchMode: true, matchedTags: ['אמונה ובטחון'] });
+  });
+
+  it('lists lessons instead of searching when the query is only marks', async () => {
+    const searchLessons = vi.fn(async () => [lesson]);
+    const getLessonsPage = vi.fn(async () => [lesson]);
+    const reader = createReader({ searchLessons, getLessonsPage });
+
+    const result = await loadInitialLessonList(reader, { q: 'ְּ' });
+
+    expect(searchLessons).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ ok: true, isSearchMode: false });
   });
 });
 

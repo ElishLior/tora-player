@@ -24,10 +24,16 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     // Service worker scripts must always be revalidated so updates are seen.
-    return ['/sw.js', '/sw-push.js'].map((source) => ({
+    const serviceWorkers = ['/sw.js', '/sw-push.js'].map((source) => ({
       source,
       headers: [{ key: 'Cache-Control', value: 'no-cache' }],
     }));
+    // Preview and local deploys must never be indexed next to production.
+    const noindex =
+      process.env.VERCEL_ENV === 'production'
+        ? []
+        : [{ source: '/:path*', headers: [{ key: 'X-Robots-Tag', value: 'noindex' }] }];
+    return [...serviceWorkers, ...noindex];
   },
 };
 
