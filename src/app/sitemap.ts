@@ -1,12 +1,13 @@
 import type { MetadataRoute } from 'next';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { PHASE_PRODUCTION_BUILD } from 'next/constants';
+import { unstable_cache } from 'next/cache';
 import { categoryPath, lessonPath, pageUrl, playlistPath, seriesPath } from '@/config/site';
 import { createAnonSupabaseClient } from '@/lib/supabase/anon';
 import { fetchTagCounts } from '@/lib/supabase/lesson-list';
 import { tagPath } from '@/lib/tag-links';
 
-export const revalidate = 3600;
+// CI has no database: populate the public sitemap from live data on its first request.
+export const dynamic = 'force-dynamic';
 
 /** Listing pages worth indexing; personal and admin pages are excluded (see robots.ts). */
 const LISTING_PATHS = ['/', '/lessons', '/shorts', '/series', '/categories', '/tags', '/playlists'];
@@ -60,20 +61,15 @@ async function catalogEntries(): Promise<MetadataRoute.Sitemap> {
   ];
 }
 
-/** Indexable pages on their canonical (default-locale) URLs. */
+const getCachedCatalogEntries = unstable_cache(catalogEntries, ['sitemap', 'catalog'], {
+  revalidate: 3600,
+  tags: ['catalog'],
+});
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const listings: MetadataRoute.Sitemap = LISTING_PATHS.map((pathname) => ({
     url: pageUrl(pathname),
     changeFrequency: 'daily',
   }));
-  try {
-    return [...listings, ...(await catalogEntries())];
-  } catch (error) {
-    // At runtime a failure keeps serving the last generated sitemap. `next
-    // build` prerenders this route and CI builds have no database: list the
-    // listing pages only until the first revalidation.
-    if (process.env.NEXT_PHASE !== PHASE_PRODUCTION_BUILD) throw error;
-    console.warn('[sitemap] database unavailable at build, prerendering listing pages only:', error);
-    return listings;
-  }
+  return [...listings, ...(await getCachedCatalogEntries())];
 }

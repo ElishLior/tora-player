@@ -86,7 +86,7 @@ export function UpNextSheet({ onClose }: UpNextSheetProps) {
           <ol className="space-y-0.5 overflow-y-auto px-2 pb-4">
             {upcoming.map((track, offset) => {
               const index = firstUpcoming + offset;
-              const hasParts = (track.partCount ?? 1) > 1;
+              const hasParts = (track.partCount ?? 1) > 1 || (!!track.audioFileId && track.partCount === undefined);
               return (
                 <li key={getTrackKey(track) ?? index} className="flex items-center gap-1">
                   <button
@@ -103,7 +103,9 @@ export function UpNextSheet({ onClose }: UpNextSheetProps) {
                     <span className="block truncate text-xs text-muted-foreground">
                       {track.seriesName && <bdi>{track.seriesName}</bdi>}
                       {track.seriesName && (hasParts || track.duration > 0) && ' · '}
-                      {hasParts && t('partOf', { number: (track.partIndex ?? 0) + 1, count: track.partCount ?? 1 })}
+                      {hasParts && (track.partCount
+                        ? t('partOf', { number: (track.partIndex ?? 0) + 1, count: track.partCount })
+                        : t('partUnknown'))}
                       {hasParts && track.duration > 0 && ' · '}
                       {track.duration > 0 && <bdi>{formatDuration(track.duration)}</bdi>}
                     </span>

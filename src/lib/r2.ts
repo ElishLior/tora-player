@@ -2,6 +2,7 @@ import {
   S3Client,
   PutObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   DeleteObjectCommand,
   DeleteObjectsCommand,
   ListObjectsV2Command,
@@ -50,6 +51,11 @@ export async function getDownloadPresignedUrl(
     ResponseCacheControl: cacheControl,
   });
   return getSignedUrl(r2Client, command, { expiresIn, signingDate });
+}
+
+/** Read object headers without transferring audio bytes. */
+export async function headR2Object(key: string) {
+  return r2Client.send(new HeadObjectCommand({ Bucket: BUCKET, Key: key }));
 }
 
 export async function uploadToR2(key: string, body: Buffer | Uint8Array, contentType: string) {

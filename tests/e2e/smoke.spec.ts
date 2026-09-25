@@ -83,14 +83,12 @@ test.describe('Tora Player Smoke Tests', () => {
     expect(scrollWidth).toBeLessThanOrEqual(clientWidth + 5); // 5px tolerance
   });
 
-  test('Verify bottom navigation is visible', async ({ page }) => {
+  test('Bottom navigation opens the lessons catalog', async ({ page }) => {
     await page.goto(`${BASE_URL}/he`);
-    const nav = page.locator('nav[role="navigation"][aria-label="Main navigation"]');
-    await expect(nav).toBeVisible();
-    // Check nav items exist
-    const navLinks = nav.locator('a');
-    const count = await navLinks.count();
-    expect(count).toBeGreaterThanOrEqual(3);
+    const nav = page.getByRole('navigation', { name: he.nav.label });
+    await nav.getByRole('link', { name: he.nav.lessons }).click();
+    await expect(page).toHaveURL(`${BASE_URL}/he/lessons`);
+    await expect(page.getByRole('main').getByRole('heading', { name: he.lessons.title })).toBeVisible();
   });
 
   test('Verify header links home with the app name', async ({ page }) => {

@@ -1,22 +1,19 @@
-import { PHASE_PRODUCTION_BUILD } from 'next/constants';
+import { unstable_cache } from 'next/cache';
 import { FEED_PATH, SITE_DESCRIPTION, SITE_NAME, absoluteUrl, pageUrl } from '@/config/site';
-import { buildPodcastFeed, loadFeedLessons, type FeedLesson } from '@/lib/podcast-feed';
+import { buildPodcastFeed, loadFeedLessons } from '@/lib/podcast-feed';
 import { createAnonSupabaseClient } from '@/lib/supabase/anon';
 
-export const revalidate = 900;
+// CI has no database: generate the first feed from live data on the first request.
+export const dynamic = 'force-dynamic';
+const getFeedLessons = unstable_cache(
+  () => loadFeedLessons(createAnonSupabaseClient()),
+  ['podcast-feed', 'main'],
+  { revalidate: 900, tags: ['catalog'] },
+);
 
-/** Site-wide podcast feed: every published lesson except short clips, one episode per audio part. */
+/** Site-wide podcast feed: published non-short lessons, one episode per audio file. */
 export async function GET() {
-  let lessons: FeedLesson[] = [];
-  try {
-    lessons = await loadFeedLessons(createAnonSupabaseClient());
-  } catch (error) {
-    // At runtime a failure keeps serving the last generated feed. `next build`
-    // prerenders this route and CI builds have no database: emit an empty feed
-    // that the first revalidation replaces.
-    if (process.env.NEXT_PHASE !== PHASE_PRODUCTION_BUILD) throw error;
-    console.warn('[feed.xml] database unavailable at build, prerendering an empty feed:', error);
-  }
+  const lessons = await getFeedLessons();
 
   const xml = buildPodcastFeed(
     {

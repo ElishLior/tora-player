@@ -9,6 +9,9 @@ vi.mock('@/lib/supabase/anon', () => ({
   createAnonSupabaseClient: vi.fn(),
 }));
 
+// Run the real feed builder; Next's cache requires a request runtime absent in Vitest.
+vi.mock('next/cache', () => ({ unstable_cache: (fn: () => Promise<unknown>) => fn }));
+
 // The real module also builds next-intl navigation, which needs the Next.js runtime.
 vi.mock('@/i18n/routing', () => ({ routing: { locales: ['he', 'en'], defaultLocale: 'he' } }));
 
@@ -17,16 +20,30 @@ import { GET } from './route';
 
 type Result = { data: unknown; error: unknown };
 
-/** Minimal PostgREST builder: every filter chains, awaiting resolves to the table's canned result. */
+/** Minimal PostgREST builder with the same page boundaries as the public API. */
 function fakeSupabase(results: Record<string, Result>) {
   return {
     from(table: string) {
       const result = results[table] ?? { data: [], error: null };
+      let start = 0;
+      let end = Number.POSITIVE_INFINITY;
       const builder: Record<string, unknown> = {
         then: (resolve: (value: Result) => unknown, reject: (reason: unknown) => unknown) =>
-          Promise.resolve(result).then(resolve, reject),
+          Promise.resolve({
+            ...result,
+            data: Array.isArray(result.data) ? result.data.slice(start, end + 1) : result.data,
+          }).then(resolve, reject),
+        range: (from: number, to: number) => {
+          start = from;
+          end = to;
+          return builder;
+        },
+        limit: (count: number) => {
+          end = Math.min(end, start + count - 1);
+          return builder;
+        },
       };
-      for (const method of ['select', 'eq', 'or', 'order', 'limit']) builder[method] = () => builder;
+      for (const method of ['select', 'eq', 'or', 'order']) builder[method] = () => builder;
       return builder;
     },
   };
@@ -129,6 +146,50 @@ describe('GET /feed.xml', () => {
     expect(single).toContain('<title>Single part</title>');
     expect(single).toContain('<description>תיאור קצר</description>');
     expect(single).toContain('type="audio/mpeg"');
+  });
+
+  it('keeps older published lessons after the first feed page', async () => {
+    const manyLessons = Array.from({ length: 225 }, (_, index) => ({
+      ...lessons[1],
+      id: `lesson-${index}`,
+      title: `Lesson ${index}`,
+      audio_files: [audio(`part-${index}`, 0)],
+    }));
+    vi.mocked(createAnonSupabaseClient).mockReturnValue(
+      fakeSupabase({
+        categories: { data: [], error: null },
+        lessons: { data: manyLessons, error: null },
+      }) as unknown as SupabaseClient,
+    );
+
+    const xml = await feedXml();
+    expect(xml.match(/<item>/g)).toHaveLength(225);
+    expect(xml).toContain('<guid isPermaLink="false">part-224</guid>');
+  });
+
+  it('publishes the legacy audio of a lesson without part rows', async () => {
+    vi.mocked(createAnonSupabaseClient).mockReturnValue(
+      fakeSupabase({
+        categories: { data: [], error: null },
+        lessons: {
+          data: [{
+            ...lessons[1],
+            id: 'legacy-lesson',
+            title: 'Legacy lesson',
+            audio_url: '/api/audio/stream/audio%2Flegacy%2Frecording.mp3',
+            file_size: 321,
+            audio_files: [],
+          }],
+          error: null,
+        },
+      }) as unknown as SupabaseClient,
+    );
+
+    const xml = await feedXml();
+    expect(xml).toContain('<guid isPermaLink="false">legacy-lesson</guid>');
+    expect(xml).toContain(
+      '<enclosure url="https://torah.example/api/audio/download/audio%2Flegacy%2Frecording.mp3?disposition=inline" length="321" type="audio/mpeg"/>',
+    );
   });
 
   it('escapes markup and drops characters XML forbids', async () => {

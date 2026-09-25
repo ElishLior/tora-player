@@ -550,6 +550,8 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
           duration: asset.duration,
           fileSize: asset.fileSize,
           sortOrder: asset.sortOrder,
+          partIndex: asset.partIndex,
+          partCount: asset.partCount,
         })),
         {
           lessonId: lesson.id,

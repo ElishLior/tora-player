@@ -1,6 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { getAudioContentType, getAudioDirectUrl } from '@/lib/audio-download';
+import { normalizeAudioUrl } from '@/lib/audio-url';
 import { PODCAST_COVER_PATH, SITE_AUTHOR, absoluteUrl, lessonUrl } from '@/config/site';
-import { lessonDescription, lessonEpisodeAudio } from '@/lib/seo';
+import { lessonDescription, lessonEpisodeAudio, type EpisodeAudio } from '@/lib/seo';
 import { LESSON_AUDIO_FILES } from '@/lib/supabase/lesson-selects';
 import { SHORT_LESSON_TYPE, SHORTS_CATEGORY_ID } from '@/lib/upload-drafts';
 import type { LessonWithRelations } from '@/types/database';
@@ -10,8 +12,8 @@ import type { LessonWithRelations } from '@/types/database';
  * part, so a two-part lesson is two episodes with stable GUIDs (lesson_audio id).
  */
 
-/** Newest lessons per feed; podcast apps only need the recent back catalogue. */
-export const FEED_LESSON_LIMIT = 200;
+/** Supabase returns a bounded page; the feed walks every page of the published catalogue. */
+const FEED_PAGE_SIZE = 200;
 
 export type FeedLesson = Pick<
   LessonWithRelations,
@@ -24,11 +26,13 @@ export type FeedLesson = Pick<
   | 'hebrew_date'
   | 'parsha'
   | 'duration'
+  | 'audio_url'
+  | 'file_size'
   | 'series'
   | 'audio_files'
 >;
 
-const FEED_LESSON_COLUMNS = `id, title, hebrew_title, description, summary, date, hebrew_date, parsha, duration, series(id, name, hebrew_name), ${LESSON_AUDIO_FILES}`;
+const FEED_LESSON_COLUMNS = `id, title, hebrew_title, description, summary, date, hebrew_date, parsha, duration, audio_url, file_size, series(id, name, hebrew_name), ${LESSON_AUDIO_FILES}`;
 
 export interface FeedChannel {
   title: string;
@@ -48,28 +52,38 @@ export async function loadFeedLessons(
   supabase: SupabaseClient,
   options: { seriesId?: string } = {},
 ): Promise<FeedLesson[]> {
-  let query = supabase.from('lessons').select(FEED_LESSON_COLUMNS).eq('is_published', true);
-
-  if (options.seriesId) {
-    query = query.eq('series_id', options.seriesId);
-  } else {
+  let shortCategoryIds: string[] | null = null;
+  if (!options.seriesId) {
     const { data: topics, error: topicsError } = await supabase
       .from('categories')
       .select('id')
       .eq('parent_id', SHORTS_CATEGORY_ID);
     if (topicsError) throw topicsError;
-    const shortCategoryIds = [SHORTS_CATEGORY_ID, ...(topics ?? []).map((topic) => topic.id as string)];
-    query = query
-      .or(`lesson_type.is.null,lesson_type.neq.${SHORT_LESSON_TYPE}`)
-      .or(`category_id.is.null,category_id.not.in.(${shortCategoryIds.join(',')})`);
+    shortCategoryIds = [SHORTS_CATEGORY_ID, ...(topics ?? []).map((topic) => topic.id as string)];
   }
 
-  const { data, error } = await query
-    .order('date', { ascending: false })
-    .order('created_at', { ascending: false })
-    .limit(FEED_LESSON_LIMIT);
-  if (error) throw error;
-  return (data ?? []) as unknown as FeedLesson[];
+  const lessons: FeedLesson[] = [];
+  for (let offset = 0; ; offset += FEED_PAGE_SIZE) {
+    let query = supabase.from('lessons').select(FEED_LESSON_COLUMNS).eq('is_published', true);
+    if (options.seriesId) {
+      query = query.eq('series_id', options.seriesId);
+    } else if (shortCategoryIds) {
+      query = query
+        .or(`lesson_type.is.null,lesson_type.neq.${SHORT_LESSON_TYPE}`)
+        .or(`category_id.is.null,category_id.not.in.(${shortCategoryIds.join(',')})`);
+    }
+
+    const { data, error } = await query
+      .order('date', { ascending: false })
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(offset, offset + FEED_PAGE_SIZE - 1);
+    if (error) throw error;
+    const page = (data ?? []) as unknown as FeedLesson[];
+    lessons.push(...page);
+    if (page.length < FEED_PAGE_SIZE) break;
+  }
+  return lessons;
 }
 
 const INVALID_XML_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g;
@@ -92,7 +106,27 @@ function renderItems(lessons: readonly FeedLesson[]): string[] {
     const link = lessonUrl(lesson.id);
     // Lesson day (UTC midnight); each part a minute later so apps keep part order.
     const day = Date.parse(`${lesson.date}T00:00:00Z`);
-    return lessonEpisodeAudio(lesson.audio_files ?? []).map((part) => {
+    const audioFiles = lesson.audio_files ?? [];
+    let parts: EpisodeAudio[];
+    if (audioFiles.length > 0) {
+      parts = lessonEpisodeAudio(audioFiles);
+    } else {
+      const audioUrl = normalizeAudioUrl(lesson.audio_url);
+      const directUrl = audioUrl && getAudioDirectUrl(audioUrl);
+      parts = directUrl
+        ? [{
+            id: lesson.id,
+            url: absoluteUrl(directUrl),
+            contentType: getAudioContentType(audioUrl),
+            fileSize: lesson.file_size || 0,
+            duration: lesson.duration || 0,
+            partNumber: 1,
+            partCount: 1,
+            label: null,
+          }]
+        : [];
+    }
+    return parts.map((part) => {
       const partTitle =
         part.partCount > 1
           ? `${title} · חלק ${part.partNumber}${part.label ? ` (${part.label})` : ''}`

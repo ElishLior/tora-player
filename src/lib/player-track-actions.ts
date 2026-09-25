@@ -37,7 +37,9 @@ export function getTrackOfflineDownloadInput(track: AudioTrack): OfflineAudioDow
     title: track.originalName || track.hebrewTitle || track.title,
     originalName: track.originalName,
     duration: track.duration,
-    sortOrder: 0,
+    sortOrder: track.partIndex ?? 0,
+    partIndex: track.partIndex,
+    partCount: track.partCount,
   };
 }
 

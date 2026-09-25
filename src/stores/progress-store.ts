@@ -11,6 +11,7 @@ export interface LocalProgress {
   lessonId: string;
   audioFileId?: string;
   position: number;
+  duration?: number;
   lastPlayed: string;
   completed: boolean;
 }

@@ -9,10 +9,10 @@ Production: https://tora-player.vercel.app
 - Framework: Next.js 15 App Router, TypeScript, Tailwind CSS
 - Database: Supabase Postgres with RLS
 - Storage: Cloudflare R2 for audio and images
-- Media delivery: app proxy routes at `/api/audio/stream/[fileKey]` and `/api/images/stream/[fileKey]`
+- Media delivery: playback via `/api/audio/stream/[fileKey]`; downloads and podcast enclosures via `/api/audio/download/[fileKey]` (GET redirects to R2; HEAD returns matching metadata)
 - Audio engine: singleton browser audio lifecycle plus Zustand player store
 - i18n: `next-intl`, Hebrew RTL primary
-- Auth: cookie-based admin auth, no user accounts
+- Auth: Supabase Auth user accounts; admin access is authorized separately
 
 ## Local Development
 
@@ -70,6 +70,13 @@ The current app includes:
 - Player UI state recovery when native/browser audio resumes outside React state.
 - Mobile/responsive QA coverage for compact player controls.
 - Production smoke coverage for lesson loading, player behavior, offline playback, and download headers.
+
+## Listening And Podcast Feeds
+
+- Lessons play their audio parts in order. Progress records the current part and its position; offline copies retain the original part count even when only one file is saved.
+- `/feed.xml` includes all published non-short lessons; `/series/<id>/feed.xml` includes the published lessons in that series, including older single-file audio. One audio file produces one episode with a stable GUID.
+- Enclosure GET redirects to R2 (which supports Range); HEAD reads only object metadata and returns the matching type, byte length, and optional attachment filename. Publishing or editing catalog content invalidates both feeds and the sitemap.
+- Most uploaded audio is Opus (`audio/ogg`). These feeds work in podcast apps that support Opus; Apple Podcasts requires MP3/AAC and is not supported until compatible renditions exist.
 
 ## Important Constraints
 

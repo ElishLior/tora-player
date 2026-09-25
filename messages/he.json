@@ -244,6 +244,7 @@
     "playNext": "נגן הבא",
     "queuedNext": "נכנס לתור",
     "partOf": "חלק {number} מתוך {count}",
+    "partUnknown": "חלק מהשיעור",
     "expandPlayer": "פתח נגן מלא",
     "downloadToDevice": "הורדת קובץ למכשיר",
     "newBadge": "חדש",

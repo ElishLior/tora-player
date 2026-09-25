@@ -49,16 +49,11 @@ export function LessonCard({ lesson, showProgress, selectable, selected, onToggl
   const isNew = hydrated && !saved && isNewSince(lesson.created_at, previousVisitAt);
   const canPlayNext = hydrated && !!currentTrack && !isCurrentlyPlaying && tracks.length > 0;
 
-  const handlePlayNext = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handlePlayNext = () => {
     useAudioStore.getState().playNext(tracks);
   };
 
-  const handlePlay = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-
+  const handlePlay = () => {
     if (isCurrentlyPlaying && isPlaying) {
       // Pause — stay on current page
       togglePlay();
@@ -77,6 +72,22 @@ export function LessonCard({ lesson, showProgress, selectable, selected, onToggl
     playLesson(tracks);
     router.push(`/lessons/${lesson.id}`);
   };
+
+  const infoContent = (
+    <>
+      <h3 className={`text-sm font-semibold truncate ${
+        isCurrentlyPlaying && !selectable ? 'text-primary' : 'text-foreground'
+      }`} dir="rtl">
+        {lesson.hebrew_title || lesson.title}
+      </h3>
+      <p className="text-xs text-muted-foreground truncate mt-0.5" dir="rtl">
+        {lesson.parsha && <span className="text-primary/80">{lesson.parsha}</span>}
+        {lesson.parsha && ' · '}
+        {lesson.hebrew_date || new Date(lesson.date).toLocaleDateString('he-IL')}
+        {lesson.duration > 0 && ` · ${formatDuration(lesson.duration)}`}
+      </p>
+    </>
+  );
 
   const cardContent = (
     <>
@@ -101,8 +112,9 @@ export function LessonCard({ lesson, showProgress, selectable, selected, onToggl
         ) : (
           /* Play button / Equalizer */
           <button
+            type="button"
             onClick={handlePlay}
-            className="flex-shrink-0 h-10 w-10 rounded-md bg-[hsl(var(--surface-elevated))] flex items-center justify-center transition-all group-hover:bg-primary group-hover:shadow-lg group-hover:shadow-primary/25"
+            className="relative z-10 flex-shrink-0 h-10 w-10 rounded-md bg-[hsl(var(--surface-elevated))] flex items-center justify-center transition-all group-hover:bg-primary group-hover:shadow-lg group-hover:shadow-primary/25"
             aria-label={t('play')}
           >
             {isCurrentlyPlaying && isPlaying ? (
@@ -120,23 +132,17 @@ export function LessonCard({ lesson, showProgress, selectable, selected, onToggl
           </button>
         )}
 
-        {/* Info */}
-        <div className="flex-1 min-w-0">
-          <h3 className={`text-sm font-semibold truncate ${
-            isCurrentlyPlaying && !selectable ? 'text-primary' : 'text-foreground'
-          }`} dir="rtl">
-            {lesson.hebrew_title || lesson.title}
-          </h3>
-
-          <p className="text-xs text-muted-foreground truncate mt-0.5" dir="rtl">
-            {lesson.parsha && (
-              <span className="text-primary/80">{lesson.parsha}</span>
-            )}
-            {lesson.parsha && ' · '}
-            {lesson.hebrew_date || new Date(lesson.date).toLocaleDateString('he-IL')}
-            {lesson.duration > 0 && ` · ${formatDuration(lesson.duration)}`}
-          </p>
-        </div>
+        {/* The lesson link covers the card, but never wraps the play or queue buttons. */}
+        {selectable ? (
+          <div className="flex-1 min-w-0">{infoContent}</div>
+        ) : (
+          <Link
+            href={`/lessons/${lesson.id}`}
+            className="flex-1 min-w-0 before:absolute before:inset-0 before:content-['']"
+          >
+            {infoContent}
+          </Link>
+        )}
 
         {/* Category badge (show in selection mode) */}
         {selectable && lesson.category && (
@@ -175,7 +181,7 @@ export function LessonCard({ lesson, showProgress, selectable, selected, onToggl
             type="button"
             onClick={handlePlayNext}
             disabled={isQueuedNext}
-            className="flex-shrink-0 rounded-full p-1.5 text-muted-foreground transition-colors hover:text-foreground disabled:text-primary"
+            className="relative z-10 flex-shrink-0 rounded-full p-1.5 text-muted-foreground transition-colors hover:text-foreground disabled:text-primary"
             aria-label={isQueuedNext ? t('queuedNext') : t('playNext')}
             title={isQueuedNext ? t('queuedNext') : t('playNext')}
           >
@@ -212,11 +218,8 @@ export function LessonCard({ lesson, showProgress, selectable, selected, onToggl
   }
 
   return (
-    <Link
-      href={`/lessons/${lesson.id}`}
-      className="group block rounded-lg p-3 transition-all hover:bg-[hsl(var(--surface-highlight))]"
-    >
+    <div className="group relative block rounded-lg p-3 transition-all hover:bg-[hsl(var(--surface-highlight))]">
       {cardContent}
-    </Link>
+    </div>
   );
 }

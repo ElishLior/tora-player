@@ -39,10 +39,13 @@ export function createAnonSupabaseClient(): SupabaseClient {
   return anonClient;
 }
 
-/** After a catalog write (lessons, audio parts, categories, series): drop cached reads and re-render pages. */
+/** After a catalog write, refresh public pages as well as independently cached feeds and the sitemap. */
 export function revalidateCatalog() {
   revalidateTag(CATALOG_TAG);
   revalidatePath('/[locale]', 'layout');
+  revalidatePath('/feed.xml');
+  revalidatePath('/series/[seriesId]/feed.xml', 'page');
+  revalidatePath('/sitemap.xml');
 }
 
 // Cached public catalog reads (5 minutes, or until revalidateCatalog()).

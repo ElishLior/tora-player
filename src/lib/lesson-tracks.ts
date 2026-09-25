@@ -19,6 +19,8 @@ export interface LessonAudioAsset {
   duration: number;
   fileSize?: number;
   sortOrder: number;
+  partIndex: number;
+  partCount: number;
   offlineKey: string;
 }
 
@@ -44,6 +46,8 @@ export function getLessonAudioAssets(lesson: LessonWithRelations): LessonAudioAs
         audioType: audio.audio_type,
         duration: audio.duration || 0,
         fileSize: audio.file_size,
+        partIndex: index,
+        partCount: sortedAudioFiles.length,
         sortOrder: audio.sort_order ?? index,
         offlineKey: getOfflineKey(lesson.id, {
           audioFileId: audio.id,
@@ -64,6 +68,8 @@ export function getLessonAudioAssets(lesson: LessonWithRelations): LessonAudioAs
       duration: lesson.duration,
       fileSize: lesson.file_size,
       sortOrder: 0,
+      partIndex: 0,
+      partCount: 1,
       offlineKey: getOfflineKey(lesson.id, { audioUrl }),
     },
   ];
@@ -87,7 +93,7 @@ function createLessonTrack(
     hebrewTitle: lesson.hebrew_title || lesson.title,
     audioUrl: asset.audioUrl,
     audioUrlFallback: normalizeAudioUrl(lesson.audio_url_fallback) || undefined,
-    duration: asset.duration || lesson.duration,
+    duration: asset.duration || (partCount === 1 ? lesson.duration : 0),
     seriesName: lesson.series?.hebrew_name || lesson.series?.name || undefined,
     date: lesson.date,
     description: lesson.description || lesson.summary || undefined,
@@ -104,18 +110,18 @@ export function getLessonTracks(lesson: LessonWithRelations): AudioTrack[] {
 /** The tracks of a lesson saved on this device (played from IndexedDB). */
 export function getOfflineLessonTracks(lesson: OfflineLessonMeta): AudioTrack[] {
   const files = [...lesson.audioFiles].sort((a, b) => a.sortOrder - b.sortOrder);
-  return files.map((file, index) => ({
+  return files.map((file) => ({
     id: lesson.lessonId,
     lessonId: lesson.lessonId,
     audioFileId: file.audioFileId,
-    partIndex: index,
-    partCount: files.length,
+    partIndex: file.partIndex ?? (file.audioFileId ? undefined : 0),
+    partCount: file.partCount ?? (file.audioFileId ? undefined : 1),
     fileKey: file.fileKey,
     offlineKey: file.offlineKey,
     title: lesson.title,
     hebrewTitle: lesson.hebrewTitle || lesson.title,
     audioUrl: file.audioUrl,
-    duration: file.duration || lesson.duration,
+    duration: file.duration || (file.partCount === 1 || !file.audioFileId ? lesson.duration : 0),
     seriesName: lesson.seriesName,
     date: lesson.date,
     originalName: file.originalName || file.title,

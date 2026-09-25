@@ -244,6 +244,7 @@
     "playNext": "Play next",
     "queuedNext": "Queued next",
     "partOf": "Part {number} of {count}",
+    "partUnknown": "Lesson part",
     "expandPlayer": "Open full player",
     "downloadToDevice": "Download file to device",
     "newBadge": "New",
