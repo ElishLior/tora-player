@@ -15,9 +15,10 @@ const MARKER_COLOR_BY_TAG: Record<string, string> = {
 };
 
 interface BookmarkMarkersProps {
+  /** Only the bookmarks of the part the bar shows. */
   bookmarks: LocalBookmark[];
   duration: number;
-  onSeek: (position: number) => void;
+  onSeek: (bookmark: LocalBookmark) => void;
 }
 
 /**
@@ -37,7 +38,7 @@ export function BookmarkMarkers({ bookmarks, duration, onSeek }: BookmarkMarkers
           <button
             key={bookmark.id}
             type="button"
-            onClick={() => onSeek(bookmark.position)}
+            onClick={() => onSeek(bookmark)}
             aria-label={t('jumpToTime', { time: formatDuration(bookmark.position) })}
             title={bookmark.note || undefined}
             className="pointer-events-auto absolute top-0 flex h-5 w-5 items-center justify-center"
@@ -55,7 +56,7 @@ export function BookmarkMarkers({ bookmarks, duration, onSeek }: BookmarkMarkers
 
 interface BookmarkChipsProps {
   bookmarks: LocalBookmark[];
-  onSeek: (position: number) => void;
+  onSeek: (bookmark: LocalBookmark) => void;
 }
 
 /** Tap a chip to jump to it; the × deletes it (no long-press/right-click needed). */
@@ -81,7 +82,7 @@ export function BookmarkChips({ bookmarks, onSeek }: BookmarkChipsProps) {
             <li key={bookmark.id} className="flex items-center rounded-full bg-amber-500/15 text-amber-400">
               <button
                 type="button"
-                onClick={() => onSeek(bookmark.position)}
+                onClick={() => onSeek(bookmark)}
                 aria-label={t('jumpToTime', { time })}
                 className="flex min-w-0 items-center gap-1 rounded-full py-1 pe-1 ps-2.5 text-xs font-medium transition-colors hover:bg-amber-500/25"
               >

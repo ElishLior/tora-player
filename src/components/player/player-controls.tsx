@@ -16,9 +16,10 @@ interface SkipButtonProps {
 
 /**
  * The one skip control used by every player surface: "back" always rewinds
- * 15s, "forward" always advances 30s, and the icons are never mirrored.
- * Render back → play → forward in DOM order; the document direction then puts
- * "back" on the right in Hebrew (as in Hebrew audio apps) and on the left in English.
+ * 15s, "forward" always advances 30s. Render back → play → forward in DOM
+ * order; the document direction then puts "back" on the right in Hebrew (as in
+ * Hebrew audio apps) and on the left in English. The arrow is mirrored in RTL
+ * so each one points outward, toward its own side of the play button.
  */
 export function SkipButton({
   direction,
@@ -40,7 +41,7 @@ export function SkipButton({
       aria-label={t(isBack ? 'skipBackward' : 'skipForward')}
       className={cn('flex flex-col items-center gap-1 transition-colors disabled:opacity-30', className)}
     >
-      <Icon aria-hidden className={iconClassName} />
+      <Icon aria-hidden className={cn('rtl:-scale-x-100', iconClassName)} />
       <span aria-hidden className={cn('text-[11px] font-bold leading-none tabular-nums', labelClassName)}>
         {t(isBack ? 'skipBackwardShort' : 'skipForwardShort')}
       </span>

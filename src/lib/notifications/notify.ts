@@ -6,6 +6,7 @@ import { sendNewLessonEmails, sendNewLessonsDigestEmails } from '@/lib/notificat
 import { loadAllPushSubscriptions, sendPush, type PushPayload } from '@/lib/notifications/push';
 import { summarizeBatch, type AnnouncedLesson, type NotifyMode } from '@/lib/notifications/batch-rules';
 import { SHORT_LESSON_TYPE, SHORTS_CATEGORY_ID } from '@/lib/upload-drafts';
+import { lessonPath, localePath } from '@/config/site';
 
 const CLAIMED_COLUMNS = 'id, title, hebrew_title, date, hebrew_date, lesson_type, category_id';
 
@@ -44,7 +45,7 @@ async function announceLesson(lesson: AnnouncedLesson): Promise<void> {
     pushToAll({
       title: t('newLessonTitle'),
       body: lesson.title,
-      url: `/he/lessons/${lesson.id}`,
+      url: localePath(lessonPath(lesson.id)),
       tag: `lesson-${lesson.id}`,
     }),
     sendNewLessonEmails({ id: lesson.id, title: lesson.title }),
@@ -126,7 +127,7 @@ export async function notifyNewLessons(lessonIds: string[], mode: NotifyMode): P
       pushToAll({
         title: t('title', { count: summary.count }),
         body: range,
-        url: `/he/lessons/${summary.newest.id}`,
+        url: localePath(lessonPath(summary.newest.id)),
         tag: `lessons-batch-${summary.newest.id}`,
       }),
       sendNewLessonsDigestEmails({

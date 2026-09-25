@@ -3,6 +3,7 @@
 import { audioEngine, type AudioEngineStatus } from "@/lib/audio-engine";
 import { getPlaybackReaction, getRetryDelayMs } from "@/lib/audio-lifecycle";
 import { planTrackPlayback, resolveTrackSource } from "@/lib/audio-resume";
+import { isLastPart, isNearPartEnd } from "@/lib/lesson-progress";
 import { startListenTracking } from "@/lib/listen-tracker";
 import { OFFLINE_DOWNLOADS_CHANGED_EVENT } from "@/lib/offline-events";
 import {
@@ -37,6 +38,8 @@ const SERVER_PROGRESS_INTERVAL_MS = 30_000;
 const RECOVERY_PROVEN_SECONDS = 10;
 // WebKit can leave the first IndexedDB open of a session hanging; stream instead.
 const OFFLINE_LOOKUP_TIMEOUT_MS = 3_000;
+// A minutes sleep timer fades the volume out over its last seconds.
+const SLEEP_FADE_SECONDS = 10;
 
 const getState = useAudioStore.getState;
 
@@ -44,11 +47,14 @@ let downloadedLessonIds: Set<string> | null = null;
 // Offline blob URLs resolved ahead of time, so auto-advance and taps can load
 // synchronously (no await between the gesture/`ended` event and play()).
 const offlineSources = new Map<string, string>();
+let prefetchRevision = 0;
 let loadedTrack: AudioTrack | null = null;
 let pendingLoadKey: string | null = null;
 let playedTrackKey: string | null = null;
 let recovery = { trackKey: null as string | null, attempts: 0, position: 0 };
 let retryTimer: number | null = null;
+let sleepTimerTimeout: number | null = null;
+let stoppedPartKey: string | null = null;
 let resumeWhenOnline = false;
 let lastCheckpointAt = 0;
 let lastServerSaveAt = 0;
@@ -59,13 +65,13 @@ function isEngineOnCurrentTrack() {
   return key !== null && key === audioEngine.getTrackKey() && pendingLoadKey === null;
 }
 
-async function lookupOfflineSource(track: AudioTrack) {
+async function lookupOfflineSource(track: AudioTrack, shouldCache?: () => boolean) {
   const source = await Promise.race([
     getOfflineAudioUrl(getTrackLessonId(track), track.audioUrl, track.offlineKey),
     new Promise<null>((resolve) => window.setTimeout(() => resolve(null), OFFLINE_LOOKUP_TIMEOUT_MS)),
   ]);
   const key = getTrackKey(track);
-  if (source && key) offlineSources.set(key, source);
+  if (source && key && (!shouldCache || shouldCache())) offlineSources.set(key, source);
   return source;
 }
 
@@ -156,6 +162,7 @@ function saveServerProgress(track: AudioTrack, position: number, completed: bool
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       lesson_id: getTrackLessonId(track),
+      audio_file_id: track.audioFileId ?? null,
       position: Math.round(position),
       completed,
     }),
@@ -169,6 +176,26 @@ function saveServerProgress(track: AudioTrack, position: number, completed: bool
     });
 }
 
+/**
+ * Saves where the listener is in a lesson: the part and the position in it.
+ * Reaching the end of the last part marks the lesson heard; any earlier
+ * position (e.g. listening again) clears it.
+ */
+function recordProgress(
+  track: AudioTrack,
+  position: number,
+  completed = isLastPart(track) && isNearPartEnd(position, audioEngine.getDuration()),
+) {
+  useProgressStore.getState().saveProgress({
+    lessonId: getTrackLessonId(track),
+    audioFileId: track.audioFileId,
+    position,
+    duration: audioEngine.getDuration(),
+    completed,
+  });
+  return completed;
+}
+
 /** Persists the position of the loaded track (resume after reload + progress). */
 function checkpoint(options: { server?: boolean } = {}) {
   const state = getState();
@@ -179,19 +206,63 @@ function checkpoint(options: { server?: boolean } = {}) {
   const position = audioEngine.getCurrentTime();
   lastCheckpointAt = Date.now();
   state.setResumePosition(position);
-  useProgressStore.getState().updateProgress(getTrackLessonId(track), position);
+  const completed = recordProgress(track, position);
   if (options.server || lastCheckpointAt - lastServerSaveAt >= SERVER_PROGRESS_INTERVAL_MS) {
-    saveServerProgress(track, position, false);
+    saveServerProgress(track, position, completed);
   }
 }
 
 function finishTrack(track: AudioTrack) {
   const state = getState();
-  useProgressStore.getState().markComplete(getTrackLessonId(track));
-  saveServerProgress(track, audioEngine.getDuration(), true);
+  const position = audioEngine.getDuration();
+  // A finished earlier part leaves progress at its end, so resuming opens the next part.
+  const completed = recordProgress(track, position, isLastPart(track));
+  saveServerProgress(track, position, completed);
   state.setResumePosition(0);
-  if (state.queue[state.queueIndex + 1]) state.nextTrack();
+
+  const { sleepTimer } = state;
+  const next = state.queue[state.queueIndex + 1];
+  // Old offline files lack the original part count. Stop at the last available
+  // file without claiming the whole lesson was heard.
+  const availableLessonEnds = !!track.audioFileId && track.partCount === undefined &&
+    (!next || getTrackLessonId(next) !== getTrackLessonId(track));
+  const stoppedAtEndOfPart = sleepTimer?.kind === "end-of-part";
+  const minutesExpired = sleepTimer?.kind === "minutes" && sleepTimer.endsAt <= Date.now();
+  const sleepNow = stoppedAtEndOfPart || minutesExpired ||
+    (sleepTimer?.kind === "end-of-lesson" && (isLastPart(track) || availableLessonEnds));
+  if (sleepNow) {
+    stoppedPartKey = stoppedAtEndOfPart || minutesExpired ? getTrackKey(track) : null;
+    state.setSleepTimer(null);
+  }
+  if (!sleepNow && next) state.nextTrack();
   else state.pause();
+}
+
+/** Counts down a minutes sleep timer while audio plays, fading out over its last seconds. */
+function applySleepTimer(): boolean {
+  const { sleepTimer, volume, setSleepTimer } = getState();
+  if (sleepTimer?.kind !== "minutes") return false;
+  const remaining = (sleepTimer.endsAt - Date.now()) / 1000;
+  if (remaining > 0) {
+    audioEngine.setVolume(remaining < SLEEP_FADE_SECONDS ? (volume * remaining) / SLEEP_FADE_SECONDS : volume);
+    return false;
+  }
+  setSleepTimer(null);
+  pause();
+  audioEngine.setVolume(volume);
+  return true;
+}
+
+function scheduleSleepTimer() {
+  if (sleepTimerTimeout !== null) window.clearTimeout(sleepTimerTimeout);
+  sleepTimerTimeout = null;
+  const timer = getState().sleepTimer;
+  if (timer?.kind !== "minutes") return;
+  if (applySleepTimer()) return;
+  sleepTimerTimeout = window.setTimeout(() => {
+    sleepTimerTimeout = null;
+    if (getState().sleepTimer === timer && !applySleepTimer()) scheduleSleepTimer();
+  }, Math.max(0, timer.endsAt - Date.now()));
 }
 
 function clearRetry() {
@@ -221,7 +292,11 @@ function prefetchNextOfflineSource() {
   const key = getTrackKey(next);
   if (!next || !key || offlineSources.has(key)) return;
   if (downloadedLessonIds && !downloadedLessonIds.has(getTrackLessonId(next))) return;
-  void lookupOfflineSource(next);
+  const revision = prefetchRevision;
+  void lookupOfflineSource(next, () => {
+    const state = getState();
+    return revision === prefetchRevision && getTrackKey(state.queue[state.queueIndex + 1]) === key;
+  });
 }
 
 function handleStatusChange(status: AudioEngineStatus) {
@@ -234,6 +309,7 @@ function handleStatusChange(status: AudioEngineStatus) {
 
   if (status === "playing") {
     playedTrackKey = key;
+    if (applySleepTimer()) return;
     if (state.playbackIssue) state.setPlaybackIssue(null);
     prefetchNextOfflineSource();
   } else if (status === "paused" || status === "error") {
@@ -277,20 +353,30 @@ function handleTimeUpdate(time: number) {
     recovery.attempts = 0;
   }
   if (Date.now() - lastCheckpointAt >= CHECKPOINT_INTERVAL_MS) checkpoint();
+  applySleepTimer();
 }
 
 function handleStoreChange(state: AudioPlayerState, previous: AudioPlayerState) {
   if (state.playbackSpeed !== previous.playbackSpeed) audioEngine.setRate(state.playbackSpeed);
-  if (state.volume !== previous.volume) audioEngine.setVolume(state.volume);
+  // A changed or cancelled sleep timer ends any fade in progress.
+  if (state.volume !== previous.volume || state.sleepTimer !== previous.sleepTimer) {
+    audioEngine.setVolume(state.volume);
+  }
+  if (state.sleepTimer !== previous.sleepTimer) scheduleSleepTimer();
+  if (state.queue !== previous.queue || state.queueIndex !== previous.queueIndex) {
+    prefetchRevision += 1;
+    if (getTrackKey(state.currentTrack) === getTrackKey(previous.currentTrack) && state.isPlaying) {
+      prefetchNextOfflineSource();
+    }
+  }
 
   if (getTrackKey(state.currentTrack) !== getTrackKey(previous.currentTrack)) {
     // Remember where the previous track was left before the element switches.
     if (previous.currentTrack && playedTrackKey === getTrackKey(previous.currentTrack)) {
-      useProgressStore
-        .getState()
-        .updateProgress(getTrackLessonId(previous.currentTrack), audioEngine.getCurrentTime());
+      recordProgress(previous.currentTrack, audioEngine.getCurrentTime());
     }
     clearRetry();
+    stoppedPartKey = null;
     syncPlayback();
     return;
   }
@@ -347,6 +433,7 @@ export function startAudioController(): () => void {
   window.addEventListener("online", handleOnline);
   window.addEventListener(OFFLINE_DOWNLOADS_CHANGED_EVENT, handleDownloadsChanged);
   void refreshDownloadedLessons();
+  scheduleSleepTimer();
   // Prepare the restored track so the first tap can play synchronously.
   syncPlayback();
 
@@ -358,6 +445,8 @@ export function startAudioController(): () => void {
     window.removeEventListener("online", handleOnline);
     window.removeEventListener(OFFLINE_DOWNLOADS_CHANGED_EVENT, handleDownloadsChanged);
     clearRetry();
+    if (sleepTimerTimeout !== null) window.clearTimeout(sleepTimerTimeout);
+    sleepTimerTimeout = null;
     stopController = null;
   };
   return stopController;
@@ -368,6 +457,12 @@ export function startAudioController(): () => void {
 export function play() {
   const state = getState();
   if (!state.currentTrack) return;
+  if (stoppedPartKey === getTrackKey(state.currentTrack) && state.queue[state.queueIndex + 1]) {
+    stoppedPartKey = null;
+    state.nextTrack();
+    return;
+  }
+  stoppedPartKey = null;
   const alreadyRequested = state.isPlaying;
   state.play();
   // An unchanged intent does not reach the store subscriber (e.g. retrying
@@ -388,10 +483,13 @@ export function togglePlay() {
 export function seekTo(time: number) {
   const state = getState();
   if (!state.currentTrack) return;
-  const duration = audioEngine.getDuration() || state.duration;
+  // Until the element holds this track it still reports the previous one's duration.
+  const onTrack = isEngineOnCurrentTrack();
+  const duration = (onTrack && audioEngine.getDuration()) || state.duration;
   const target = Math.max(0, duration > 0 ? Math.min(time, duration) : time);
   // Before the element holds this track, the store position becomes its start position.
-  if (isEngineOnCurrentTrack()) audioEngine.seek(target);
+  if (onTrack) audioEngine.seek(target);
+  stoppedPartKey = null;
   state.setCurrentTime(target);
   state.setResumePosition(target);
 }
@@ -415,7 +513,15 @@ export function playTrack(
   options: { queue?: AudioTrack[]; queueIndex?: number; startAt?: number } = {},
 ) {
   const state = getState();
-  if (options.queue) state.setQueue(options.queue, options.queueIndex);
+  if (
+    options.queue &&
+    getTrackKey(state.currentTrack) === getTrackKey(track) &&
+    getTrackKey(options.queue[options.queueIndex ?? 0]) === getTrackKey(track)
+  ) {
+    useAudioStore.setState({ queue: options.queue, queueIndex: options.queueIndex ?? 0 });
+    if (audioEngine.getTrackKey() === getTrackKey(track)) state.setCurrentTime(audioEngine.getCurrentTime());
+    play();
+  } else if (options.queue) state.setQueue(options.queue, options.queueIndex);
   else state.setTrack(track);
   if (options.startAt !== undefined) seekTo(options.startAt);
 }

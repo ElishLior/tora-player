@@ -1,6 +1,6 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
+import { revalidateCatalog } from '@/lib/supabase/anon';
 import { createAdminSupabaseClient } from '@/lib/supabase/admin';
 import { createSeriesSchema } from '@/lib/validators';
 import { isAdmin } from '@/lib/auth/admin';
@@ -33,7 +33,7 @@ export async function createSeries(formData: FormData) {
     return { error: { _form: [error.message] } };
   }
 
-  revalidatePath('/[locale]', 'layout');
+  revalidateCatalog();
   return { data: data as Series };
 }
 
@@ -62,7 +62,7 @@ export async function updateSeries(id: string, formData: FormData) {
     return { error: { _form: [error.message] } };
   }
 
-  revalidatePath('/[locale]', 'layout');
+  revalidateCatalog();
   return { data: data as Series };
 }
 
@@ -81,6 +81,6 @@ export async function deleteSeries(id: string) {
     return { error: error.message };
   }
 
-  revalidatePath('/[locale]', 'layout');
+  revalidateCatalog();
   return { success: true };
 }

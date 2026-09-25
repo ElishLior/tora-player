@@ -23,6 +23,9 @@ export interface OfflineAudioFileMeta {
   duration: number;
   fileSize: number;
   sortOrder: number;
+  /** Original position and total parts of the lesson, not the saved subset. */
+  partIndex?: number;
+  partCount?: number;
   downloadedAt: string;
 }
 
@@ -49,6 +52,8 @@ export interface OfflineAudioDownloadInput {
   duration?: number;
   fileSize?: number;
   sortOrder?: number;
+  partIndex?: number;
+  partCount?: number;
 }
 
 export type OfflineLessonInput = Omit<
@@ -147,6 +152,8 @@ function normalizeLessonMeta(meta: Partial<OfflineLessonMeta> | null | undefined
         duration: file.duration || 0,
         fileSize: file.fileSize || 0,
         sortOrder: file.sortOrder ?? index,
+        partIndex: file.partIndex,
+        partCount: file.partCount,
         downloadedAt: file.downloadedAt || meta.downloadedAt || new Date(0).toISOString(),
       }))
       .sort((a, b) => a.sortOrder - b.sortOrder),
@@ -392,6 +399,8 @@ export async function saveAudioFilesOffline(
           duration: file.duration || 0,
           fileSize: blob.size,
           sortOrder: file.sortOrder ?? index,
+          partIndex: file.partIndex,
+          partCount: file.partCount,
           downloadedAt: new Date().toISOString(),
         };
         await saveLessonMeta(db, lessonMeta, fileMeta);

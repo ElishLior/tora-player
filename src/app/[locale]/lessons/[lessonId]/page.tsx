@@ -1,6 +1,7 @@
-import { Suspense } from 'react';
+import { Suspense, cache } from 'react';
+import type { Metadata } from 'next';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { lessonReadClient } from '@/lib/supabase/admin-lesson';
 import { getLessonById } from '@/lib/supabase/queries';
 import { notFound } from 'next/navigation';
 import { formatDuration } from '@/lib/utils';
@@ -9,26 +10,57 @@ import { ArrowRight, Calendar, Clock, Edit, MapPin, User, BookOpen, Hash } from 
 import { isAdmin } from '@/lib/auth/admin';
 import { ShareButton } from '@/components/shared/share-button';
 import { LessonPlayerClient, LessonTags } from './lesson-player-client';
+import { JsonLd } from '@/components/seo/json-ld';
+import { OG_LOCALE, SITE_NAME, categoryPath, isSiteLocale, lessonPath, pageUrl } from '@/config/site';
+import { breadcrumbJsonLd, lessonDescription, lessonJsonLd, pageAlternates } from '@/lib/seo';
 
 type Props = {
   params: Promise<{ locale: string; lessonId: string }>;
 };
+
+/**
+ * One lesson read per request, shared by generateMetadata and the page. Admins
+ * read with the service role so drafts open (lessonReadClient); null when the
+ * lesson is missing or hidden.
+ */
+const loadLesson = cache(async (lessonId: string) => {
+  try {
+    return await getLessonById(await lessonReadClient(), lessonId);
+  } catch {
+    return null;
+  }
+});
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { locale, lessonId } = await params;
+  const lesson = await loadLesson(lessonId);
+  if (!lesson) return {};
+  const title = lesson.hebrew_title || lesson.title;
+  const description = lessonDescription(lesson);
+  const pathname = lessonPath(lesson.id);
+  return {
+    title,
+    description,
+    alternates: pageAlternates(pathname),
+    // Images come from ./opengraph-image.tsx.
+    openGraph: {
+      type: 'music.song',
+      url: pageUrl(pathname),
+      title,
+      description,
+      siteName: SITE_NAME.he,
+      locale: OG_LOCALE[isSiteLocale(locale) ? locale : 'he'],
+      ...(lesson.duration > 0 && { duration: Math.round(lesson.duration) }),
+    },
+  };
+}
 
 export default async function LessonDetailPage({ params }: Props) {
   const { locale, lessonId } = await params;
   setRequestLocale(locale);
   const t = await getTranslations('lessons');
 
-  const supabase = await createServerSupabaseClient();
-  if (!supabase) notFound();
-
-  let lesson;
-  try {
-    lesson = await getLessonById(supabase, lessonId);
-  } catch {
-    notFound();
-  }
-
+  const lesson = await loadLesson(lessonId);
   if (!lesson) notFound();
 
   const admin = await isAdmin();
@@ -38,6 +70,16 @@ export default async function LessonDetailPage({ params }: Props) {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 animate-fade-in">
+      <JsonLd
+        data={[
+          lessonJsonLd(lesson),
+          breadcrumbJsonLd([
+            { name: SITE_NAME.he, pathname: '/' },
+            ...(lesson.category ? [{ name: lesson.category.hebrew_name, pathname: categoryPath(lesson.category.id) }] : []),
+            { name: lesson.hebrew_title || lesson.title, pathname: lessonPath(lesson.id) },
+          ]),
+        ]}
+      />
       {/* Header */}
       <div className="flex items-center gap-3">
         <Link href="/lessons" className="rounded-full p-2 text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--surface-highlight))] transition-colors">
@@ -62,7 +104,7 @@ export default async function LessonDetailPage({ params }: Props) {
 
       {/* Title */}
       <div className="space-y-2">
-        <h1 className="text-xl font-bold" dir="rtl">
+        <h1 className="text-xl font-bold" dir="auto">
           {lesson.hebrew_title || lesson.title}
         </h1>
         <LessonTags lessonId={lesson.id} tags={lesson.tags ?? []} admin={admin} />
@@ -70,7 +112,7 @@ export default async function LessonDetailPage({ params }: Props) {
           <Link
             href={`/lessons?series=${lesson.series.id}`}
             className="inline-block text-sm text-primary hover:underline"
-            dir="rtl"
+            dir="auto"
           >
             {lesson.series.hebrew_name || lesson.series.name}
           </Link>
@@ -78,7 +120,7 @@ export default async function LessonDetailPage({ params }: Props) {
       </div>
 
       {/* Metadata pills */}
-      <div className="flex flex-wrap gap-2" dir="rtl">
+      <div className="flex flex-wrap gap-2">
         {lesson.parsha && (
           <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 text-primary px-3 py-1 text-xs font-medium">
             <BookOpen className="h-3.5 w-3.5" />
@@ -125,11 +167,11 @@ export default async function LessonDetailPage({ params }: Props) {
 
       {/* Description / Summary */}
       {(lesson.description || lesson.summary) && (
-        <div className="rounded-xl bg-[hsl(var(--surface-elevated))] p-4" dir="rtl">
+        <div className="rounded-xl bg-[hsl(var(--surface-elevated))] p-4">
           <h2 className="text-sm font-bold mb-2 text-muted-foreground">
             {locale === 'he' ? 'תיאור השיעור' : 'Description'}
           </h2>
-          <p className="text-sm leading-relaxed whitespace-pre-wrap">
+          <p className="text-sm leading-relaxed whitespace-pre-wrap" dir="auto">
             {lesson.description || lesson.summary}
           </p>
         </div>
@@ -145,7 +187,7 @@ export default async function LessonDetailPage({ params }: Props) {
 
       {/* Multi-part links */}
       {hasParts && (
-        <div className="rounded-xl bg-[hsl(var(--surface-elevated))] p-4" dir="rtl">
+        <div className="rounded-xl bg-[hsl(var(--surface-elevated))] p-4">
           <h2 className="text-sm font-bold mb-3 text-muted-foreground">
             {locale === 'he' ? 'חלקים' : 'Parts'}
           </h2>
@@ -174,7 +216,7 @@ export default async function LessonDetailPage({ params }: Props) {
 
       {/* Snippets */}
       {lesson.snippets && lesson.snippets.length > 0 && (
-        <div dir="rtl">
+        <div>
           <h2 className="text-sm font-bold mb-3 text-muted-foreground uppercase tracking-wider">
             {locale === 'he' ? 'קטעים נבחרים' : 'Snippets'}
           </h2>
@@ -182,10 +224,10 @@ export default async function LessonDetailPage({ params }: Props) {
             {lesson.snippets.map((snippet) => (
               <div key={snippet.id} className="rounded-xl bg-[hsl(var(--surface-elevated))] p-4">
                 {snippet.title && (
-                  <h3 className="text-sm font-bold mb-1">{snippet.title}</h3>
+                  <h3 className="text-sm font-bold mb-1" dir="auto">{snippet.title}</h3>
                 )}
                 {snippet.hebrew_title && snippet.hebrew_title !== snippet.title && (
-                  <p className="text-sm text-muted-foreground leading-relaxed">{snippet.hebrew_title}</p>
+                  <p className="text-sm text-muted-foreground leading-relaxed" dir="auto">{snippet.hebrew_title}</p>
                 )}
                 {snippet.start_time > 0 && (
                   <p className="text-xs text-primary mt-2">

@@ -14,7 +14,9 @@ import { OFFLINE_DOWNLOADS_CHANGED_EVENT } from '@/lib/offline-events';
 import { formatFileSize } from '@/lib/audio-utils';
 import { formatDuration } from '@/lib/utils';
 import { EmptyState } from '@/components/shared/empty-state';
-import { useAudioStore } from '@/stores/audio-store';
+import { playTrack } from '@/lib/audio-controller';
+import { getOfflineLessonTracks } from '@/lib/lesson-tracks';
+import { playLesson } from '@/lib/play-lesson';
 
 /**
  * Offline library. The service worker precaches this page and its chunks, and
@@ -28,7 +30,6 @@ export default function OfflinePage() {
   const [lessons, setLessons] = useState<OfflineLessonMeta[] | null>(null);
   const [storage, setStorage] = useState({ used: 0, quota: 0 });
   const [isOnline, setIsOnline] = useState(true);
-  const setTrack = useAudioStore((s) => s.setTrack);
 
   const loadData = useCallback(async () => {
     const [downloaded, storageInfo] = await Promise.all([getDownloadedLessons(), getStorageUsage()]);
@@ -53,22 +54,15 @@ export default function OfflinePage() {
     };
   }, [loadData]);
 
-  function handlePlay(lesson: OfflineLessonMeta, file: OfflineAudioFileMeta | undefined = lesson.audioFiles[0]) {
-    if (!file) return;
-    setTrack({
-      id: lesson.lessonId,
-      lessonId: lesson.lessonId,
-      audioFileId: file.audioFileId,
-      fileKey: file.fileKey,
-      offlineKey: file.offlineKey,
-      title: lesson.title,
-      hebrewTitle: lesson.hebrewTitle || lesson.title,
-      audioUrl: file.audioUrl,
-      duration: file.duration || lesson.duration,
-      seriesName: lesson.seriesName,
-      date: lesson.date,
-      originalName: file.originalName || file.title,
-    });
+  /** The lesson continues where it was left; a tapped file plays from its start. Either way all saved parts queue up. */
+  function handlePlay(lesson: OfflineLessonMeta, file?: OfflineAudioFileMeta) {
+    const tracks = getOfflineLessonTracks(lesson);
+    if (!file) {
+      playLesson(tracks);
+      return;
+    }
+    const index = tracks.findIndex((track) => track.offlineKey === file.offlineKey);
+    if (index >= 0) playTrack(tracks[index], { queue: tracks, queueIndex: index });
   }
 
   const totalDownloaded = lessons?.reduce((acc, lesson) => acc + lesson.fileSize, 0) ?? 0;

@@ -147,7 +147,8 @@
     "error": "Error",
     "retry": "Retry",
     "back": "Back",
-    "rateLimited": "Too many attempts. Try again in a few minutes."
+    "rateLimited": "Too many attempts. Try again in a few minutes.",
+    "manageApp": "Manage {appName}"
   },
   "home": {
     "title": "Tora Player",
@@ -156,7 +157,10 @@
     "recentLessons": "Recent Lessons",
     "quickAccess": "Quick Access",
     "welcome": "Welcome to Tora Player",
-    "welcomeDesc": "Listen to daily Torah lessons anytime, anywhere"
+    "welcomeDesc": "Listen to daily Torah lessons anytime, anywhere",
+    "latestLesson": "Latest lesson",
+    "categories": "Categories",
+    "showAll": "Show all"
   },
   "lessons": {
     "title": "Lessons",
@@ -214,10 +218,44 @@
     "lessonFallback": "Torah lesson",
     "audioFiles": "Audio files",
     "part": "Part {number}",
+    "downloaded": "Saved on device",
+    "heard": "Heard to the end",
+    "resumeAt": "Resume from {time}",
+    "resumePart": "Resume part {number} from {time}",
+    "sleepTimer": "Sleep timer",
+    "sleepOff": "Off",
+    "sleepMinutes": "{minutes} min",
+    "sleepEndOfPart": "End of part",
+    "sleepEndOfLesson": "End of lesson",
+    "sleepRemaining": "Stops in {time}",
+    "sleepAtEndOfPart": "Stops at the end of the part",
+    "sleepAtEndOfLesson": "Stops at the end of the lesson",
     "issue": {
       "retrying": "Connection lost, trying to continue…",
       "blocked": "The browser stopped playback. Tap play to continue.",
       "failed": "Playback stopped. Tap play to try again."
+    },
+    "previousTrack": "Previous",
+    "nextTrack": "Next",
+    "upNextEmpty": "Nothing else in the queue",
+    "removeFromQueue": "Remove from queue",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "playNext": "Play next",
+    "queuedNext": "Queued next",
+    "partOf": "Part {number} of {count}",
+    "partUnknown": "Lesson part",
+    "expandPlayer": "Open full player",
+    "downloadToDevice": "Download file to device",
+    "newBadge": "New",
+    "dismiss": "Close",
+    "castStatus": {
+      "noAudio": "Start playing a lesson, then tap Cast.",
+      "noAirPlayDevices": "No AirPlay devices found. For Google speakers (Home/Nest), connect via Bluetooth in your phone settings.",
+      "noChromecast": "No Chromecast devices found. Make sure it is on the same WiFi network.",
+      "castFailed": "Connected to Chromecast, but the lesson did not load on the device.",
+      "casting": "Playing on Chromecast.",
+      "guidance": "Google speakers: connect via Bluetooth in Settings. AirPlay: pick it in Control Center. Chromecast: open the site in Chrome."
     }
   },
   "driving": {
@@ -252,7 +290,9 @@
   },
   "series": {
     "title": "Series",
-    "noSeries": "No series yet"
+    "noSeries": "No series yet",
+    "continueSeries": "Continue series",
+    "startSeries": "Start from the first lesson"
   },
   "shorts": {
     "title": "Shorts",
@@ -647,12 +687,32 @@
     "untagged": "Untagged",
     "groupBy": "Group",
     "groupByTag": "By tag",
-    "groupByCategory": "By category"
+    "groupByCategory": "By category",
+    "metaDescription": "Lessons about #{tag}"
   },
   "tags": {
     "label": "Tags",
     "placeholder": "Add a tag and press Enter",
     "remove": "Remove tag {tag}",
     "full": "Up to {max} tags"
+  },
+  "errorPage": {
+    "title": "Something went wrong",
+    "description": "An error occurred while loading this page.",
+    "retry": "Try again",
+    "updateTitle": "A new version of the app is available",
+    "updateDescription": "Reload the app to open this page. Reloading stops playback.",
+    "reload": "Reload"
+  },
+  "pwa": {
+    "installTitle": "Install {appName}",
+    "installSubtitle": "Quick access from your home screen",
+    "install": "Install",
+    "dismiss": "Close"
+  },
+  "notFound": {
+    "title": "Page not found",
+    "description": "The page you are looking for does not exist or has moved.",
+    "backHome": "Back to home"
   }
 }

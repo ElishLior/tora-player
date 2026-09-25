@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ChevronDown,
   Bookmark,
@@ -12,6 +12,9 @@ import {
   CheckCircle,
   Loader2,
   BookOpen,
+  ListMusic,
+  SkipBack,
+  SkipForward,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
@@ -20,8 +23,15 @@ import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { SeekBar } from './seek-bar';
 import { SpeedControl } from './speed-control';
 import { PlayPauseIcon, SkipButton } from './player-controls';
-import { handleCastClick } from '@/lib/cast-utils';
+import { SleepTimerControl } from './sleep-timer';
+import { UpNextSheet } from './up-next';
+import { CastStatusMessage } from './cast-status';
+import { audioEngine } from '@/lib/audio-engine';
+import { handleCastClick, isCastableSource } from '@/lib/cast-utils';
+import { useModalDialog } from '@/hooks/use-modal-dialog';
+import { useAudioStore } from '@/stores/audio-store';
 import { useBookmarksStore } from '@/stores/bookmarks-store';
+import { isMomentInPart } from '@/lib/lesson-tracks';
 import { BookmarkDialog } from '@/components/bookmarks/bookmark-dialog';
 import { BookmarkChips, BookmarkMarkers } from '@/components/bookmarks/lesson-bookmarks';
 import { ShareClipDialog } from '@/components/player/share-clip-dialog';
@@ -54,6 +64,10 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
     skipBackward,
     seekTo,
     setPlaybackSpeed,
+    hasNextTrack,
+    hasPreviousTrack,
+    nextTrack,
+    previousTrack,
   } = useAudioPlayer();
 
   const locale = useLocale();
@@ -63,6 +77,11 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
   const [showShareClipDialog, setShowShareClipDialog] = useState(false);
   const [offlineSaveState, setOfflineSaveState] = useState<'idle' | 'downloading' | 'downloaded' | 'error'>('idle');
   const [offlineSaveProgress, setOfflineSaveProgress] = useState(0);
+  const [showUpNext, setShowUpNext] = useState(false);
+  const upNextCount = useAudioStore((s) => Math.max(0, s.queue.length - s.queueIndex - 1));
+  const dialogRef = useRef<HTMLDivElement>(null);
+  // Focus returns to the mini player's expand button, which replaces this player.
+  useModalDialog(dialogRef, onClose, '[data-player-expand]');
 
   const lessonId = currentTrack ? getTrackLessonId(currentTrack) : '';
 
@@ -124,6 +143,8 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
   if (!currentTrack) return null;
 
   const lessonBookmarks = bookmarks.filter((b) => b.lessonId === lessonId);
+  // This player seeks within the loaded file, so it lists only that part's bookmarks.
+  const partBookmarks = lessonBookmarks.filter((b) => isMomentInPart(b.audioFileId, currentTrack));
   const bookmarkCount = lessonBookmarks.length;
   const downloadFilename = getTrackDownloadFilename(currentTrack);
   const downloadUrl = getTrackDownloadUrl(currentTrack);
@@ -131,7 +152,12 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
   return (
     <>
       <div
-        className="fixed inset-0 z-[100] flex flex-col safe-area-inset animate-slide-up"
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="full-player-title"
+        tabIndex={-1}
+        className="fixed inset-0 z-[100] flex flex-col safe-area-inset animate-slide-up outline-none"
         style={{
           background: 'linear-gradient(180deg, hsl(141 30% 12%) 0%, hsl(0 0% 7%) 40%)',
         }}
@@ -139,6 +165,8 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3">
           <button
+            type="button"
+            data-autofocus
             onClick={onClose}
             className="rounded-full p-2 text-muted-foreground hover:text-foreground transition-colors"
             aria-label={t('closePlayer')}
@@ -184,7 +212,7 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
 
           {/* Track info */}
           <div className="w-full max-w-md space-y-1 flex-shrink-0">
-            <h2 className="text-xl font-bold text-foreground truncate" dir="auto">
+            <h2 id="full-player-title" className="text-xl font-bold text-foreground truncate" dir="auto">
               {currentTrack.hebrewTitle || currentTrack.title}
             </h2>
             <p className="text-sm text-muted-foreground">
@@ -206,7 +234,7 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
           {/* Seek bar with bookmark markers */}
           <div className="w-full max-w-md relative flex-shrink-0">
             <SeekBar currentTime={currentTime} duration={duration} onSeek={seekTo} />
-            <BookmarkMarkers bookmarks={lessonBookmarks} duration={duration} onSeek={seekTo} />
+            <BookmarkMarkers bookmarks={partBookmarks} duration={duration} onSeek={(bookmark) => seekTo(bookmark.position)} />
           </div>
 
           {playbackIssue && (
@@ -215,9 +243,23 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
             </p>
           )}
 
-          {/* Main controls: back → play → forward in DOM order; RTL puts "back" on the right. */}
-          <div className="flex items-center justify-center gap-6 w-full max-w-md flex-shrink-0">
-            <SpeedControl speed={playbackSpeed} onSpeedChange={setPlaybackSpeed} />
+          {/*
+            Transport in DOM order: previous → back → play → forward → next;
+            dir="rtl" mirrors the row. Lesson arrows appear only with queue neighbours.
+          */}
+          <div className="flex items-center justify-center gap-4 w-full max-w-md flex-shrink-0">
+            <div className="w-10">
+              {hasPreviousTrack && (
+                <button
+                  type="button"
+                  onClick={previousTrack}
+                  className="p-2 text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label={t('previousTrack')}
+                >
+                  <SkipBack className="h-6 w-6 rtl:-scale-x-100" />
+                </button>
+              )}
+            </div>
 
             <SkipButton
               direction="back"
@@ -242,12 +284,38 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
               iconClassName="h-8 w-8"
             />
 
-            {/* Balances the speed control on the other side */}
-            <div className="w-12" aria-hidden />
+            <div className="w-10">
+              {hasNextTrack && (
+                <button
+                  type="button"
+                  onClick={nextTrack}
+                  className="p-2 text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label={t('nextTrack')}
+                >
+                  <SkipForward className="h-6 w-6 rtl:-scale-x-100" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between w-full max-w-md flex-shrink-0">
+            <SpeedControl speed={playbackSpeed} onSpeedChange={setPlaybackSpeed} />
+            {upNextCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowUpNext(true)}
+                aria-haspopup="dialog"
+                className="flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <ListMusic className="h-4 w-4" />
+                {t('upNext')}
+                <span className="tabular-nums">({upNextCount})</span>
+              </button>
+            )}
           </div>
 
           <div className="w-full max-w-md flex-shrink-0">
-            <BookmarkChips bookmarks={lessonBookmarks} onSeek={seekTo} />
+            <BookmarkChips bookmarks={partBookmarks} onSeek={(bookmark) => seekTo(bookmark.position)} />
           </div>
 
           {/* Secondary actions */}
@@ -280,6 +348,7 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
               <Car className="h-5 w-5" />
               <span className="text-[10px]">{t('drivingMode')}</span>
             </button>
+            <SleepTimerControl className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors" />
             <button
               onClick={handleSaveOffline}
               disabled={offlineSaveState === 'downloaded' || offlineSaveState === 'downloading'}
@@ -322,27 +391,34 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
                 })
               }
               className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
-              aria-label={locale === 'he' ? 'הורדת קובץ למכשיר' : 'Download file to device'}
+              aria-label={t('downloadToDevice')}
             >
               <FileDown className="h-5 w-5" />
               <span className="text-[10px] whitespace-nowrap">{t('downloadFile')}</span>
             </a>
-            <button
-              onClick={() => void handleCastClick()}
-              className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
-              aria-label={t('cast')}
-            >
-              <Cast className="h-5 w-5" />
-              <span className="text-[10px]">{t('cast')}</span>
-            </button>
+            {isCastableSource(audioEngine.getCurrentUrl()) && (
+              <button
+                type="button"
+                onClick={() => void handleCastClick()}
+                className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Cast className="h-5 w-5" />
+                <span className="text-[10px]">{t('cast')}</span>
+              </button>
+            )}
           </div>
         </div>
+
+        {showUpNext && <UpNextSheet onClose={() => setShowUpNext(false)} />}
       </div>
+
+      <CastStatusMessage />
 
       {bookmarkPosition !== null && (
         <BookmarkDialog
           onClose={() => setBookmarkPosition(null)}
           lessonId={lessonId}
+          audioFileId={currentTrack.audioFileId}
           position={bookmarkPosition}
         />
       )}

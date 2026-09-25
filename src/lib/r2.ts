@@ -2,6 +2,7 @@ import {
   S3Client,
   PutObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   DeleteObjectCommand,
   DeleteObjectsCommand,
   ListObjectsV2Command,
@@ -32,19 +33,29 @@ interface DownloadPresignOptions {
   contentDisposition?: string;
   /** Overrides the Content-Type R2 returns. */
   contentType?: string;
+  /** Overrides the Cache-Control R2 returns. */
+  cacheControl?: string;
+  /** Fixed signing time; the same key, options and date always yield the same URL. */
+  signingDate?: Date;
 }
 
 export async function getDownloadPresignedUrl(
   key: string,
-  { expiresIn = 7200, contentDisposition, contentType }: DownloadPresignOptions = {},
+  { expiresIn = 7200, contentDisposition, contentType, cacheControl, signingDate }: DownloadPresignOptions = {},
 ) {
   const command = new GetObjectCommand({
     Bucket: BUCKET,
     Key: key,
     ResponseContentDisposition: contentDisposition,
     ResponseContentType: contentType,
+    ResponseCacheControl: cacheControl,
   });
-  return getSignedUrl(r2Client, command, { expiresIn });
+  return getSignedUrl(r2Client, command, { expiresIn, signingDate });
+}
+
+/** Read object headers without transferring audio bytes. */
+export async function headR2Object(key: string) {
+  return r2Client.send(new HeadObjectCommand({ Bucket: BUCKET, Key: key }));
 }
 
 export async function uploadToR2(key: string, body: Buffer | Uint8Array, contentType: string) {

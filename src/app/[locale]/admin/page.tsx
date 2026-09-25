@@ -13,6 +13,7 @@ export default function AdminDashboardPage() {
   const tNotifications = useTranslations('notifications.admin');
   const tStats = useTranslations('adminStats');
   const tUsers = useTranslations('adminUsers');
+  const tCommon = useTranslations('common');
 
   const insightLinks = [
     { href: `/${locale}/admin/stats`, icon: BarChart3, label: tStats('title'), description: tStats('cardDescription') },
@@ -77,7 +78,7 @@ export default function AdminDashboardPage() {
               {isRTL ? 'לוח בקרה' : 'Admin Dashboard'}
             </h1>
             <p className="text-sm text-muted-foreground">
-              {isRTL ? 'ניהול נגן תורה' : 'Manage Tora Player'}
+              {tCommon('manageApp', { appName: tCommon('appName') })}
             </p>
           </div>
         </div>

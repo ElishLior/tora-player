@@ -28,6 +28,7 @@ export async function PUT(request: NextRequest) {
     {
       user_id: session.userId,
       lesson_id: parsed.data.lesson_id,
+      audio_file_id: parsed.data.audio_file_id,
       position: Math.round(parsed.data.position),
       completed: parsed.data.completed,
       last_played_at: new Date().toISOString(),

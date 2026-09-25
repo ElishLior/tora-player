@@ -1,19 +1,35 @@
 export const dynamic = 'force-dynamic';
 
+import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { AlertTriangle, ArrowRight, Hash } from 'lucide-react';
 import { Link } from '@/i18n/routing';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { createSupabaseLessonListReader, loadInitialLessonList } from '@/lib/supabase/lesson-list';
+import { isSupabaseConfigured } from '@/lib/supabase/server';
+import { createCatalogLessonListReader } from '@/lib/supabase/anon';
+import { loadInitialLessonList } from '@/lib/supabase/lesson-list';
 import { tagFromSegment, tagPath } from '@/lib/tag-links';
 import { isAdmin } from '@/lib/auth/admin';
 import { EmptyState } from '@/components/shared/empty-state';
 import { LessonsClient } from '../../lessons/lessons-client';
+import { SITE_TAGLINE, isSiteLocale } from '@/config/site';
+import { pageAlternates, truncateText } from '@/lib/seo';
 
 type Props = {
   params: Promise<{ locale: string; tag: string }>;
 };
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { locale, tag: segment } = await params;
+  const tag = tagFromSegment(segment);
+  if (!tag || !isSiteLocale(locale)) return {};
+  const t = await getTranslations({ locale, namespace: 'tagBrowse' });
+  return {
+    title: `#${tag}`,
+    description: truncateText(`${t('metaDescription', { tag })} — ${SITE_TAGLINE[locale]}`),
+    alternates: pageAlternates(tagPath(tag)),
+  };
+}
 
 export default async function TagPage({ params }: Props) {
   const { locale, tag: segment } = await params;
@@ -23,11 +39,10 @@ export default async function TagPage({ params }: Props) {
 
   const t = await getTranslations('tagBrowse');
   const commonT = await getTranslations('common');
-  const supabase = await createServerSupabaseClient();
   const admin = await isAdmin();
 
   const result = await loadInitialLessonList(
-    supabase ? createSupabaseLessonListReader(supabase) : null,
+    isSupabaseConfigured() ? createCatalogLessonListReader() : null,
     { tagFilter: tag },
   );
   if (!result.ok) {

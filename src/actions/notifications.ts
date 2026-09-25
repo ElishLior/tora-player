@@ -4,6 +4,7 @@ import { getTranslations } from 'next-intl/server';
 import { isAdmin } from '@/lib/auth/admin';
 import { getVapidDetails, sendPush } from '@/lib/notifications/push';
 import { createAdminSupabaseClient } from '@/lib/supabase/admin';
+import { localePath } from '@/config/site';
 
 export type TestNotificationResult =
   | { ok: true }
@@ -26,7 +27,7 @@ export async function sendTestNotification(endpoint: string): Promise<TestNotifi
   const result = await sendPush([subscription], {
     title: t('testTitle'),
     body: t('testBody'),
-    url: '/he',
+    url: localePath('/'),
     tag: 'test',
   });
   return result.sent === 1 ? { ok: true } : { ok: false, error: 'failed' };

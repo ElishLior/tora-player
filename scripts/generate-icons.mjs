@@ -69,19 +69,14 @@ async function main() {
   // Email logo: PNG for mail-client compatibility, sized for a 120px slot at 2x.
   await write(path.join(pub, 'email-logo.png'), await sharp(illustration).resize(240, 240).png({ compressionLevel: 9 }).toBuffer());
 
-  // Link preview (WhatsApp/Telegram/Facebook): 1200x630, Hebrew RTL text.
-  const og = Buffer.from(`<svg width="1200" height="630" xmlns="http://www.w3.org/2000/svg">
-  <rect width="1200" height="630" fill="${BG}"/>
-  <text x="1080" y="270" text-anchor="end" font-family="Arial Hebrew, SF Hebrew, Arial" font-weight="700" font-size="96" fill="#ffffff">נגן תורה</text>
-  <text x="1080" y="350" text-anchor="end" font-family="Arial Hebrew, SF Hebrew, Arial" font-size="40" fill="#d4af37">שיעורי הרב אליהו</text>
-  <text x="1080" y="410" text-anchor="end" font-family="Arial Hebrew, SF Hebrew, Arial" font-size="40" fill="#a1a1aa">ציון בניהו בן יהוידע</text>
-</svg>`);
+  // Podcast artwork (Apple: square JPEG/PNG, 1400–3000 px, RGB). No text, so a
+  // rename never needs a new image; link previews are rendered by
+  // src/app/opengraph-image.tsx.
   await write(
-    path.join(pub, 'og.jpg'),
-    await sharp(og)
-      .composite([{ input: await roundMedallion(470), left: 80, top: 80 }])
-      .flatten({ background: BG })
-      .jpeg({ quality: 82, mozjpeg: true })
+    path.join(pub, 'podcast-cover.jpg'),
+    await sharp({ create: { width: 1400, height: 1400, channels: 3, background: BG } })
+      .composite([{ input: await roundMedallion(1180), gravity: 'center' }])
+      .jpeg({ quality: 86, mozjpeg: true })
       .toBuffer(),
   );
 }

@@ -5,7 +5,8 @@
  * belongs to sw.js.
  */
 
-const PUSH_FALLBACK_URL = '/he';
+// The middleware sends `/` to the default locale's home page.
+const PUSH_FALLBACK_URL = '/';
 const PUSH_ICON = '/icons/icon-192.png';
 
 function samePushTarget(url) {
@@ -27,10 +28,12 @@ self.addEventListener('push', (event) => {
     }
   }
 
-  const title = payload.title || 'נגן תורה';
+  // The server always sends a title (src/lib/notifications/push.ts); a bare
+  // text push (e.g. a DevTools test) shows its text as the title instead.
+  const title = payload.title || payload.body || '';
   event.waitUntil(
     self.registration.showNotification(title, {
-      body: payload.body || '',
+      body: payload.title ? payload.body || '' : '',
       icon: PUSH_ICON,
       dir: 'rtl',
       lang: 'he',

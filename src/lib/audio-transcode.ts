@@ -7,7 +7,9 @@
  * for optimal streaming and storage.
  *
  * Uses single-threaded WASM build (no SharedArrayBuffer/COOP/COEP required).
- * WASM is loaded from CDN on demand — singleton instance.
+ * The core (@ffmpeg/core, copied to public/ffmpeg/ by
+ * scripts/copy-ffmpeg-core.mjs) is loaded from our own origin on demand —
+ * singleton instance.
  */
 
 import { FFmpeg } from '@ffmpeg/ffmpeg';
@@ -44,7 +46,7 @@ export interface TranscodeProgress {
 
 /**
  * Get or create the singleton FFmpeg instance.
- * Loads WASM from CDN on first call.
+ * Loads the self-hosted WASM core on first call.
  */
 async function getFFmpeg(onProgress?: (p: TranscodeProgress) => void): Promise<FFmpeg> {
   if (ffmpegInstance?.loaded) return ffmpegInstance;
@@ -65,8 +67,9 @@ async function getFFmpeg(onProgress?: (p: TranscodeProgress) => void): Promise<F
   onProgress?.({ percent: 0, message: 'טוען מנוע המרה...' });
 
   loadPromise = ffmpegInstance.load({
-    coreURL: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js',
-    wasmURL: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm',
+    // Absolute URLs: the worker resolves them against its own chunk URL.
+    coreURL: new URL('/ffmpeg/ffmpeg-core.js', window.location.origin).href,
+    wasmURL: new URL('/ffmpeg/ffmpeg-core.wasm', window.location.origin).href,
   }).catch((err) => {
     // Reset on failure so next attempt retries
     ffmpegInstance = null;

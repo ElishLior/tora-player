@@ -116,18 +116,11 @@ export const createSeriesSchema = z.object({
 
 export const playbackProgressSchema = z.object({
   lesson_id: uuidLike,
+  /** Part (lesson_audio id) the position is in; null for single-file lessons. */
+  audio_file_id: uuidLike.nullable().default(null),
   /** Seconds; stored rounded to an integer. */
   position: z.number().min(0),
   completed: z.boolean().default(false),
-});
-
-export const searchSchema = z.object({
-  query: z.string().min(1),
-  series_id: uuidLike.optional(),
-  date_from: z.string().optional(),
-  date_to: z.string().optional(),
-  limit: z.number().int().min(1).max(100).default(20),
-  offset: z.number().int().min(0).default(0),
 });
 
 // ==================== CATEGORIES ====================
@@ -212,6 +205,7 @@ export const bookmarkSyncSchema = z.object({
 export const progressSyncSchema = validItems(
   z.object({
     lesson_id: uuidLike,
+    audio_file_id: uuidLike.nullable().default(null),
     position: z.number().min(0),
     completed: z.boolean(),
     last_played_at: z.iso.datetime({ offset: true }),

@@ -1,18 +1,24 @@
 /**
- * Cross-platform audio output utility.
+ * Cross-platform audio output ("Cast" button).
  *
  * Priority:
  * 1. AirPlay via Remote Playback API (feature-detected, works on Safari/Apple)
- * 2. Google Cast SDK (Chrome desktop + Android)
+ * 2. Google Cast SDK (Chrome desktop + Android): the device continues the
+ *    lesson from the current position and local playback pauses
  * 3. Fallback guidance (Bluetooth for Google speakers, etc.)
+ *
+ * Outcomes are reported through `useCastStatus` and shown inline by
+ * `CastStatusMessage`; nothing here opens browser dialogs.
  *
  * NOTE: Google smart speakers (Home, Nest) do NOT support AirPlay.
  * From iOS the only option for Google speakers is Bluetooth.
- * Spotify uses their proprietary "Spotify Connect" which is NOT available
- * for third-party web apps.
  */
 
+import { create } from 'zustand';
 import { audioEngine } from '@/lib/audio-engine';
+import { pause } from '@/lib/audio-controller';
+import { getAudioContentType } from '@/lib/audio-download';
+import { useAudioStore } from '@/stores/audio-store';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyWindow = Window & Record<string, any>;
@@ -21,10 +27,21 @@ const w = () => (typeof window !== 'undefined' ? window as unknown as AnyWindow 
 
 let sdkLoading = false;
 
-function isHebrew(): boolean {
-  if (typeof document === 'undefined') return false;
-  return document.documentElement.lang === 'he' ||
-    document.documentElement.dir === 'rtl';
+/** Message keys under `player.castStatus`. */
+export type CastStatus = 'noAudio' | 'noAirPlayDevices' | 'noChromecast' | 'castFailed' | 'casting' | 'guidance';
+
+export const useCastStatus = create<{ status: CastStatus | null }>(() => ({ status: null }));
+
+function report(status: CastStatus) {
+  useCastStatus.setState({ status });
+}
+
+/**
+ * Offline copies play from blob: URLs that only exist in this tab, so no
+ * receiver can fetch them; the Cast button is hidden for them.
+ */
+export function isCastableSource(source: string | null): boolean {
+  return !source?.startsWith('blob:');
 }
 
 /**
@@ -47,7 +64,7 @@ function platformSupportsAirPlay(): boolean {
 }
 
 /** True if we're in a Chrome-based browser that can run the Cast SDK */
-export function isCastCompatible(): boolean {
+function isCastCompatible(): boolean {
   if (typeof navigator === 'undefined') return false;
   const ua = navigator.userAgent;
   return /Chrome\//.test(ua) && !/Edge\/|Edg\//.test(ua) && !/CriOS/.test(ua);
@@ -146,6 +163,40 @@ function loadCastSdk(): Promise<boolean> {
   });
 }
 
+/** The part of a CAF CastSession used here. */
+interface CastSession {
+  loadMedia(request: unknown): Promise<unknown>;
+}
+
+/**
+ * Hands the loaded lesson over to the connected Chromecast: same file, same
+ * position, real MIME type; local playback pauses once the device took it.
+ */
+async function loadOnChromecast(win: AnyWindow, session: CastSession): Promise<CastStatus> {
+  const source = audioEngine.getCurrentUrl();
+  const track = useAudioStore.getState().currentTrack;
+  if (!source || !track) return 'noAudio';
+
+  const media = win.chrome.cast.media;
+  const contentType = track.mimeType || getAudioContentType(track.fileKey || track.originalName || source);
+  const mediaInfo = new media.MediaInfo(toAbsoluteUrl(source), contentType);
+  const metadata = new media.GenericMediaMetadata();
+  metadata.title = track.hebrewTitle || track.title;
+  if (track.seriesName) metadata.subtitle = track.seriesName;
+  mediaInfo.metadata = metadata;
+
+  const request = new media.LoadRequest(mediaInfo);
+  request.currentTime = audioEngine.getCurrentTime();
+  request.autoplay = true;
+  try {
+    await session.loadMedia(request);
+  } catch {
+    return 'castFailed';
+  }
+  pause();
+  return 'casting';
+}
+
 // ─── Main entry point ────────────────────────────────────────────
 
 /**
@@ -157,7 +208,7 @@ function loadCastSdk(): Promise<boolean> {
  * 3. Fallback guidance with Bluetooth suggestion for Google speakers
  */
 export async function handleCastClick(): Promise<void> {
-  const he = isHebrew();
+  useCastStatus.setState({ status: null });
 
   // ── 1. AirPlay — feature-detected (Safari, iOS, macOS) ────────
   if (platformSupportsAirPlay()) {
@@ -167,25 +218,12 @@ export async function handleCastClick(): Promise<void> {
       case 'success':
       case 'cancelled':
         return;
-
       case 'no-audio':
-        alert(he
-          ? 'התחל להשמיע שיעור תחילה, ואז לחץ על כפתור השידור.'
-          : 'Start playing a lesson first, then tap the cast button.'
-        );
+        report('noAudio');
         return;
-
       case 'no-devices':
-        alert(he
-          ? 'לא נמצאו מכשירי AirPlay ברשת.\n\n'
-            + 'AirPlay עובד עם: HomePod, Apple TV, רמקולים תומכי AirPlay.\n\n'
-            + 'לרמקול Google (Home/Nest): חבר דרך Bluetooth בהגדרות הטלפון.'
-          : 'No AirPlay devices found on your network.\n\n'
-            + 'AirPlay works with: HomePod, Apple TV, AirPlay speakers.\n\n'
-            + 'For Google speakers (Home/Nest): connect via Bluetooth in Settings.'
-        );
+        report('noAirPlayDevices');
         return;
-
       case 'unsupported':
         // AirPlay APIs didn't work — fall through to Cast / fallback
         break;
@@ -197,47 +235,21 @@ export async function handleCastClick(): Promise<void> {
     const available = await loadCastSdk();
     const win = w();
 
-    if (available && win?.cast?.framework) {
-      try {
-        const ctx = win.cast.framework.CastContext.getInstance();
-        await ctx.requestSession();
-
-        // After session established → load current audio on the Cast device
-        const session = ctx.getCurrentSession?.();
-        if (session && win.chrome?.cast) {
-          const currentUrl = audioEngine.getCurrentUrl();
-          if (currentUrl) {
-            try {
-              const absoluteUrl = toAbsoluteUrl(currentUrl);
-              const mediaInfo = new win.chrome.cast.media.MediaInfo(absoluteUrl, 'audio/mpeg');
-              const request = new win.chrome.cast.media.LoadRequest(mediaInfo);
-              await session.loadMedia(request);
-            } catch {
-              console.warn('[Cast] Connected but failed to load media on device');
-            }
-          }
-        }
-      } catch {
-        // User cancelled the picker
-      }
-    } else {
-      alert(he
-        ? 'לא נמצאו מכשירי Chromecast ברשת.\nוודא שמכשיר ה-Chromecast מחובר לאותה רשת WiFi.'
-        : 'No Chromecast devices found.\nMake sure your Chromecast is on the same WiFi network.'
-      );
+    if (!available || !win?.cast?.framework) {
+      report('noChromecast');
+      return;
     }
+    const ctx = win.cast.framework.CastContext.getInstance();
+    try {
+      await ctx.requestSession();
+    } catch {
+      return; // The listener closed the picker.
+    }
+    const session = ctx.getCurrentSession?.();
+    if (session && win.chrome?.cast) report(await loadOnChromecast(win, session));
     return;
   }
 
   // ── 3. Fallback — Bluetooth guidance for Google speakers ───────
-  alert(he
-    ? 'שידור לרמקול:\n\n'
-      + '• רמקול Google (Home/Nest): חבר דרך הגדרות ← Bluetooth\n\n'
-      + '• רמקול AirPlay (HomePod וכו\'): התחל להשמיע ואז בחר ב-AirPlay דרך מרכז הבקרה\n\n'
-      + '• Chromecast: פתח בדפדפן Chrome במחשב'
-    : 'Stream to speaker:\n\n'
-      + '• Google speakers (Home/Nest): connect via Settings → Bluetooth\n\n'
-      + '• AirPlay speakers (HomePod etc.): start playback then select AirPlay from Control Center\n\n'
-      + '• Chromecast: open in Chrome on desktop'
-  );
+  report('guidance');
 }

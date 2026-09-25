@@ -147,7 +147,8 @@
     "error": "שגיאה",
     "retry": "נסה שוב",
     "back": "חזרה",
-    "rateLimited": "יותר מדי ניסיונות. נסו שוב בעוד כמה דקות."
+    "rateLimited": "יותר מדי ניסיונות. נסו שוב בעוד כמה דקות.",
+    "manageApp": "ניהול {appName}"
   },
   "home": {
     "title": "נגן תורה",
@@ -156,7 +157,10 @@
     "recentLessons": "שיעורים אחרונים",
     "quickAccess": "גישה מהירה",
     "welcome": "ברוכים הבאים לנגן תורה",
-    "welcomeDesc": "האזינו לשיעורי תורה יומיים בכל מקום ובכל זמן"
+    "welcomeDesc": "האזינו לשיעורי תורה יומיים בכל מקום ובכל זמן",
+    "latestLesson": "השיעור האחרון",
+    "categories": "קטגוריות",
+    "showAll": "הצג הכל"
   },
   "lessons": {
     "title": "שיעורים",
@@ -214,10 +218,44 @@
     "lessonFallback": "שיעור תורה",
     "audioFiles": "קבצי שמע",
     "part": "חלק {number}",
+    "downloaded": "שמור במכשיר",
+    "heard": "נשמע עד הסוף",
+    "resumeAt": "המשך מ-{time}",
+    "resumePart": "המשך בחלק {number} מ-{time}",
+    "sleepTimer": "טיימר שינה",
+    "sleepOff": "כבוי",
+    "sleepMinutes": "{minutes} דק׳",
+    "sleepEndOfPart": "סוף החלק",
+    "sleepEndOfLesson": "סוף השיעור",
+    "sleepRemaining": "ייעצר בעוד {time}",
+    "sleepAtEndOfPart": "ייעצר בסוף החלק",
+    "sleepAtEndOfLesson": "ייעצר בסוף השיעור",
     "issue": {
       "retrying": "החיבור נקטע, מנסה להמשיך…",
       "blocked": "הדפדפן עצר את ההשמעה. הקש על נגן כדי להמשיך.",
       "failed": "ההשמעה נעצרה. הקש על נגן כדי לנסות שוב."
+    },
+    "previousTrack": "הקודם",
+    "nextTrack": "הבא",
+    "upNextEmpty": "אין עוד שיעורים בתור",
+    "removeFromQueue": "הסר מהתור",
+    "moveUp": "הזז למעלה",
+    "moveDown": "הזז למטה",
+    "playNext": "נגן הבא",
+    "queuedNext": "נכנס לתור",
+    "partOf": "חלק {number} מתוך {count}",
+    "partUnknown": "חלק מהשיעור",
+    "expandPlayer": "פתח נגן מלא",
+    "downloadToDevice": "הורדת קובץ למכשיר",
+    "newBadge": "חדש",
+    "dismiss": "סגור",
+    "castStatus": {
+      "noAudio": "התחילו להשמיע שיעור, ואז הקישו על שדר.",
+      "noAirPlayDevices": "לא נמצאו מכשירי AirPlay ברשת. לרמקול Google (Home/Nest) התחברו דרך Bluetooth בהגדרות הטלפון.",
+      "noChromecast": "לא נמצאו מכשירי Chromecast. ודאו שהמכשיר מחובר לאותה רשת WiFi.",
+      "castFailed": "החיבור ל-Chromecast הצליח, אבל השיעור לא נטען במכשיר.",
+      "casting": "השיעור מושמע ב-Chromecast.",
+      "guidance": "לרמקול Google: חברו דרך Bluetooth בהגדרות. ל-AirPlay: בחרו אותו במרכז הבקרה. ל-Chromecast: פתחו את האתר ב-Chrome."
     }
   },
   "driving": {
@@ -252,7 +290,9 @@
   },
   "series": {
     "title": "סדרות",
-    "noSeries": "אין סדרות עדיין"
+    "noSeries": "אין סדרות עדיין",
+    "continueSeries": "המשך סדרה",
+    "startSeries": "התחל מהשיעור הראשון"
   },
   "shorts": {
     "title": "קצרים",
@@ -647,12 +687,32 @@
     "untagged": "ללא תגית",
     "groupBy": "קיבוץ",
     "groupByTag": "לפי תגית",
-    "groupByCategory": "לפי קטגוריה"
+    "groupByCategory": "לפי קטגוריה",
+    "metaDescription": "שיעורים בנושא #{tag}"
   },
   "tags": {
     "label": "תגיות",
     "placeholder": "הוסיפו תגית ולחצו Enter",
     "remove": "הסרת התגית {tag}",
     "full": "עד {max} תגיות"
+  },
+  "errorPage": {
+    "title": "משהו השתבש",
+    "description": "אירעה שגיאה בטעינת הדף.",
+    "retry": "נסה שוב",
+    "updateTitle": "יש גרסה חדשה של האפליקציה",
+    "updateDescription": "כדי לפתוח את הדף יש לטעון את האפליקציה מחדש. הטעינה תעצור את ההשמעה.",
+    "reload": "טען מחדש"
+  },
+  "pwa": {
+    "installTitle": "התקן את {appName}",
+    "installSubtitle": "גישה מהירה מהמסך הראשי",
+    "install": "התקן",
+    "dismiss": "סגור"
+  },
+  "notFound": {
+    "title": "הדף לא נמצא",
+    "description": "הדף שחיפשתם לא קיים או שהועבר.",
+    "backHome": "חזרה לדף הבית"
   }
 }

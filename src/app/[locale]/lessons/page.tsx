@@ -1,12 +1,9 @@
 export const dynamic = 'force-dynamic';
 
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
-import {
-  createSupabaseLessonListReader,
-  loadInitialLessonList,
-  type LessonListFailureCode,
-} from '@/lib/supabase/lesson-list';
+import { isSupabaseConfigured } from '@/lib/supabase/server';
+import { createCatalogLessonListReader } from '@/lib/supabase/anon';
+import { loadInitialLessonList, type LessonListFailureCode } from '@/lib/supabase/lesson-list';
 import { EmptyState } from '@/components/shared/empty-state';
 import { LessonsClient } from './lessons-client';
 import { Link } from '@/i18n/routing';
@@ -39,7 +36,6 @@ export default async function LessonsPage({ params, searchParams }: Props) {
   const commonT = await getTranslations('common');
   const tagT = await getTranslations('tagBrowse');
 
-  const supabase = await createServerSupabaseClient();
   const admin = await isAdmin();
 
   let lessons: LessonWithRelations[] = [];
@@ -50,7 +46,7 @@ export default async function LessonsPage({ params, searchParams }: Props) {
   let loadError: { code: LessonListFailureCode; message: string } | null = null;
 
   const lessonListResult = await loadInitialLessonList(
-    supabase ? createSupabaseLessonListReader(supabase) : null,
+    isSupabaseConfigured() ? createCatalogLessonListReader() : null,
     { q, audioTypeFilter, categoryFilter, tagFilter },
   );
 

@@ -7,6 +7,9 @@ export interface AudioTrack {
   id: string;
   lessonId?: string;
   audioFileId?: string;
+  /** Position of this file among the lesson's parts (0-based) and how many there are. */
+  partIndex?: number;
+  partCount?: number;
   fileKey?: string;
   offlineKey?: string;
   title: string;
@@ -29,6 +32,16 @@ export interface AudioTrack {
  * - failed: retries are exhausted (or the device is offline)
  */
 export type PlaybackIssue = "retrying" | "blocked" | "failed";
+
+/**
+ * Stops playback after a number of minutes (wall clock, fading out at the
+ * end), at the end of the current part, or at the end of the lesson.
+ * Never persisted: a reload starts without a timer.
+ */
+export type SleepTimer =
+  | { kind: "minutes"; endsAt: number }
+  | { kind: "end-of-part" }
+  | { kind: "end-of-lesson" };
 
 /** Stable identity of one audio file of one lesson. */
 export function getTrackKey(track: AudioTrack | null | undefined): string | null {
@@ -57,12 +70,22 @@ export interface AudioPlayerState {
   volume: number;
   playbackSpeed: number;
   isMiniPlayerExpanded: boolean;
+  sleepTimer: SleepTimer | null;
 
   /** Plays a single track. Keeps the queue only when the track is part of it. */
   setTrack: (track: AudioTrack) => void;
   setQueue: (tracks: AudioTrack[], startIndex?: number) => void;
   nextTrack: () => void;
   previousTrack: () => void;
+  /**
+   * Queues tracks right after the current one (moving them if already queued).
+   * Needs a loaded track; the current track itself is never duplicated.
+   */
+  playNext: (tracks: AudioTrack[]) => void;
+  /** Drops a queue item. The current track cannot be removed. */
+  removeFromQueue: (index: number) => void;
+  /** Moves a queue item; the current track keeps playing and queueIndex follows it. */
+  moveInQueue: (from: number, to: number) => void;
   play: () => void;
   pause: () => void;
   togglePlay: () => void;
@@ -74,6 +97,7 @@ export interface AudioPlayerState {
   setPlaybackStatus: (status: AudioEngineStatus) => void;
   setPlaybackIssue: (issue: PlaybackIssue | null) => void;
   toggleMiniPlayer: () => void;
+  setSleepTimer: (timer: SleepTimer | null) => void;
 }
 
 type PersistedAudioState = Pick<
@@ -145,6 +169,7 @@ export const useAudioStore = create<AudioPlayerState>()(
       volume: 1,
       playbackSpeed: 1,
       isMiniPlayerExpanded: false,
+      sleepTimer: null,
 
       setTrack: (track) => {
         const key = getTrackKey(track);
@@ -179,6 +204,49 @@ export const useAudioStore = create<AudioPlayerState>()(
         if (previous) set({ ...startTrack(previous), queueIndex: queueIndex - 1 });
       },
 
+      playNext: (tracks) => {
+        const { currentTrack, queue, queueIndex } = get();
+        if (!currentTrack) return;
+        const currentKey = getTrackKey(currentTrack);
+        const incoming = tracks.filter((track) => getTrackKey(track) !== currentKey);
+        if (incoming.length === 0) return;
+        const incomingKeys = new Set(incoming.map(getTrackKey));
+        // A restored queue that lost track of the current item starts over from it.
+        const base = getTrackKey(queue[queueIndex]) === currentKey ? queue : [currentTrack];
+        const baseIndex = base === queue ? queueIndex : 0;
+        const kept: AudioTrack[] = [];
+        let index = 0;
+        base.forEach((item, i) => {
+          if (i === baseIndex) index = kept.length;
+          else if (incomingKeys.has(getTrackKey(item))) return;
+          kept.push(item);
+        });
+        kept.splice(index + 1, 0, ...incoming);
+        set({ queue: kept, queueIndex: index });
+      },
+
+      removeFromQueue: (index) => {
+        const { queue, queueIndex } = get();
+        if (index === queueIndex || index < 0 || index >= queue.length) return;
+        set({
+          queue: queue.filter((_, i) => i !== index),
+          queueIndex: index < queueIndex ? queueIndex - 1 : queueIndex,
+        });
+      },
+
+      moveInQueue: (from, to) => {
+        const { queue, queueIndex } = get();
+        if (from === to || !queue[from] || !queue[to]) return;
+        const next = [...queue];
+        const [item] = next.splice(from, 1);
+        next.splice(to, 0, item);
+        let index = queueIndex;
+        if (from === queueIndex) index = to;
+        else if (from < queueIndex && to >= queueIndex) index -= 1;
+        else if (from > queueIndex && to <= queueIndex) index += 1;
+        set({ queue: next, queueIndex: index });
+      },
+
       play: () => set({ isPlaying: true, playbackIssue: null }),
       pause: () => set({ isPlaying: false, playbackIssue: null }),
       togglePlay: () => {
@@ -193,6 +261,7 @@ export const useAudioStore = create<AudioPlayerState>()(
       setPlaybackSpeed: (speed) => set({ playbackSpeed: speed }),
       setPlaybackStatus: (status) => set({ playbackStatus: status }),
       setPlaybackIssue: (issue) => set({ playbackIssue: issue }),
+      setSleepTimer: (timer) => set({ sleepTimer: timer }),
       toggleMiniPlayer: () =>
         set((state) => ({ isMiniPlayerExpanded: !state.isMiniPlayerExpanded })),
     }),

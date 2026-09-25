@@ -1,37 +1,50 @@
 export const dynamic = 'force-dynamic';
 
-import { setRequestLocale } from 'next-intl/server';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { getCategoryById, getLessonsByCategory, getAllCategories } from '@/lib/supabase/queries';
+import { cache } from 'react';
+import type { Metadata } from 'next';
+import { getTranslations, setRequestLocale } from 'next-intl/server';
+import { isSupabaseConfigured } from '@/lib/supabase/server';
+import { getCachedAllCategories, getCachedCategoryById, getCachedCategoryLessons } from '@/lib/supabase/anon';
 import { LessonCard } from '@/components/lessons/lesson-card';
 import { EmptyState } from '@/components/shared/empty-state';
 import { Link } from '@/i18n/routing';
 import { BookOpen, ChevronLeft, FolderOpen } from 'lucide-react';
 import { notFound } from 'next/navigation';
-import type { Category } from '@/types/database';
+import { JsonLd } from '@/components/seo/json-ld';
+import { DEFAULT_LOCALE, SITE_NAME, SITE_TAGLINE, categoryPath } from '@/config/site';
+import { breadcrumbJsonLd, pageAlternates, truncateText } from '@/lib/seo';
 
 type Props = {
   params: Promise<{ locale: string; categoryId: string }>;
 };
 
+/** One category lookup per request, shared by generateMetadata and the page. */
+const loadCategory = cache((categoryId: string) => getCachedCategoryById(categoryId).catch(() => null));
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { categoryId } = await params;
+  const category = await loadCategory(categoryId);
+  if (!category) return {};
+  return {
+    title: category.hebrew_name,
+    description: truncateText(category.description || `${category.hebrew_name} — ${SITE_TAGLINE.he}`),
+    alternates: pageAlternates(categoryPath(category.id)),
+  };
+}
+
 export default async function CategoryDetailPage({ params }: Props) {
   const { locale, categoryId } = await params;
   setRequestLocale(locale);
 
-  const supabase = await createServerSupabaseClient();
   const isRTL = locale === 'he';
 
-  if (!supabase) return notFound();
+  if (!isSupabaseConfigured()) return notFound();
 
-  let category: Category;
-  try {
-    category = await getCategoryById(supabase, categoryId);
-  } catch {
-    return notFound();
-  }
+  const category = await loadCategory(categoryId);
+  if (!category) return notFound();
 
   // Get all categories to find parent name and sibling sub-categories
-  const allCategories = await getAllCategories(supabase);
+  const allCategories = await getCachedAllCategories();
   const parentCategory = category.parent_id
     ? allCategories.find(c => c.id === category.parent_id) || null
     : null;
@@ -39,10 +52,20 @@ export default async function CategoryDetailPage({ params }: Props) {
     .filter(c => c.parent_id === categoryId)
     .sort((a, b) => a.sort_order - b.sort_order);
 
-  const lessons = await getLessonsByCategory(supabase, categoryId);
+  const lessons = await getCachedCategoryLessons(categoryId);
+
+  const tCategories = await getTranslations({ locale: DEFAULT_LOCALE, namespace: 'categories' });
 
   return (
     <div className="space-y-5 animate-fade-in">
+      <JsonLd
+        data={breadcrumbJsonLd([
+          { name: SITE_NAME.he, pathname: '/' },
+          { name: tCategories('title'), pathname: '/categories' },
+          ...(parentCategory ? [{ name: parentCategory.hebrew_name, pathname: categoryPath(parentCategory.id) }] : []),
+          { name: category.hebrew_name, pathname: categoryPath(category.id) },
+        ])}
+      />
       {/* Breadcrumb */}
       <nav className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <Link href="/categories" className="hover:text-foreground transition-colors">

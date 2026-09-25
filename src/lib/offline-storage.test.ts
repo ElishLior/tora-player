@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getOfflineLessonTracks } from './lesson-tracks';
+import { isLastPart } from './lesson-progress';
 
 const dbState = vi.hoisted(() => ({
   stores: new Map<string, Map<IDBValidKey, unknown>>(),
@@ -170,6 +172,98 @@ describe('offline lesson storage', () => {
     expect(await getOfflineAudioUrl('lesson-secondary-only', '/api/audio/stream/part-1.mp3')).toBeNull();
     expect(await getOfflineAudioUrl('lesson-secondary-only', '/api/audio/stream/part-2.mp3')).toMatch(/^blob:audio-/);
     expect(await getOfflineAudioUrl('lesson-secondary-only')).toMatch(/^blob:audio-/);
+  });
+
+  it('keeps original lesson positions when only the first or last part is saved', async () => {
+    mockAudioFetch();
+    const { saveAudioFilesOffline, getDownloadedLesson } = await loadOfflineStorage();
+    const meta = {
+      lessonId: 'partial-lesson',
+      title: 'Lesson',
+      hebrewTitle: 'שיעור',
+      duration: 1800,
+      date: '2026-05-10',
+    };
+
+    await saveAudioFilesOffline('partial-lesson', [{
+      audioFileId: 'first',
+      audioUrl: '/api/audio/stream/part-1.mp3',
+      duration: 0,
+      partIndex: 0,
+      partCount: 3,
+      sortOrder: 10,
+    }], meta);
+    const first = await getDownloadedLesson('partial-lesson');
+    expect(first?.audioFiles[0]).toMatchObject({ audioFileId: 'first', partIndex: 0, partCount: 3 });
+    const firstTrack = getOfflineLessonTracks(first!)[0];
+    expect(firstTrack).toMatchObject({ partIndex: 0, partCount: 3, duration: 0 });
+    expect(isLastPart(firstTrack)).toBe(false);
+
+    await saveAudioFilesOffline('partial-lesson', [{
+      audioFileId: 'third',
+      audioUrl: '/api/audio/stream/part-3.mp3',
+      duration: 300,
+      partIndex: 2,
+      partCount: 3,
+      sortOrder: 30,
+    }], meta);
+    const both = await getDownloadedLesson('partial-lesson');
+    expect(getOfflineLessonTracks(both!).map(({ audioFileId, partIndex, partCount }) => ({
+      audioFileId, partIndex, partCount,
+    }))).toEqual([
+      { audioFileId: 'first', partIndex: 0, partCount: 3 },
+      { audioFileId: 'third', partIndex: 2, partCount: 3 },
+    ]);
+    expect(isLastPart(getOfflineLessonTracks(both!)[1])).toBe(true);
+
+    await saveAudioFilesOffline('last-only', [{
+      audioFileId: 'third',
+      audioUrl: '/api/audio/stream/part-3.mp3',
+      partIndex: 2,
+      partCount: 3,
+    }], { ...meta, lessonId: 'last-only' });
+    expect(getOfflineLessonTracks((await getDownloadedLesson('last-only'))!)[0]).toMatchObject({
+      partIndex: 2, partCount: 3,
+    });
+  });
+
+  it('does not infer completion from the saved subset of older audio-file metadata', async () => {
+    const { getDownloadedLesson } = await loadOfflineStorage();
+    await getDownloadedLesson('initialize-db');
+    const stored = {
+      lessonId: 'older',
+      title: 'Older lesson',
+      hebrewTitle: 'שיעור',
+      audioUrl: '/old.mp3',
+      duration: 1800,
+      date: '2026-05-10',
+      audioFiles: [{
+        offlineKey: 'older:part',
+        lessonId: 'older',
+        audioFileId: 'part',
+        audioUrl: '/old.mp3',
+        duration: 0,
+        sortOrder: 4,
+      }],
+    };
+    dbState.stores.get('lesson-meta')!.set('older', stored);
+    dbState.stores.get('audio-cache')!.set('older:part', new Blob(['audio']));
+    const oldTracks = getOfflineLessonTracks((await getDownloadedLesson('older'))!);
+    expect(oldTracks[0].partCount).toBeUndefined();
+    expect(oldTracks[0].duration).toBe(0);
+    expect(isLastPart(oldTracks[0])).toBe(false);
+
+    dbState.stores.get('lesson-meta')!.set('legacy-single', {
+      lessonId: 'legacy-single',
+      title: 'Single',
+      audioUrl: '/single.mp3',
+      duration: 120,
+      date: '2026-05-10',
+    });
+    dbState.stores.get('audio-cache')!.set('legacy-single', new Blob(['audio']));
+    const singleTracks = getOfflineLessonTracks((await getDownloadedLesson('legacy-single'))!);
+    expect(singleTracks[0]).toMatchObject({ partIndex: 0, partCount: 1, duration: 120 });
+    expect(isLastPart(singleTracks[0])).toBe(true);
   });
 
   it('filters downloaded lesson metadata to files that still have audio blobs', async () => {

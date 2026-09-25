@@ -14,17 +14,24 @@ export function SpeedControl({ speed, onSpeedChange }: SpeedControlProps) {
   const [isOpen, setIsOpen] = useState(false);
   const t = useTranslations('player');
   const menuRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
+    if (!isOpen) return;
+    const handlePointer = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setIsOpen(false);
+    };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setIsOpen(false);
+      triggerRef.current?.focus();
+    };
+    document.addEventListener('mousedown', handlePointer);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handlePointer);
+      document.removeEventListener('keydown', handleKey);
+    };
   }, [isOpen]);
 
   const isCustomSpeed = speed !== 1;
@@ -32,7 +39,11 @@ export function SpeedControl({ speed, onSpeedChange }: SpeedControlProps) {
   return (
     <div className="relative" ref={menuRef}>
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        ref={triggerRef}
+        type="button"
+        onClick={() => setIsOpen((open) => !open)}
+        aria-expanded={isOpen}
+        aria-haspopup="menu"
         className={`rounded-full border px-2.5 py-1 text-xs font-bold tabular-nums transition-colors min-w-[3rem] ${
           isCustomSpeed
             ? 'border-primary text-primary'
@@ -40,14 +51,22 @@ export function SpeedControl({ speed, onSpeedChange }: SpeedControlProps) {
         }`}
         aria-label={`${t('speed')}: ${speed}x`}
       >
-        {speed}x
+        <bdi>{speed}x</bdi>
       </button>
 
       {isOpen && (
-        <div className="absolute bottom-full mb-2 start-1/2 -translate-x-1/2 bg-[hsl(var(--surface-elevated))] border border-[hsl(0,0%,20%)] rounded-xl shadow-2xl p-1 z-50 min-w-[80px]">
+        // Physical left/translate: centred under the trigger in both directions.
+        <div
+          role="menu"
+          aria-label={t('speed')}
+          className="absolute bottom-full left-1/2 z-50 mb-2 min-w-[80px] -translate-x-1/2 rounded-xl border border-[hsl(0,0%,20%)] bg-[hsl(var(--surface-elevated))] p-1 shadow-2xl"
+        >
           {SPEED_OPTIONS.map((opt) => (
             <button
               key={opt}
+              type="button"
+              role="menuitemradio"
+              aria-checked={opt === speed}
               onClick={() => {
                 onSpeedChange(opt);
                 setIsOpen(false);
@@ -58,7 +77,7 @@ export function SpeedControl({ speed, onSpeedChange }: SpeedControlProps) {
                   : 'text-foreground hover:bg-[hsl(var(--surface-highlight))]'
               }`}
             >
-              {opt}x
+              <bdi>{opt}x</bdi>
             </button>
           ))}
         </div>
