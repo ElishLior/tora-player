@@ -59,7 +59,7 @@ Expected healthy production shape:
 
 ## Current Shipped State
 
-Last production release: May 11, 2026, via PR #9.
+Last production release: September 25, 2026, via PR #19 (deployment `dpl_3wT2VG4MqZshsGgGPRqDemiSEC4T`).
 
 The current app includes:
 
