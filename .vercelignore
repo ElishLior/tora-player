@@ -4,7 +4,11 @@
 /.agents/
 /.a5c/
 /tests/
-/scripts/
+# Keep scripts/: npm prebuild needs scripts/copy-ffmpeg-core.mjs remotely.
 /supabase/
+/AGENTS.md
+/_bmad-output/
+/test-results/
+/.env*
 *.zip
 *.xlsx
