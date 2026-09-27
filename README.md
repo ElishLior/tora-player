@@ -25,6 +25,8 @@ npm run test
 npm run test:e2e
 ```
 
+Local checks do not replace GitHub Actions. Before marking a pull request ready or merging it, reviewers must verify that CI succeeded for the pull request's current head commit.
+
 The in-app browser and Playwright tests often use custom ports, for example:
 
 ```bash
