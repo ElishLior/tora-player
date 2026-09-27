@@ -17,8 +17,20 @@ cd -- "$repo_root" || {
   exit "$status"
 }
 
-export CI=true
-export NEXT_TELEMETRY_DISABLED=1
+for env_file in .env .env.*; do
+  [ -e "$env_file" ] || continue
+  [ "$env_file" = .env.example ] && continue
+  printf 'FAILED: Refusing to read environment file %s; run from a clean checkout instead\n' "$env_file" >&2
+  exit 1
+done
+
+# npm and Next read HOME config and process environment; isolate both before any install hook runs.
+checks_home=$(mktemp -d "$repo_root/.factory/.checks-home.XXXXXX") || exit 1
+trap 'rm -rf "$checks_home"' 0
+
+safe_run() {
+  env -i HOME="$checks_home" PATH="$PATH" CI=true NEXT_TELEMETRY_DISABLED=1 "$@"
+}
 
 run_step() {
   step_name=$1
@@ -35,14 +47,14 @@ run_step() {
 }
 
 type_check() {
-  npx next typegen && npm run type-check
+  safe_run npx next typegen && safe_run npm run type-check
 }
 
-run_step 'Install dependencies' npm ci
+run_step 'Install dependencies' safe_run npm ci
 run_step 'Type-check' type_check
-run_step 'Lint' npm run lint
-run_step 'Unit tests' npm test
-run_step 'Build' env \
+run_step 'Lint' safe_run npm run lint
+run_step 'Unit tests' safe_run npm test
+run_step 'Build' safe_run env \
   NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321 \
   NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder-anon-key \
   NEXT_PUBLIC_APP_URL=http://localhost:3000 \
