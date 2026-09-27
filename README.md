@@ -25,6 +25,14 @@ npm run test
 npm run test:e2e
 ```
 
+Run the same checks as CI on Linux with Node.js 22 from a **clean checkout**:
+
+```bash
+./.factory/checks.sh
+```
+
+The script refuses repo-root `.env` files other than `.env.example` before installing dependencies. Each step runs with an empty inherited environment and a disposable `HOME`, so it does not read your local `.env.local`, exported secrets, or home `.npmrc`. If your working tree has a real `.env.local`, use a fresh Git worktree with no local env files. It stops at the first failed step.
+
 The in-app browser and Playwright tests often use custom ports, for example:
 
 ```bash
