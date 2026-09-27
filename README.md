@@ -25,6 +25,14 @@ npm run test
 npm run test:e2e
 ```
 
+Run the complete CI check sequence on Linux with Node.js 22:
+
+```bash
+./.factory/checks.sh
+```
+
+The script runs without secrets and stops at the first failed step.
+
 The in-app browser and Playwright tests often use custom ports, for example:
 
 ```bash
