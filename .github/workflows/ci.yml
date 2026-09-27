@@ -23,7 +23,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
       - name: Verify (install, type-check, lint, tests, build)
         run: bash .factory/checks.sh
