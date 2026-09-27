@@ -13,6 +13,9 @@
 # testing
 /coverage
 
+# Disposable HOME for .factory/checks.sh; SIGKILL can bypass its cleanup trap.
+/.factory/.checks-home.*/
+
 # next.js
 /.next/
 /out/
