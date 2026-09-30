@@ -68,7 +68,7 @@ Never deploy production without explicit user approval.
 
 ## Agent Workflow
 
-In OMP, route each task through the pstack playbooks (skill `poteto-mode`). Large, cross-cutting, or multi-session work goes to `figure-it-out`. The May 2026 plans in `docs/superpowers/plans/` are kept as records; their `REQUIRED SUB-SKILL` headers name the retired Superpowers pack, so use pstack instead.
+In OMP, route each task through the pstack playbooks (skill `poteto-mode`). Large, cross-cutting, or multi-session work goes to `figure-it-out`. The May 2026 plans in `docs/superpowers/plans/` are kept as records. They name skills from the retired Superpowers pack (`subagent-driven-development`, `executing-plans`) in their `REQUIRED SUB-SKILL` headers and in their steps; use pstack wherever a plan names one of them.
 
 ## Git Workflow
 
