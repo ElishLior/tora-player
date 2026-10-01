@@ -9,22 +9,29 @@ Start the app, check it, drive the changed feature as a guest listener, keep the
 
 ## Launch
 
-Local, to test this checkout (Node 22, `npm ci` done, port 3006 free):
+Every run starts with its own evidence folder:
 
 ```bash
 EVIDENCE=~/.local/state/verify-tora/$(date -u +%Y%m%dT%H%M%SZ); mkdir -p "$EVIDENCE"
+```
+
+Local, to test this checkout (Node 22, `npm ci` done, port 3006 free):
+
+```bash
+# Next loads .env* files by itself, and they can hold the service-role key that turns guest reads
+# into production writes. Same rule as .factory/checks.sh: this must print nothing. If it prints a
+# file, stop and use a clean `git worktree add` instead (the main checkout has them).
+ls -a | grep -E '^\.env' | grep -vx '.env.example'
 BASE=http://127.0.0.1:3006
-# Public values only, through the environment. Never a .env* file: .factory/checks.sh rejects
-# them, and they can carry the service-role key that turns reads into production writes.
 export NEXT_PUBLIC_SUPABASE_URL=https://ncmfptetebjjtbeqfeiw.supabase.co
 export NEXT_PUBLIC_SUPABASE_ANON_KEY="$(supabase projects api-keys --project-ref ncmfptetebjjtbeqfeiw -o json 2>/dev/null | jq -r '.[] | select(.name=="anon") | .api_key')"
-npm run dev -- --hostname 127.0.0.1 --port 3006 > "$EVIDENCE/server.log" 2>&1 &
+env -u SUPABASE_SERVICE_ROLE_KEY npm run dev -- --hostname 127.0.0.1 --port 3006 > "$EVIDENCE/server.log" 2>&1 &
 echo $! > "$EVIDENCE/server.pid"
 ```
 
 Ready when `curl -s -o /dev/null -w '%{http_code}\n' $BASE/api/health` prints 200 or 503 (about 15 s). Skip the two exports for a UI-only run: the lessons page then shows the load error "לא ניתן לטעון שיעורים כרגע", but offline downloads, bookmarks and the admin redirect still work.
 
-Deployed: `BASE=https://tora-player.vercel.app`. Nothing to launch; the same guest-only rules apply.
+Deployed: `BASE=https://tora-player.vercel.app`. Nothing to launch or clean up; the same guest-only rules apply.
 
 ## Doctor
 
@@ -73,6 +80,8 @@ Everything stays in `$EVIDENCE`, outside the repo:
 Write `git rev-parse HEAD` and `git status --short` into `$EVIDENCE/commit.txt`. A proof counts only for a clean tree at that commit.
 
 ## Cleanup
+
+Local runs only; a deployed run started nothing.
 
 ```bash
 kill "$(cat "$EVIDENCE/server.pid")"
