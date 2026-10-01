@@ -22,7 +22,7 @@ npm run dev -- --hostname 127.0.0.1 --port 3006 > "$EVIDENCE/server.log" 2>&1 &
 echo $! > "$EVIDENCE/server.pid"
 ```
 
-Ready when `curl -s -o /dev/null -w '%{http_code}\n' $BASE/api/health` prints 200 or 503 (about 15 s). Skip the two exports for a UI-only run: the catalog is then empty, but offline downloads, bookmarks and the admin redirect still work.
+Ready when `curl -s -o /dev/null -w '%{http_code}\n' $BASE/api/health` prints 200 or 503 (about 15 s). Skip the two exports for a UI-only run: the lessons page then shows the load error "לא ניתן לטעון שיעורים כרגע", but offline downloads, bookmarks and the admin redirect still work.
 
 Deployed: `BASE=https://tora-player.vercel.app`. Nothing to launch; the same guest-only rules apply.
 
@@ -52,6 +52,8 @@ Give every run its own `--output` folder: Playwright empties that folder when a 
 
 For behavior no spec covers, drive the page with the browser tool (OMP `browser`, or `skill://agent-browser`) using the Hebrew labels in `messages/he.json`, and save a screenshot of each step into `$EVIDENCE`.
 
+Drive only in a fresh, signed-out browser. The specs get a new context per test. With the browser tool, open a new managed tab and clear its cookies and site storage before the first page; never use the relay to your real Chrome. A signed-in session syncs bookmarks, progress and notes to production on page load (`src/components/auth/account-button.tsx:29`), and a stored push subscription is posted again after 24 hours (`src/components/notifications/use-push-notifications.ts:73-89`).
+
 Do not drive, on any URL with real data:
 
 - sign-in, `/he/admin/**`, upload, or lesson editing;
@@ -78,4 +80,4 @@ sleep 2; lsof -nP -iTCP:3006 -sTCP:LISTEN   # must print nothing
 unset NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY
 ```
 
-If a `next-server` still listens on 3006, kill that PID: the port was free before you launched, so it is yours. Cleanup never deletes `$EVIDENCE`. Keep this skill current with `/maintain-verification-skill`.
+If the port is still busy, report it and stop; never kill a process you cannot tie to `server.pid`. Cleanup never deletes `$EVIDENCE`. Keep this skill current with `/maintain-verification-skill`.

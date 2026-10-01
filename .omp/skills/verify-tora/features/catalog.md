@@ -23,5 +23,5 @@ Preconditions: Launch with the anon key, or a deployed URL.
 
 ## Gotchas
 
-- In a UI-only run "render restored lessons" fails because the catalog is empty. Report it as skipped for missing data, not as a regression.
+- In a UI-only run "render restored lessons" fails because the lessons page shows the load error "לא ניתן לטעון שיעורים כרגע" (no Supabase). Report it as skipped for missing data, not as a regression.
 - Dev mode compiles each route on first request; the first test can take 20 seconds.
