@@ -66,6 +66,10 @@ npx vercel --prod --yes
 
 Never deploy production without explicit user approval.
 
+## Agent Workflow
+
+In OMP, route each task through the pstack playbooks (skill `poteto-mode`). Large, cross-cutting, or multi-session work goes to `figure-it-out`. The May 2026 plans in `docs/superpowers/plans/` are kept as records. They name skills from the retired Superpowers pack (`subagent-driven-development`, `executing-plans`) in their `REQUIRED SUB-SKILL` headers and in their steps. Wherever a plan names one of them, use pstack in OMP; in Claude Code or Codex, which don't load pstack, work the plan's steps directly.
+
 ## Git Workflow
 
 - `dev` is the development branch.
