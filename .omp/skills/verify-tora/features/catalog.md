@@ -18,7 +18,7 @@ Open the site. The bottom navigation ("ניווט ראשי") has "שיעורים
 
 Preconditions: Launch with the anon key, or a deployed URL.
 
-- Run `PLAYWRIGHT_BASE_URL=$BASE npx playwright test tests/e2e/smoke.spec.ts --project=chromium --reporter=line --trace=on --output="$EVIDENCE/playwright"`. Each test prints one line; the summary says how many passed.
+- Run `PLAYWRIGHT_BASE_URL=$BASE npx playwright test tests/e2e/smoke.spec.ts --project=chromium --reporter=line --trace=on --output="$EVIDENCE/catalog"`. Each test prints one line; with catalog data all 12 pass.
 - The search test only loads the page. To prove results, open `$BASE/he/search?q=<a word from a lesson title>` with the browser tool and screenshot the list.
 
 ## Gotchas

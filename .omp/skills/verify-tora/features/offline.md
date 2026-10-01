@@ -16,11 +16,12 @@ Full player, "שמירה אופליין"; then the bottom navigation "הורדו
 
 ## Driving it with Playwright
 
-Preconditions: none for the first two tests (they seed IndexedDB themselves). The device-file test needs catalog data.
+Preconditions: none for the first two tests (they seed IndexedDB themselves). The device-file test needs a deployed URL.
 
-- Run `PLAYWRIGHT_BASE_URL=$BASE npx playwright test tests/e2e/offline-download.spec.ts --project=chromium --reporter=line --trace=on --output="$EVIDENCE/playwright"`.
+- Run `PLAYWRIGHT_BASE_URL=$BASE npx playwright test tests/e2e/offline-download.spec.ts --project=chromium --reporter=line --trace=on --output="$EVIDENCE/offline"`.
 - The device-file test answers `**/api/audio/**` with a few bytes, so nothing is pulled from R2.
 
 ## Gotchas
 
 - The service worker ignores localhost and 127.0.0.1 (`public/sw.js:195`). Reloading a page while offline can only be proven on a deployed URL.
+- Against a local server the device-file test times out waiting for the download; the same test passes on https://tora-player.vercel.app (both seen 2026-10-01). Locally, report it as skipped, not failed.

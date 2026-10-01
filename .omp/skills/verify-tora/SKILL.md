@@ -45,8 +45,10 @@ The repo's Playwright specs are the harness. Run the spec for the feature you ch
 
 ```bash
 PLAYWRIGHT_BASE_URL=$BASE npx playwright test tests/e2e/player-behavior.spec.ts \
-  --project=chromium --reporter=line --trace=on --output="$EVIDENCE/playwright" 2>&1 | tee "$EVIDENCE/playwright.txt"
+  --project=chromium --reporter=line --trace=on --output="$EVIDENCE/playback" 2>&1 | tee "$EVIDENCE/playback.txt"
 ```
+
+Give every run its own `--output` folder: Playwright empties that folder when a run starts. Dev mode compiles each route on its first visit, so a first run can fail on a 5-second wait; rerun once on the warm server, and treat a second failure as real.
 
 For behavior no spec covers, drive the page with the browser tool (OMP `browser`, or `skill://agent-browser`) using the Hebrew labels in `messages/he.json`, and save a screenshot of each step into `$EVIDENCE`.
 
@@ -62,8 +64,8 @@ Do not drive, on any URL with real data:
 Everything stays in `$EVIDENCE`, outside the repo:
 
 - `server.log` from the dev server;
-- `playwright.txt`, one pass or fail line per test;
-- `playwright/<test>/trace.zip`, a screenshot and DOM snapshot of every action (`npx playwright show-trace <zip>`);
+- `<run>.txt` (for example `playback.txt`), one pass or fail line per test;
+- `<run>/<test>/trace.zip`, a screenshot and DOM snapshot of every action (`npx playwright show-trace <zip>`);
 - browser-tool screenshots for anything driven by hand.
 
 Write `git rev-parse HEAD` and `git status --short` into `$EVIDENCE/commit.txt`. A proof counts only for a clean tree at that commit.

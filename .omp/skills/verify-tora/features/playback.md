@@ -17,7 +17,7 @@ Playing a lesson from the catalog and controlling it from the header, the mini p
 
 Preconditions: Launch with the anon key, or a deployed URL.
 
-- Run `PLAYWRIGHT_BASE_URL=$BASE npx playwright test tests/e2e/player-behavior.spec.ts --project=chromium --reporter=line --trace=on --output="$EVIDENCE/playwright"`. Four tests pass.
+- Run `PLAYWRIGHT_BASE_URL=$BASE npx playwright test tests/e2e/player-behavior.spec.ts --project=chromium --reporter=line --trace=on --output="$EVIDENCE/playback"`. All 4 pass on a warm server.
 - The spec replaces `play()` and `pause()` (`installMediaHarness`), so no audio is fetched and no listen is recorded.
 - Driving mode has no spec. With the browser tool: full player, "מצב נהיגה", then the dialog "מצב נהיגה" shows large controls; "השהה" turns into "נגן".
 
