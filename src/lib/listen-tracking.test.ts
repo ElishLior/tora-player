@@ -44,9 +44,9 @@ describe('recordListenSample', () => {
 
   it('counts a skip interval as wall time, not as the jump', () => {
     let session = play(null, 0, 0, 10);
-    session = recordListenSample(session, at(15_000, 10 + 5 + 30), nextId).session; // +30s skip
+    session = recordListenSample(session, at(15_000, 10 + 5 + 15), nextId).session; // +15s skip
     expect(session.listenedSeconds).toBe(15);
-    session = recordListenSample(session, at(20_000, 45 + 5 - 15), nextId).session; // -15s skip
+    session = recordListenSample(session, at(20_000, 30 + 5 - 15), nextId).session; // -15s skip
     expect(session.listenedSeconds).toBe(20);
   });
 

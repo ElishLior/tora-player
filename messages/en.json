@@ -192,7 +192,7 @@
   "player": {
     "play": "Play",
     "pause": "Pause",
-    "skipForward": "Skip 30 seconds forward",
+    "skipForward": "Skip 15 seconds forward",
     "skipBackward": "Back 15 seconds",
     "speed": "Speed",
     "volume": "Volume",
@@ -212,7 +212,7 @@
     "noActiveLesson": "No active lesson",
     "clipMode": "Clip Mode",
     "skipBackwardShort": "-15",
-    "skipForwardShort": "+30",
+    "skipForwardShort": "+15",
     "seek": "Position in lesson",
     "closePlayer": "Close player",
     "lessonFallback": "Torah lesson",
