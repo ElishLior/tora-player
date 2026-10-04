@@ -9,9 +9,11 @@ describe('generateLessonMetadata Friday title', () => {
     expect(meta.isHolidayReading).toBe(false);
   });
 
-  it('joins double portions under one פרשת prefix', () => {
-    const meta = generateLessonMetadata('2026-04-10');
-    expect(meta.title).toBe('ליל שישי - כ״ג ניסן תשפ״ו | פרשת שמיני');
+  it('joins a real double portion under one פרשת prefix', () => {
+    const meta = generateLessonMetadata('2027-09-24');
+    expect(meta.parsha).toBe('נצבים-וילך');
+    expect(meta.title).toBe('ליל שישי - כ״ב אלול תשפ״ז | פרשת נצבים-וילך');
+    expect(meta.isHolidayReading).toBe(false);
   });
 
   it('names the Sukkot Friday חג הסוכות, not פרשת סוכות', () => {
@@ -30,6 +32,11 @@ describe('generateLessonMetadata Friday title', () => {
       expect(meta.isHolidayReading, date).toBe(true);
       expect(meta.title, date).not.toContain('פרשת');
     }
+  });
+
+  it('puts the Chol HaMoed Shabbat first, as people say it', () => {
+    expect(generateLessonMetadata('2025-10-10').title).toBe('ליל שישי - י״ח תשרי תשפ״ו | שבת חול המועד סוכות');
+    expect(generateLessonMetadata('2026-04-03').title).toBe('ליל שישי - ט״ז ניסן תשפ״ו | שבת חול המועד פסח');
   });
 
   it('uses the holiday name from the calendar for other holidays', () => {

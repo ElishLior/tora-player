@@ -5,8 +5,8 @@ const HEBREW_DAYS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמי
 /**
  * Title wording for a holiday reading, keyed by the calendar's English reading
  * name. A holiday is not a "parsha", so it never gets the "פרשת" prefix. The
- * owner asked for Sukkot to read "חג הסוכות"; any other holiday uses the
- * calendar's own Hebrew name until a wording is chosen for it here.
+ * owner asked for Sukkot to read "חג הסוכות"; other wording below is a proposal and
+ * can be changed here.
  */
 const HOLIDAY_TITLES: Record<string, string> = {
   Sukkot: 'חג הסוכות',
@@ -18,6 +18,20 @@ const HOLIDAY_TITLES: Record<string, string> = {
  */
 function stripNikud(str: string): string {
   return str.replace(/[\u0591-\u05C7]/g, '');
+}
+
+const CHOL_HAMOED_SHABBAT = /^(.+) שבת חול המועד$/;
+
+/**
+ * "חג הסוכות" for Sukkot itself; "שבת חול המועד סוכות" (Shabbat first, as people
+ * say it) for the Shabbat of the intermediate days of Sukkot or Pesach; any other
+ * holiday keeps the calendar's Hebrew name.
+ */
+function holidayTitleFor(englishName: string, hebrewName: string): string {
+  const exact = HOLIDAY_TITLES[englishName];
+  if (exact) return exact;
+  const cholHamoed = hebrewName.match(CHOL_HAMOED_SHABBAT);
+  return cholHamoed ? `שבת חול המועד ${cholHamoed[1]}` : hebrewName;
 }
 
 /**
@@ -60,7 +74,7 @@ export function generateLessonMetadata(dateStr: string) {
           .join('-')
       );
       isHolidayReading = parshaResult.chag === true;
-      if (isHolidayReading) holidayTitle = HOLIDAY_TITLES[parshaResult.parsha[0]] ?? parsha;
+      if (isHolidayReading) holidayTitle = holidayTitleFor(parshaResult.parsha[0], parsha);
     }
   } catch {
     // No parsha for this date (e.g., holiday)
