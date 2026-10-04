@@ -35,6 +35,7 @@ interface MetadataSuggestion {
   hebrewDate: string;
   hebrewDay: string;
   parsha: string | null;
+  readingLabel: string | null;
   teacher: string;
   location: string;
   lessonType: string;
@@ -487,9 +488,9 @@ export default function EditLessonPage() {
               <span className="rounded-full bg-[hsl(var(--surface-elevated))] px-2.5 py-1">
                 יום {metadataSuggestion.hebrewDay}
               </span>
-              {metadataSuggestion.parsha && (
+              {metadataSuggestion.readingLabel && (
                 <span className="rounded-full bg-primary/20 text-primary px-2.5 py-1 font-medium">
-                  פרשת {metadataSuggestion.parsha}
+                  {metadataSuggestion.readingLabel}
                 </span>
               )}
             </div>
