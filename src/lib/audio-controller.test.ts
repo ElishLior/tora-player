@@ -666,3 +666,96 @@ describe("audio controller", () => {
     });
   });
 });
+
+describe("audio controller duration evidence", () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    stop = startAudioController();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  afterEach(() => {
+    stop();
+    pause();
+    useAudioStore.setState({ currentTrack: null, queue: [], queueIndex: -1, sleepTimer: null });
+    useProgressStore.setState({ progressMap: {} });
+    vi.restoreAllMocks();
+    getDownloadedLessons.mockResolvedValue([]);
+    getOfflineAudioUrl.mockResolvedValue(null);
+    audioEngine.unload();
+    element()?.emit("emptied");
+    vi.useRealTimers();
+  });
+
+  /** Final part of a two-part lesson: catalog 3819 s, like the 25 Sep 2026 lesson. */
+  function playFinalPart(catalogDuration: number) {
+    const parts = makeParts("lesson", 2).map((part) => ({ ...part, duration: catalogDuration }));
+    playTrack(parts[1], { queue: parts, queueIndex: 1 });
+  }
+
+  function listenTo(position: number) {
+    element().currentTime = position;
+    element().emit("timeupdate");
+    element().paused = true;
+    element().emit("pause");
+  }
+
+  it("does not mark the lesson heard when the browser under-reports the length and the listener pauses before the real last minute", () => {
+    playFinalPart(3819);
+    becomePlaying(3712.2); // desktop WebKit measured 3712.2 for the real 3819.05 s file
+    listenTo(3655); // inside the last minute of the estimate, 164 s before the real end
+
+    expect(useProgressStore.getState().progressMap.lesson).toMatchObject({ position: 3655, completed: false });
+  });
+
+  it("shows the longer catalog length while the browser under-reports it", () => {
+    playFinalPart(3819);
+    becomePlaying(3712.2);
+
+    expect(useAudioStore.getState().duration).toBe(3819);
+  });
+
+  it("shows the browser length when the catalog length is unknown", () => {
+    playFinalPart(0);
+    becomePlaying(540);
+
+    expect(useAudioStore.getState().duration).toBe(540);
+  });
+
+  it("never reports a length shorter than the position the audio has reached", () => {
+    playFinalPart(0);
+    becomePlaying(100); // an estimate that playback has already passed
+    element().currentTime = 106;
+    element().emit("timeupdate");
+
+    expect(useAudioStore.getState().duration).toBeGreaterThanOrEqual(106);
+  });
+
+  it("keeps an unknown length unknown while the audio plays", () => {
+    playFinalPart(0);
+    becomePlaying(Number.POSITIVE_INFINITY); // streamed file with no usable browser length
+    element().currentTime = 42;
+    element().emit("timeupdate");
+
+    expect(useAudioStore.getState().duration).toBe(0);
+    expect(useAudioStore.getState().currentTime).toBe(42);
+  });
+
+  it("still marks the lesson heard inside the last minute when both lengths agree", () => {
+    playFinalPart(3819);
+    becomePlaying(3819.05);
+    listenTo(3780);
+
+    expect(useProgressStore.getState().progressMap.lesson).toMatchObject({ completed: true });
+  });
+
+  it("marks the lesson heard when the audio really ends, even if the catalog length is longer", () => {
+    const parts = makeParts("lesson", 1).map((part) => ({ ...part, duration: 1200 }));
+    playTrack(parts[0]);
+    becomePlaying(1000);
+    endCurrentFile();
+
+    expect(useProgressStore.getState().progressMap.lesson).toMatchObject({ completed: true });
+  });
+});

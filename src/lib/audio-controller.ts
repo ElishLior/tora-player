@@ -4,6 +4,7 @@ import { audioEngine, type AudioEngineStatus } from "@/lib/audio-engine";
 import { getPlaybackReaction, getRetryDelayMs } from "@/lib/audio-lifecycle";
 import { planTrackPlayback, resolveTrackSource } from "@/lib/audio-resume";
 import { isLastPart, isNearPartEnd } from "@/lib/lesson-progress";
+import { trustedPartDuration } from "@/lib/part-duration";
 import { startListenTracking } from "@/lib/listen-tracker";
 import { OFFLINE_DOWNLOADS_CHANGED_EVENT } from "@/lib/offline-events";
 import {
@@ -59,6 +60,11 @@ let resumeWhenOnline = false;
 let lastCheckpointAt = 0;
 let lastServerSaveAt = 0;
 let serverProgressEnabled = true;
+
+/** The length to believe for the current track: catalog and element evidence combined. */
+function trustedDuration(track: AudioTrack): number {
+  return trustedPartDuration({ catalog: track.duration, element: audioEngine.getDuration() });
+}
 
 function isEngineOnCurrentTrack() {
   const key = getTrackKey(getState().currentTrack);
@@ -184,7 +190,7 @@ function saveServerProgress(track: AudioTrack, position: number, completed: bool
 function recordProgress(
   track: AudioTrack,
   position: number,
-  completed = isLastPart(track) && isNearPartEnd(position, audioEngine.getDuration()),
+  completed = isLastPart(track) && isNearPartEnd(position, trustedDuration(track)),
 ) {
   useProgressStore.getState().saveProgress({
     lessonId: getTrackLessonId(track),
@@ -349,7 +355,11 @@ function handleStatusChange(status: AudioEngineStatus) {
 
 function handleTimeUpdate(time: number) {
   if (!isEngineOnCurrentTrack()) return;
-  getState().setCurrentTime(time);
+  const state = getState();
+  // Playing past a believed length proves it was too short; never claim the end early.
+  // A length that is still unknown (0) stays unknown rather than tracking the position.
+  if (state.duration > 0 && time > state.duration) useAudioStore.setState({ currentTime: time, duration: time });
+  else state.setCurrentTime(time);
   if (recovery.attempts > 0 && time > recovery.position + RECOVERY_PROVEN_SECONDS) {
     recovery.attempts = 0;
   }
@@ -417,8 +427,9 @@ export function startAudioController(): () => void {
   audioEngine.setHandlers({
     onStatusChange: handleStatusChange,
     onTimeUpdate: handleTimeUpdate,
-    onDurationChange: (duration) => {
-      if (isEngineOnCurrentTrack()) getState().setDuration(duration);
+    onDurationChange: () => {
+      const { currentTrack, setDuration } = getState();
+      if (currentTrack && isEngineOnCurrentTrack()) setDuration(trustedDuration(currentTrack));
     },
     onPlayBlocked: () => {
       const latest = getState();
