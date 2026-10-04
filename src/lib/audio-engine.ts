@@ -1,6 +1,7 @@
 "use client";
 
 import { normalizeAudioUrl } from "@/lib/audio-url";
+import { attachElementDiagnostics, diag, elementSnapshot } from "@/lib/playback-diagnostics";
 
 /**
  * What the audio element is doing, read from its live state:
@@ -94,7 +95,9 @@ export class AudioEngine {
     if (element.error) this.reload();
 
     const trackKey = this.trackKey;
+    diag("audio:play()", elementSnapshot(element));
     element.play()?.catch((error: unknown) => {
+      diag("audio:play-rejected", { name: (error as { name?: string } | null)?.name ?? "unknown" });
       // AbortError means a newer load/pause superseded this call.
       if (
         trackKey === this.trackKey &&
@@ -201,6 +204,7 @@ export class AudioEngine {
     element.addEventListener("canplay", this.applyPendingPosition);
     element.addEventListener("playing", this.applyPendingPosition);
     element.addEventListener("timeupdate", this.handleTimeUpdate);
+    attachElementDiagnostics(element);
     this.element = element;
     return element;
   }

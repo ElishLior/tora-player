@@ -3,7 +3,7 @@ import { routing } from '@/i18n/routing';
 import { SITE_URL } from '@/config/site';
 
 /** Personal, admin and device-only pages: never crawled (they also send noindex, see their layouts). */
-const PRIVATE_PATHS = ['/admin', '/auth', '/me', '/bookmarks', '/offline', '/driving', '/lessons/upload', '/lessons/*/edit'];
+const PRIVATE_PATHS = ['/admin', '/auth', '/me', '/bookmarks', '/offline', '/driving', '/diagnostics', '/lessons/upload', '/lessons/*/edit'];
 
 export default function robots(): MetadataRoute.Robots {
   return {
