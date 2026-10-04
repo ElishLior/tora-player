@@ -3,7 +3,7 @@
  * Rename daily lessons to the canonical title from src/lib/hebrew-date.ts
  * (the same function the admin upload uses):
  *
- *   Friday:     "ליל שישי - {hebrew_date} | פרשת {parsha}"
+ *   Friday:     "ליל שישי - {hebrew_date} | פרשת {parsha}" (holiday readings use the holiday name instead of פרשת)
  *   Other days: "יום {day} - {hebrew_date}"
  *
  * Short lessons (lesson_type short_clip or filed under קצרים) keep their topic
