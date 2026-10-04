@@ -7,18 +7,10 @@ import {
   play,
   previousTrackOrSkip,
   seekTo,
-  skipBy,
+  skipBackward,
+  skipForward,
 } from "@/lib/audio-controller";
-import {
-  SKIP_BACK_SECONDS,
-  SKIP_FORWARD_SECONDS,
-} from "@/lib/player-track-actions";
-import {
-  getTransportState,
-  useAudioStore,
-  type AudioPlayerState,
-  type AudioTrack,
-} from "@/stores/audio-store";
+import { getTransportState, useAudioStore, type AudioPlayerState, type AudioTrack } from "@/stores/audio-store";
 import { DEFAULT_LOCALE, SITE_NAME } from "@/config/site";
 
 // Normal playback moves the position by < 1s per timeupdate even at 2x speed;
@@ -66,15 +58,18 @@ function buildMetadata(track: AudioTrack) {
 }
 
 function updatePositionState(session: MediaSession, state: AudioPlayerState) {
-  if (state.duration <= 0) return;
   try {
+    if (state.duration <= 0) {
+      session.setPositionState({});
+      return;
+    }
     session.setPositionState({
       duration: state.duration,
       playbackRate: state.playbackSpeed || 1,
       position: Math.max(0, Math.min(state.currentTime, state.duration)),
     });
   } catch {
-    // Older browsers without setPositionState.
+    // Older browsers can omit setPositionState or reject the update.
   }
 }
 
@@ -91,8 +86,9 @@ export function useMediaSession() {
       ["play", () => play()],
       ["pause", () => pause()],
       ["stop", () => pause()],
-      ["seekbackward", (details) => skipBy(-(details.seekOffset || SKIP_BACK_SECONDS))],
-      ["seekforward", (details) => skipBy(details.seekOffset || SKIP_FORWARD_SECONDS)],
+      // Relative skips always use the app's 15-second interval, regardless of OS seekOffset.
+      ["seekbackward", () => skipBackward()],
+      ["seekforward", () => skipForward()],
       [
         "seekto",
         (details) => {
@@ -123,8 +119,7 @@ export function useMediaSession() {
       const trackChanged = track !== previous?.currentTrack;
       // iOS can drop the now-playing info after an interruption; re-assert it
       // whenever sound starts again.
-      const startedPlaying =
-        state.playbackStatus === "playing" && previous?.playbackStatus !== "playing";
+      const startedPlaying = state.playbackStatus === "playing" && previous?.playbackStatus !== "playing";
       if (trackChanged || startedPlaying) session.metadata = buildMetadata(track);
 
       session.playbackState = getTransportState(state) === "paused" ? "paused" : "playing";

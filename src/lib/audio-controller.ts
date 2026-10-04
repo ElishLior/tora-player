@@ -308,6 +308,7 @@ function handleStatusChange(status: AudioEngineStatus) {
   const key = getTrackKey(track)!;
 
   if (status === "playing") {
+    clearRetry();
     playedTrackKey = key;
     if (applySleepTimer()) return;
     if (state.playbackIssue) state.setPlaybackIssue(null);

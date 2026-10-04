@@ -192,7 +192,7 @@
   "player": {
     "play": "נגן",
     "pause": "השהה",
-    "skipForward": "דלג 30 שניות קדימה",
+    "skipForward": "דלג 15 שניות קדימה",
     "skipBackward": "חזור 15 שניות אחורה",
     "speed": "מהירות",
     "volume": "עוצמה",
@@ -212,7 +212,7 @@
     "noActiveLesson": "אין שיעור פעיל",
     "clipMode": "מצב קטע",
     "skipBackwardShort": "15-",
-    "skipForwardShort": "30+",
+    "skipForwardShort": "15+",
     "seek": "מיקום בשיעור",
     "closePlayer": "סגור נגן",
     "lessonFallback": "שיעור תורה",
