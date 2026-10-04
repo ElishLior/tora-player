@@ -11,6 +11,7 @@ import {
   skipForward,
   startAudioController,
 } from "./audio-controller";
+import { getResumePoint } from "./lesson-progress";
 import { playLesson } from "./play-lesson";
 
 // Browser globals the controller and its stores touch at import time.
@@ -740,6 +741,24 @@ describe("audio controller duration evidence", () => {
 
     expect(useAudioStore.getState().duration).toBe(0);
     expect(useAudioStore.getState().currentTime).toBe(42);
+  });
+
+  it("opens the next part when an earlier part ends while the browser length is short", () => {
+    const parts = makeParts("lesson", 2).map((part) => ({ ...part, duration: 3819 }));
+    playTrack(parts[0], { queue: parts, queueIndex: 0 });
+    becomePlaying(3712.2);
+    endCurrentFile();
+
+    const progress = useProgressStore.getState().progressMap.lesson;
+    expect(getResumePoint(parts, progress)).toEqual({ index: 1, position: 0 });
+  });
+
+  it("does not mark the lesson heard by position once playback has passed a length that was too short", () => {
+    playFinalPart(0); // catalog unknown: only the browser's estimate exists
+    becomePlaying(100);
+    listenTo(106);
+
+    expect(useProgressStore.getState().progressMap.lesson).toMatchObject({ position: 106, completed: false });
   });
 
   it("still marks the lesson heard inside the last minute when both lengths agree", () => {

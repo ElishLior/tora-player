@@ -41,6 +41,8 @@ const RECOVERY_PROVEN_SECONDS = 10;
 const OFFLINE_LOOKUP_TIMEOUT_MS = 3_000;
 // A minutes sleep timer fades the volume out over its last seconds.
 const SLEEP_FADE_SECONDS = 10;
+// Rounding slack when telling a position inside the final minute from one past the length.
+const PAST_LENGTH_TOLERANCE_SECONDS = 1;
 
 const getState = useAudioStore.getState;
 
@@ -64,6 +66,16 @@ let serverProgressEnabled = true;
 /** The length to believe for the current track: catalog and element evidence combined. */
 function trustedDuration(track: AudioTrack): number {
   return trustedPartDuration({ catalog: track.duration, element: audioEngine.getDuration() });
+}
+
+/**
+ * Whether the position counts as the end of the part by position alone. A
+ * position beyond the believed length proves that length was too short, so
+ * only a natural end (finishTrack) may finish the part then.
+ */
+function isAtPartEnd(track: AudioTrack, position: number): boolean {
+  const duration = trustedDuration(track);
+  return isNearPartEnd(position, duration) && position <= duration + PAST_LENGTH_TOLERANCE_SECONDS;
 }
 
 function isEngineOnCurrentTrack() {
@@ -190,7 +202,7 @@ function saveServerProgress(track: AudioTrack, position: number, completed: bool
 function recordProgress(
   track: AudioTrack,
   position: number,
-  completed = isLastPart(track) && isNearPartEnd(position, trustedDuration(track)),
+  completed = isLastPart(track) && isAtPartEnd(track, position),
 ) {
   useProgressStore.getState().saveProgress({
     lessonId: getTrackLessonId(track),
@@ -220,7 +232,9 @@ function checkpoint(options: { server?: boolean } = {}) {
 
 function finishTrack(track: AudioTrack) {
   const state = getState();
-  const position = audioEngine.getDuration();
+  // The believed length, not only the element's: a short browser length would leave an
+  // earlier part "unfinished" and reopen it instead of the next one.
+  const position = trustedDuration(track);
   // A finished earlier part leaves progress at its end, so resuming opens the next part.
   const completed = recordProgress(track, position, isLastPart(track));
   saveServerProgress(track, position, completed);
@@ -382,8 +396,13 @@ function handleStoreChange(state: AudioPlayerState, previous: AudioPlayerState) 
   }
 
   if (getTrackKey(state.currentTrack) !== getTrackKey(previous.currentTrack)) {
-    // Remember where the previous track was left before the element switches.
-    if (previous.currentTrack && playedTrackKey === getTrackKey(previous.currentTrack)) {
+    // Remember where the previous track was left before the element switches. A file that
+    // ended was already recorded by finishTrack; its raw element position would undo that.
+    if (
+      previous.currentTrack &&
+      playedTrackKey === getTrackKey(previous.currentTrack) &&
+      audioEngine.getStatus() !== "ended"
+    ) {
       recordProgress(previous.currentTrack, audioEngine.getCurrentTime());
     }
     clearRetry();
