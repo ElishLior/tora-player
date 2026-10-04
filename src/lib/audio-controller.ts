@@ -54,6 +54,8 @@ let prefetchRevision = 0;
 let loadedTrack: AudioTrack | null = null;
 let pendingLoadKey: string | null = null;
 let playedTrackKey: string | null = null;
+// The part whose natural end finishTrack already recorded; cleared once it plays again.
+let finishedTrackKey: string | null = null;
 let recovery = { trackKey: null as string | null, attempts: 0, position: 0 };
 let retryTimer: number | null = null;
 let sleepTimerTimeout: number | null = null;
@@ -232,6 +234,7 @@ function checkpoint(options: { server?: boolean } = {}) {
 
 function finishTrack(track: AudioTrack) {
   const state = getState();
+  finishedTrackKey = getTrackKey(track);
   // The believed length, not only the element's: a short browser length would leave an
   // earlier part "unfinished" and reopen it instead of the next one.
   const position = trustedDuration(track);
@@ -330,6 +333,7 @@ function handleStatusChange(status: AudioEngineStatus) {
   if (status === "playing") {
     clearRetry();
     playedTrackKey = key;
+    finishedTrackKey = null;
     if (applySleepTimer()) return;
     if (state.playbackIssue) state.setPlaybackIssue(null);
     prefetchNextOfflineSource();
@@ -396,12 +400,12 @@ function handleStoreChange(state: AudioPlayerState, previous: AudioPlayerState) 
   }
 
   if (getTrackKey(state.currentTrack) !== getTrackKey(previous.currentTrack)) {
-    // Remember where the previous track was left before the element switches. A file that
-    // ended was already recorded by finishTrack; its raw element position would undo that.
+    // Remember where the previous track was left before the element switches. A part that
+    // finishTrack already recorded keeps that end; its raw element position would undo it.
     if (
       previous.currentTrack &&
       playedTrackKey === getTrackKey(previous.currentTrack) &&
-      audioEngine.getStatus() !== "ended"
+      finishedTrackKey !== getTrackKey(previous.currentTrack)
     ) {
       recordProgress(previous.currentTrack, audioEngine.getCurrentTime());
     }
@@ -447,8 +451,11 @@ export function startAudioController(): () => void {
     onStatusChange: handleStatusChange,
     onTimeUpdate: handleTimeUpdate,
     onDurationChange: () => {
-      const { currentTrack, setDuration } = getState();
-      if (currentTrack && isEngineOnCurrentTrack()) setDuration(trustedDuration(currentTrack));
+      const { currentTrack, currentTime, setDuration } = getState();
+      if (!currentTrack || !isEngineOnCurrentTrack()) return;
+      const trusted = trustedDuration(currentTrack);
+      // A length already raised to the position stays there; an unknown length stays unknown.
+      setDuration(trusted > 0 ? Math.max(trusted, currentTime) : 0);
     },
     onPlayBlocked: () => {
       const latest = getState();

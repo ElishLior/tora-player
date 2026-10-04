@@ -761,6 +761,47 @@ describe("audio controller duration evidence", () => {
     expect(useProgressStore.getState().progressMap.lesson).toMatchObject({ position: 106, completed: false });
   });
 
+  it("saves the end of a file that ended while paused when the listener then switches lessons", () => {
+    const [lastPart] = makeParts("lesson", 1).map((part) => ({ ...part, duration: 600 }));
+    playTrack(lastPart);
+    becomePlaying(600);
+    pause(); // paused just before the end; the checkpoint saved position 0
+    element().currentTime = 600;
+    element().ended = true;
+    element().emit("ended"); // reaction none: no finishTrack, nothing saved
+    playTrack(makeTrack("other"));
+
+    expect(useProgressStore.getState().progressMap.lesson).toMatchObject({ position: 600, completed: true });
+  });
+
+  it("does not skip the switch save for a finished part that was played again", () => {
+    const parts = makeParts("lesson", 2).map((part) => ({ ...part, duration: 600 }));
+    playTrack(parts[0], { queue: parts, queueIndex: 0 });
+    becomePlaying(600);
+    endCurrentFile(); // finishTrack runs and advances to part 2
+    playTrack(parts[0], { queue: parts, queueIndex: 0 }); // back to part 1
+    becomePlaying(600);
+    element().currentTime = 200;
+    element().emit("timeupdate");
+    playTrack(parts[1], { queue: parts, queueIndex: 1 }); // switch away mid-way
+
+    expect(useProgressStore.getState().progressMap.lesson).toMatchObject({
+      audioFileId: "lesson-part-1",
+      position: 200,
+    });
+  });
+
+  it("keeps the shown length at or above the position when the browser revises its estimate downward", () => {
+    playFinalPart(0);
+    becomePlaying(100);
+    element().currentTime = 106;
+    element().emit("timeupdate"); // passed the estimate: length follows the position
+    element().duration = 104;
+    element().emit("durationchange");
+
+    expect(useAudioStore.getState().duration).toBeGreaterThanOrEqual(106);
+  });
+
   it("still marks the lesson heard inside the last minute when both lengths agree", () => {
     playFinalPart(3819);
     becomePlaying(3819.05);
