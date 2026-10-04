@@ -66,15 +66,18 @@ function buildMetadata(track: AudioTrack) {
 }
 
 function updatePositionState(session: MediaSession, state: AudioPlayerState) {
-  if (state.duration <= 0) return;
   try {
+    if (state.duration <= 0) {
+      session.setPositionState({});
+      return;
+    }
     session.setPositionState({
       duration: state.duration,
       playbackRate: state.playbackSpeed || 1,
       position: Math.max(0, Math.min(state.currentTime, state.duration)),
     });
   } catch {
-    // Older browsers without setPositionState.
+    // Older browsers can omit setPositionState or reject the update.
   }
 }
 

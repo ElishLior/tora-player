@@ -143,6 +143,13 @@ function becomePlaying(duration = 3600) {
   element().emit("playing");
 }
 
+function useRetryClock() {
+  vi.useFakeTimers();
+  vi.spyOn(window, "setTimeout").mockImplementation(((callback: () => void, delay: number) =>
+    globalThis.setTimeout(callback, delay)) as unknown as typeof window.setTimeout);
+  vi.spyOn(window, "clearTimeout").mockImplementation((id) => globalThis.clearTimeout(id));
+}
+
 let stop: () => void;
 
 describe("audio controller", () => {
@@ -163,6 +170,7 @@ describe("audio controller", () => {
     getOfflineAudioUrl.mockResolvedValue(null);
     audioEngine.unload();
     element()?.emit("emptied");
+    vi.useRealTimers();
   });
 
   it("starts a tapped lesson inside the tap (no await before play)", () => {
@@ -186,6 +194,99 @@ describe("audio controller", () => {
 
     expect(element().play).toHaveBeenCalledTimes(2);
     expect(element().currentTime).toBe(1800);
+  });
+
+  it("keeps successful explicit resume uninterrupted when an old error retry is due", () => {
+    useRetryClock();
+    playTrack(makeTrack("a"));
+    becomePlaying();
+    element().currentTime = 100;
+    element().error = { code: 2 };
+    element().emit("error");
+
+    pause();
+    play();
+    becomePlaying();
+    expect(element().currentTime).toBe(100);
+    element().currentTime = 105;
+    const loads = element().load.mock.calls.length;
+    const plays = element().play.mock.calls.length;
+
+    vi.advanceTimersByTime(1000);
+
+    expect(element().load).toHaveBeenCalledTimes(loads);
+    expect(element().play).toHaveBeenCalledTimes(plays);
+    expect(element().currentTime).toBe(105);
+    expect(element().paused).toBe(false);
+    expect(useAudioStore.getState().currentTrack?.id).toBe("a");
+    expect(elements).toHaveLength(1);
+  });
+
+  it("still retries errors at the same position with bounded backoff", () => {
+    useRetryClock();
+    playTrack(makeTrack("retry-backoff"));
+    becomePlaying();
+    element().currentTime = 100;
+
+    for (const delay of [1000, 2000, 4000]) {
+      element().error = { code: 2 };
+      element().emit("error");
+      expect(useAudioStore.getState().playbackIssue).toBe("retrying");
+      const loads = element().load.mock.calls.length;
+      const plays = element().play.mock.calls.length;
+
+      vi.advanceTimersByTime(delay - 1);
+      expect(element().load).toHaveBeenCalledTimes(loads);
+      vi.advanceTimersByTime(1);
+      expect(element().load).toHaveBeenCalledTimes(loads + 1);
+      expect(element().play).toHaveBeenCalledTimes(plays + 1);
+      becomePlaying();
+      expect(element().currentTime).toBe(100);
+    }
+
+    element().error = { code: 2 };
+    element().emit("error");
+    expect(useAudioStore.getState().playbackIssue).toBe("failed");
+    expect(useAudioStore.getState().isPlaying).toBe(false);
+  });
+
+  it("does not resume paused intent when an error retry is due", () => {
+    useRetryClock();
+    playTrack(makeTrack("a"));
+    becomePlaying();
+    element().currentTime = 100;
+    element().error = { code: 2 };
+    element().emit("error");
+    pause();
+    const loads = element().load.mock.calls.length;
+    const plays = element().play.mock.calls.length;
+
+    vi.advanceTimersByTime(1000);
+
+    expect(element().load).toHaveBeenCalledTimes(loads);
+    expect(element().play).toHaveBeenCalledTimes(plays);
+    expect(element().paused).toBe(true);
+    expect(useAudioStore.getState().isPlaying).toBe(false);
+  });
+
+  it("does not retry the previous track after a track switch", () => {
+    useRetryClock();
+    playTrack(makeTrack("a"));
+    becomePlaying();
+    element().error = { code: 2 };
+    element().emit("error");
+    playTrack(makeTrack("b"));
+    becomePlaying();
+    element().currentTime = 200;
+    const loads = element().load.mock.calls.length;
+    const plays = element().play.mock.calls.length;
+
+    vi.advanceTimersByTime(1000);
+
+    expect(element().load).toHaveBeenCalledTimes(loads);
+    expect(element().play).toHaveBeenCalledTimes(plays);
+    expect(element().currentTime).toBe(200);
+    expect(useAudioStore.getState().currentTrack?.id).toBe("b");
   });
 
   it("starts the next queued lesson from the ended event itself", () => {
