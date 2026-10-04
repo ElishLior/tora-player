@@ -7,6 +7,8 @@ import {
   pause,
   play,
   playTrack,
+  skipBackward,
+  skipForward,
   startAudioController,
 } from "./audio-controller";
 import { playLesson } from "./play-lesson";
@@ -304,7 +306,27 @@ describe("audio controller", () => {
     expect(element().paused).toBe(false);
   });
 
-  it("skips inside the lesson when car 'next' has no next lesson", () => {
+  it.each([
+    { direction: "backward", action: skipBackward, start: 100, expected: 85 },
+    { direction: "forward", action: skipForward, start: 100, expected: 115 },
+    { direction: "backward at the start", action: skipBackward, start: 10, expected: 0 },
+    { direction: "forward at the end", action: skipForward, start: 590, expected: 600 },
+  ])("skips 15 seconds $direction from the live position within track bounds", ({ action, start, expected }) => {
+    playTrack(makeTrack("a"));
+    becomePlaying(600);
+    // The live element can be ahead of the last store update in the background.
+    useAudioStore.getState().setCurrentTime(50);
+    element().currentTime = start;
+
+    action();
+
+    expect(element().currentTime).toBe(expected);
+    expect(useAudioStore.getState().currentTime).toBe(expected);
+    expect(useAudioStore.getState().resumePosition).toBe(expected);
+    expect(useAudioStore.getState().currentTrack?.id).toBe("a");
+  });
+
+  it("skips 15 seconds inside the lesson when car 'next' has no next lesson", () => {
     playTrack(makeTrack("a"));
     becomePlaying();
     element().currentTime = 100;
@@ -312,7 +334,7 @@ describe("audio controller", () => {
     nextTrackOrSkip();
 
     expect(useAudioStore.getState().currentTrack?.id).toBe("a");
-    expect(element().currentTime).toBe(130);
+    expect(element().currentTime).toBe(115);
   });
 
   it("shows play (not a stuck pause) when the browser blocks playback", async () => {
@@ -598,7 +620,9 @@ describe("audio controller", () => {
     let resolveOld!: (url: string) => void;
     getOfflineAudioUrl.mockImplementation(async (lessonId) => {
       if (lessonId === "b" && !resolveOld) {
-        return new Promise<string>((resolve) => { resolveOld = resolve; });
+        return new Promise<string>((resolve) => {
+          resolveOld = resolve;
+        });
       }
       return lessonId === "c" ? "blob:c" : "blob:new-b";
     });

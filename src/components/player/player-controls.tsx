@@ -16,7 +16,7 @@ interface SkipButtonProps {
 
 /**
  * The one skip control used by every player surface: "back" always rewinds
- * 15s, "forward" always advances 30s. Render back → play → forward in DOM
+ * 15s, "forward" always advances 15s. Render back → play → forward in DOM
  * order; the document direction then puts "back" on the right in Hebrew (as in
  * Hebrew audio apps) and on the left in English. The arrow is mirrored in RTL
  * so each one points outward, toward its own side of the play button.
@@ -42,7 +42,7 @@ export function SkipButton({
       className={cn('flex flex-col items-center gap-1 transition-colors disabled:opacity-30', className)}
     >
       <Icon aria-hidden className={cn('rtl:-scale-x-100', iconClassName)} />
-      <span aria-hidden className={cn('text-[11px] font-bold leading-none tabular-nums', labelClassName)}>
+      <span aria-hidden className={cn('text-[11px] font-bold tabular-nums leading-none', labelClassName)}>
         {t(isBack ? 'skipBackwardShort' : 'skipForwardShort')}
       </span>
     </button>
@@ -54,5 +54,5 @@ export function PlayPauseIcon({ transport, className }: { transport: TransportSt
   if (transport === 'playing') return <Pause aria-hidden className={cn('fill-current', className)} />;
   if (transport === 'loading') return <Loader2 aria-hidden className={cn('animate-spin', className)} />;
   // The triangle always points right; nudge it physically to look centred.
-  return <Play aria-hidden className={cn('fill-current translate-x-[8%]', className)} />;
+  return <Play aria-hidden className={cn('translate-x-[8%] fill-current', className)} />;
 }

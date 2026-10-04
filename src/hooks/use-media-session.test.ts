@@ -30,11 +30,15 @@ vi.mock("react", async (importOriginal) => ({
 // Next's navigation runtime is not available in Vitest's Node environment.
 vi.mock("next-intl/navigation", () => ({ createNavigation: () => ({}) }));
 
+const actionHandlers = new Map<MediaSessionAction, MediaSessionActionHandler | null>();
+
 const session = {
   metadata: null as MediaMetadata | null,
   playbackState: "none",
   positionState: null as MediaPositionState | null,
-  setActionHandler: vi.fn(),
+  setActionHandler: vi.fn((action: MediaSessionAction, handler: MediaSessionActionHandler | null) => {
+    actionHandlers.set(action, handler);
+  }),
   setPositionState: vi.fn((state: MediaPositionState) => {
     session.positionState = state.duration === undefined ? null : state;
   }),
@@ -51,9 +55,16 @@ function makeTrack(id: string, duration: number): AudioTrack {
   };
 }
 
-describe("Media Session position", () => {
+function invokeAction(action: MediaSessionAction, details: Omit<MediaSessionActionDetails, "action"> = {}) {
+  const handler = actionHandlers.get(action);
+  expect(handler).toBeTypeOf("function");
+  handler!({ action, ...details });
+}
+
+describe("Media Session", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    actionHandlers.clear();
     useAudioStore.setState(useAudioStore.getInitialState());
     session.metadata = null;
     session.playbackState = "none";
@@ -73,6 +84,77 @@ describe("Media Session position", () => {
     cleanups.splice(0).forEach((cleanup) => cleanup());
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+  });
+
+  it.each([
+    { action: "seekbackward" as const, seekOffset: undefined, expected: 85 },
+    { action: "seekbackward" as const, seekOffset: 10, expected: 85 },
+    { action: "seekbackward" as const, seekOffset: 30, expected: 85 },
+    { action: "seekforward" as const, seekOffset: undefined, expected: 115 },
+    { action: "seekforward" as const, seekOffset: 10, expected: 115 },
+    { action: "seekforward" as const, seekOffset: 30, expected: 115 },
+  ])("$action skips exactly 15 seconds with OS seekOffset $seekOffset", ({ action, seekOffset, expected }) => {
+    useAudioStore.getState().setTrack(makeTrack("lesson", 600));
+    useAudioStore.getState().setCurrentTime(100);
+    useMediaSession();
+
+    invokeAction(action, { seekOffset });
+    expect(useAudioStore.getState().currentTime).toBe(expected);
+    expect(session.positionState?.position).toBe(expected);
+    expect(useAudioStore.getState().currentTrack?.id).toBe("lesson");
+  });
+
+  it("clamps interval callbacks to the current track bounds", () => {
+    useAudioStore.getState().setTrack(makeTrack("lesson", 600));
+    useAudioStore.getState().setCurrentTime(10);
+    useMediaSession();
+
+    invokeAction("seekbackward", { seekOffset: 30 });
+    expect(useAudioStore.getState().currentTime).toBe(0);
+
+    useAudioStore.getState().setCurrentTime(595);
+    invokeAction("seekforward", { seekOffset: 10 });
+    expect(useAudioStore.getState().currentTime).toBe(600);
+  });
+
+  it("preserves absolute seekto times and boundary clamping", () => {
+    useAudioStore.getState().setTrack(makeTrack("lesson", 600));
+    useMediaSession();
+
+    invokeAction("seekto", { seekTime: 234 });
+    expect(useAudioStore.getState().currentTime).toBe(234);
+    invokeAction("seekto");
+    expect(useAudioStore.getState().currentTime).toBe(234);
+    invokeAction("seekto", { seekTime: -10 });
+    expect(useAudioStore.getState().currentTime).toBe(0);
+    invokeAction("seekto", { seekTime: 900 });
+    expect(useAudioStore.getState().currentTime).toBe(600);
+  });
+
+  it("navigates queue neighbours and falls back to 15-second intervals at either end", () => {
+    const tracks = [makeTrack("first", 600), makeTrack("second", 600)];
+    useAudioStore.getState().setQueue(tracks, 0);
+    useAudioStore.getState().setCurrentTime(100);
+    useMediaSession();
+
+    invokeAction("previoustrack");
+    expect(useAudioStore.getState().currentTrack?.id).toBe("first");
+    expect(useAudioStore.getState().currentTime).toBe(85);
+
+    invokeAction("nexttrack");
+    expect(useAudioStore.getState().currentTrack?.id).toBe("second");
+    expect(useAudioStore.getState().queueIndex).toBe(1);
+    expect(useAudioStore.getState().currentTime).toBe(0);
+
+    useAudioStore.getState().setCurrentTime(100);
+    invokeAction("nexttrack");
+    expect(useAudioStore.getState().currentTrack?.id).toBe("second");
+    expect(useAudioStore.getState().currentTime).toBe(115);
+
+    invokeAction("previoustrack");
+    expect(useAudioStore.getState().currentTrack?.id).toBe("first");
+    expect(useAudioStore.getState().queueIndex).toBe(0);
+    expect(useAudioStore.getState().currentTime).toBe(0);
   });
 
   it("clears the previous track's position until the new track's duration is known", () => {
