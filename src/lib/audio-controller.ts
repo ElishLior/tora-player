@@ -4,6 +4,7 @@ import { audioEngine, type AudioEngineStatus } from "@/lib/audio-engine";
 import { getPlaybackReaction, getRetryDelayMs } from "@/lib/audio-lifecycle";
 import { planTrackPlayback, resolveTrackSource } from "@/lib/audio-resume";
 import { isLastPart, isNearPartEnd } from "@/lib/lesson-progress";
+import { trustedPartDuration } from "@/lib/part-duration";
 import { startListenTracking } from "@/lib/listen-tracker";
 import { OFFLINE_DOWNLOADS_CHANGED_EVENT } from "@/lib/offline-events";
 import {
@@ -40,6 +41,8 @@ const RECOVERY_PROVEN_SECONDS = 10;
 const OFFLINE_LOOKUP_TIMEOUT_MS = 3_000;
 // A minutes sleep timer fades the volume out over its last seconds.
 const SLEEP_FADE_SECONDS = 10;
+// Rounding slack when telling a position inside the final minute from one past the length.
+const PAST_LENGTH_TOLERANCE_SECONDS = 1;
 
 const getState = useAudioStore.getState;
 
@@ -51,6 +54,8 @@ let prefetchRevision = 0;
 let loadedTrack: AudioTrack | null = null;
 let pendingLoadKey: string | null = null;
 let playedTrackKey: string | null = null;
+// The part whose natural end finishTrack already recorded; cleared once it plays again.
+let finishedTrackKey: string | null = null;
 let recovery = { trackKey: null as string | null, attempts: 0, position: 0 };
 let retryTimer: number | null = null;
 let sleepTimerTimeout: number | null = null;
@@ -59,6 +64,21 @@ let resumeWhenOnline = false;
 let lastCheckpointAt = 0;
 let lastServerSaveAt = 0;
 let serverProgressEnabled = true;
+
+/** The length to believe for the current track: catalog and element evidence combined. */
+function trustedDuration(track: AudioTrack): number {
+  return trustedPartDuration({ catalog: track.duration, element: audioEngine.getDuration() });
+}
+
+/**
+ * Whether the position counts as the end of the part by position alone. A
+ * position beyond the believed length proves that length was too short, so
+ * only a natural end (finishTrack) may finish the part then.
+ */
+function isAtPartEnd(track: AudioTrack, position: number): boolean {
+  const duration = trustedDuration(track);
+  return isNearPartEnd(position, duration) && position <= duration + PAST_LENGTH_TOLERANCE_SECONDS;
+}
 
 function isEngineOnCurrentTrack() {
   const key = getTrackKey(getState().currentTrack);
@@ -184,7 +204,7 @@ function saveServerProgress(track: AudioTrack, position: number, completed: bool
 function recordProgress(
   track: AudioTrack,
   position: number,
-  completed = isLastPart(track) && isNearPartEnd(position, audioEngine.getDuration()),
+  completed = isLastPart(track) && isAtPartEnd(track, position),
 ) {
   useProgressStore.getState().saveProgress({
     lessonId: getTrackLessonId(track),
@@ -214,7 +234,10 @@ function checkpoint(options: { server?: boolean } = {}) {
 
 function finishTrack(track: AudioTrack) {
   const state = getState();
-  const position = audioEngine.getDuration();
+  finishedTrackKey = getTrackKey(track);
+  // The believed length, not only the element's: a short browser length would leave an
+  // earlier part "unfinished" and reopen it instead of the next one.
+  const position = trustedDuration(track);
   // A finished earlier part leaves progress at its end, so resuming opens the next part.
   const completed = recordProgress(track, position, isLastPart(track));
   saveServerProgress(track, position, completed);
@@ -310,6 +333,7 @@ function handleStatusChange(status: AudioEngineStatus) {
   if (status === "playing") {
     clearRetry();
     playedTrackKey = key;
+    finishedTrackKey = null;
     if (applySleepTimer()) return;
     if (state.playbackIssue) state.setPlaybackIssue(null);
     prefetchNextOfflineSource();
@@ -349,7 +373,11 @@ function handleStatusChange(status: AudioEngineStatus) {
 
 function handleTimeUpdate(time: number) {
   if (!isEngineOnCurrentTrack()) return;
-  getState().setCurrentTime(time);
+  const state = getState();
+  // Playing past a believed length proves it was too short; never claim the end early.
+  // A length that is still unknown (0) stays unknown rather than tracking the position.
+  if (state.duration > 0 && time > state.duration) useAudioStore.setState({ currentTime: time, duration: time });
+  else state.setCurrentTime(time);
   if (recovery.attempts > 0 && time > recovery.position + RECOVERY_PROVEN_SECONDS) {
     recovery.attempts = 0;
   }
@@ -372,8 +400,13 @@ function handleStoreChange(state: AudioPlayerState, previous: AudioPlayerState) 
   }
 
   if (getTrackKey(state.currentTrack) !== getTrackKey(previous.currentTrack)) {
-    // Remember where the previous track was left before the element switches.
-    if (previous.currentTrack && playedTrackKey === getTrackKey(previous.currentTrack)) {
+    // Remember where the previous track was left before the element switches. A part that
+    // finishTrack already recorded keeps that end; its raw element position would undo it.
+    if (
+      previous.currentTrack &&
+      playedTrackKey === getTrackKey(previous.currentTrack) &&
+      finishedTrackKey !== getTrackKey(previous.currentTrack)
+    ) {
       recordProgress(previous.currentTrack, audioEngine.getCurrentTime());
     }
     clearRetry();
@@ -417,8 +450,12 @@ export function startAudioController(): () => void {
   audioEngine.setHandlers({
     onStatusChange: handleStatusChange,
     onTimeUpdate: handleTimeUpdate,
-    onDurationChange: (duration) => {
-      if (isEngineOnCurrentTrack()) getState().setDuration(duration);
+    onDurationChange: () => {
+      const { currentTrack, currentTime, setDuration } = getState();
+      if (!currentTrack || !isEngineOnCurrentTrack()) return;
+      const trusted = trustedDuration(currentTrack);
+      // A length already raised to the position stays there; an unknown length stays unknown.
+      setDuration(trusted > 0 ? Math.max(trusted, currentTime) : 0);
     },
     onPlayBlocked: () => {
       const latest = getState();
