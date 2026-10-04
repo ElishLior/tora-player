@@ -6,6 +6,7 @@ import { planTrackPlayback, resolveTrackSource } from "@/lib/audio-resume";
 import { isLastPart, isNearPartEnd } from "@/lib/lesson-progress";
 import { trustedPartDuration } from "@/lib/part-duration";
 import { startListenTracking } from "@/lib/listen-tracker";
+import { diag, startLifecycleDiagnostics } from "@/lib/playback-diagnostics";
 import { OFFLINE_DOWNLOADS_CHANGED_EVENT } from "@/lib/offline-events";
 import {
   getDownloadedLessons,
@@ -227,6 +228,12 @@ function checkpoint(options: { server?: boolean } = {}) {
   lastCheckpointAt = Date.now();
   state.setResumePosition(position);
   const completed = recordProgress(track, position);
+  diag("ctrl:checkpoint", {
+    pos: Math.round(position),
+    dur: Math.round(trustedDuration(track)),
+    completed,
+    server: !!options.server,
+  });
   if (options.server || lastCheckpointAt - lastServerSaveAt >= SERVER_PROGRESS_INTERVAL_MS) {
     saveServerProgress(track, position, completed);
   }
@@ -324,6 +331,7 @@ function prefetchNextOfflineSource() {
 
 function handleStatusChange(status: AudioEngineStatus) {
   const state = getState();
+  diag("ctrl:status", { status, intent: state.isPlaying, issue: state.playbackIssue });
   state.setPlaybackStatus(status);
   const track = state.currentTrack;
   // Events of a track we are switching away from must not steer the new one.
@@ -464,6 +472,7 @@ export function startAudioController(): () => void {
     },
   });
 
+  const stopLifecycleDiagnostics = startLifecycleDiagnostics();
   const unsubscribe = useAudioStore.subscribe(handleStoreChange);
   const stopListenTracking = startListenTracking();
   document.addEventListener("visibilitychange", handleVisibilityChange);
@@ -476,6 +485,7 @@ export function startAudioController(): () => void {
   syncPlayback();
 
   stopController = () => {
+    stopLifecycleDiagnostics();
     unsubscribe();
     stopListenTracking();
     document.removeEventListener("visibilitychange", handleVisibilityChange);
@@ -494,6 +504,7 @@ export function startAudioController(): () => void {
 
 export function play() {
   const state = getState();
+  diag("ctrl:play", { hasTrack: !!state.currentTrack, intent: state.isPlaying, status: state.playbackStatus });
   if (!state.currentTrack) return;
   if (stoppedPartKey === getTrackKey(state.currentTrack) && state.queue[state.queueIndex + 1]) {
     stoppedPartKey = null;
@@ -509,7 +520,9 @@ export function play() {
 }
 
 export function pause() {
-  getState().pause();
+  const state = getState();
+  diag("ctrl:pause", { intent: state.isPlaying, status: state.playbackStatus });
+  state.pause();
   audioEngine.pause();
 }
 

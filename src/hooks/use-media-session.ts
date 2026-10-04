@@ -12,6 +12,7 @@ import {
 } from "@/lib/audio-controller";
 import { getTransportState, useAudioStore, type AudioPlayerState, type AudioTrack } from "@/stores/audio-store";
 import { DEFAULT_LOCALE, SITE_NAME } from "@/config/site";
+import { diag } from "@/lib/playback-diagnostics";
 
 // Normal playback moves the position by < 1s per timeupdate even at 2x speed;
 // a bigger jump is a seek the OS must be told about.
@@ -102,7 +103,18 @@ export function useMediaSession() {
     ];
     for (const [action, handler] of handlers) {
       try {
-        session.setActionHandler(action, handler);
+        session.setActionHandler(action, (details) => {
+          const current = useAudioStore.getState();
+          diag("ms:action", {
+            action,
+            seekOffset: details?.seekOffset ?? null,
+            seekTime: details?.seekTime ?? null,
+            intent: current.isPlaying,
+            status: current.playbackStatus,
+            osState: session.playbackState,
+          });
+          handler(details);
+        });
       } catch {
         // Action not supported by this browser.
       }
@@ -122,7 +134,11 @@ export function useMediaSession() {
       const startedPlaying = state.playbackStatus === "playing" && previous?.playbackStatus !== "playing";
       if (trackChanged || startedPlaying) session.metadata = buildMetadata(track);
 
-      session.playbackState = getTransportState(state) === "paused" ? "paused" : "playing";
+      const nextState = getTransportState(state) === "paused" ? "paused" : "playing";
+      if (session.playbackState !== nextState) {
+        diag("ms:playbackState", { state: nextState, intent: state.isPlaying, status: state.playbackStatus });
+      }
+      session.playbackState = nextState;
 
       if (
         !previous ||
