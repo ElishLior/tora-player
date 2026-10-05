@@ -2,7 +2,8 @@ export const dynamic = 'force-dynamic';
 
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { isSupabaseConfigured } from '@/lib/supabase/server';
-import { createCatalogLessonListReader } from '@/lib/supabase/anon';
+import { createCatalogLessonListReader, getCachedPartTypes } from '@/lib/supabase/anon';
+import { LESSON_PART_TYPES, SHORTS_AUDIO_TYPE } from '@/lib/lesson-naming';
 import { loadInitialLessonList, type LessonListFailureCode } from '@/lib/supabase/lesson-list';
 import { EmptyState } from '@/components/shared/empty-state';
 import { LessonsClient } from './lessons-client';
@@ -49,6 +50,13 @@ export default async function LessonsPage({ params, searchParams }: Props) {
     isSupabaseConfigured() ? createCatalogLessonListReader() : null,
     { q, audioTypeFilter, categoryFilter, tagFilter },
   );
+
+  // Part-type chips: סידור / עץ חיים plus any type the admin added (קצרים has its own category).
+  const usedPartTypes: string[] = isSupabaseConfigured()
+    ? await getCachedPartTypes().catch(() => [...LESSON_PART_TYPES])
+    : [...LESSON_PART_TYPES];
+  const partTypeChips = usedPartTypes.filter((type) => type !== SHORTS_AUDIO_TYPE);
+  if (audioTypeFilter && !partTypeChips.includes(audioTypeFilter)) partTypeChips.push(audioTypeFilter);
 
   allCategories = lessonListResult.allCategories;
   const tagCounts: TagCount[] = lessonListResult.tagCounts;
@@ -112,8 +120,7 @@ export default async function LessonsPage({ params, searchParams }: Props) {
         {/* Audio type tabs */}
         {[
           { value: '', label: 'הכל' },
-          { value: 'סידור', label: 'סידור' },
-          { value: 'עץ חיים', label: 'עץ חיים' },
+          ...partTypeChips.map((type) => ({ value: type, label: type })),
         ].map((tab) => {
           const isActive = !categoryFilter && (audioTypeFilter || '') === tab.value;
           return (

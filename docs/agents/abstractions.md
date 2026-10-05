@@ -11,6 +11,7 @@ Building blocks to compose before writing new code. Each has a small interface, 
 | Track builders | `src/lib/lesson-tracks.ts` | `getLessonTracks(lesson)`, `getOfflineLessonTracks(meta)` | Building queues: one track per part with `partIndex`/`partCount`. |
 | `trustedPartDuration` | `src/lib/part-duration.ts` | `({ catalog, element }) => seconds` (0 = unknown) | Which length of a part to believe for "heard by position" and the shown length. Keeps the longer known value; a natural end still finishes the part. Read its header comment before changing the rule. |
 | Progress rules | `src/lib/lesson-progress.ts` | `isNearPartEnd`, `isLastPart`, `getResumePoint`, `getListenedFraction` | Heard / resume / progress-bar decisions. Pure. |
+| `systemSkipSeconds` | `src/lib/player-track-actions.ts` | `({ seekOffset, appleTouchDevice, appSeconds }) => seconds` | Lock-screen / notification skip length, so it matches the number the OS shows. |
 | `getTransportState` | `src/stores/audio-store.ts` | store state in, `"playing" \| "loading" \| "paused"` | Every play/pause icon. Do not read `isPlaying`. |
 
 ## Diagnostics
@@ -26,6 +27,7 @@ Building blocks to compose before writing new code. Each has a small interface, 
 | `generateLessonMetadata(date)` | `src/lib/hebrew-date.ts` | date string in, `title`, `hebrewDate`, `parsha`, `isHolidayReading`, `readingLabel`, ... | Every lesson title and Hebrew date. Holiday wording lives in `HOLIDAY_TITLES` / `holidayTitleFor`. |
 | `parshaLabel(parsha)` | `src/lib/parsha-label.ts` | stored `lessons.parsha` in, display text out | Showing any stored reading name (cards, lesson page, SEO text). Puts the Chol HaMoed Shabbat first; no calendar import, so client components can use it. |
 | Tag helpers | `src/lib/tags.ts`, `src/lib/tag-links.ts` | `normalizeTags`, tag URL builders | Every tag write and link. |
+| Part types | `src/lib/part-types.ts`, `src/components/lessons/part-type-field.tsx`, `getCachedPartTypes` (`src/lib/supabase/anon.ts`) | `normalizePartType`, `partTypeOptions(used)`; `<PartTypeField value onChange />` (commits a whole value, never per keystroke) | Any place that sets or lists a part's type (סידור / עץ חיים / admin-added types). |
 | Site identity | `src/config/site.ts` | `SITE_URL`, `localePath`, `pageUrl`, `lessonPath`, ... | Any origin, name or URL. Never hardcode them. |
 
 ## Verification
