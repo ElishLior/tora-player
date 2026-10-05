@@ -2,6 +2,20 @@
 
 Notes from the October 4, 2026 work on mobile playback reliability, lesson duration and holiday titles. They were saved from temporary folders so the next session can pick them up.
 
+## Update: October 5, 2026 release
+
+This section is the current state. Read the sections below it as history.
+
+- **Released to production** via #37 (deployment `dpl_FJeXJC4m7zS3hAnr8CNNePpeHtQA`): #31–#34 plus #36.
+  - #36 fixed the last two review findings (Fable #4 and #6): a forward skip past a short browser length no longer jumps backwards, and stored Chol HaMoed readings display as "שבת חול המועד פסח".
+  - Rollback: `npx vercel promote dpl_3wT2VG4MqZshsGgGPRqDemiSEC4T`.
+- **Production smoke:** 19/19 Playwright tests passed on https://tora-player.vercel.app (smoke, playback, offline including the device-file download).
+- **Title renamed** with owner approval: lesson `fb296bdf-9d25-4832-a2d9-262875d48a29` now reads "ליל שישי - י״ד תשרי תשפ״ז | חג הסוכות". The before/after JSON is in `~/.local/state/tora-data-writes/` on the owner's Mac.
+- **Six zero-length parts left at 0** by owner choice. A full decode confirmed the #33 values (2268, 5319, 7239, 5310, 4867, 2535 s), but nothing was written, so #33 can't protect those four February lessons.
+- **#30 (`effect`) held** by the owner.
+- **The installed app needs a link to the log.** It has no address bar, so `/me` got a link to `/diagnostics` in a follow-up PR.
+- **Still open:** the real-device checks below, now run on production with `/he/diagnostics`.
+
 ## State at the end of the session
 
 Merged into `dev` (head `b15324a`). CI passed on each PR. Not on `main`, and production is still the September 25 release.

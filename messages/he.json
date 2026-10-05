@@ -600,6 +600,7 @@
       "button": "התחברות"
     },
     "loading": "טוען…",
+    "diagnosticsLink": "יומן נגינה · כלי בדיקה למכשיר",
     "lessonFallback": "שיעור",
     "continue": {
       "resume": "המשך מ-<bdi>{time}</bdi>",
