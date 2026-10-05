@@ -66,6 +66,10 @@ npx vercel --prod --yes
 
 Never deploy production without explicit user approval.
 
+## Agent Workflow
+
+In OMP, route each task through the pstack playbooks (skill `poteto-mode`). Large, cross-cutting, or multi-session work goes to `figure-it-out`. The May 2026 plans in `docs/superpowers/plans/` are kept as records. They name skills from the retired Superpowers pack (`subagent-driven-development`, `executing-plans`) in their `REQUIRED SUB-SKILL` headers and in their steps. Wherever a plan names one of them, use pstack in OMP; in Claude Code or Codex, which don't load pstack, work the plan's steps directly.
+
 ## Git Workflow
 
 - `dev` is the development branch.
@@ -110,8 +114,8 @@ How playback is wired (keep it this way):
 - `src/lib/audio-controller.ts` is the only code that drives the engine. `<AudioPlayer/>` (root layout) starts it once. UI surfaces, the lock screen and car controls only change store state or call its actions (`play`, `pause`, `togglePlay`, `seekTo`, `skipBackward`, `skipForward`, `playTrack`, `nextTrackOrSkip`, `previousTrackOrSkip`).
 - Resuming the loaded track never seeks; a start position is applied only when a different track loads.
 - Play/pause icons use `getTransportState()` (real element state), not the `isPlaying` intent.
-- Skip semantics are fixed: "back" = -15s (`RotateCcw`), "forward" = +30s (`RotateCw`), via `SkipButton` in `src/components/player/player-controls.tsx`. Render back → play → forward in DOM order and let `dir="rtl"` place them; never swap handlers or icons for RTL. The icon itself is mirrored in RTL (`rtl:-scale-x-100`) so each arrow points outward toward its own side.
-- Car/headset next/previous go to the queue neighbour, else skip inside the lesson.
+- Skip semantics follow the user's October 4, 2026 decision: "back" = -15s (`RotateCcw`), "forward" = +15s (`RotateCw`), via `SkipButton` in `src/components/player/player-controls.tsx`. All interval skips use the controller's `skipBackward` / `skipForward` actions and clamp to track bounds; a forward skip never moves playback backwards (once playback has run past a too-short browser length estimate, it stays put). Media Session `seekbackward` / `seekforward` ignore OS-supplied `seekOffset`, including 10s and 30s. Absolute `seekto` still uses the supplied `seekTime`. The standard Media Session API cannot customize native OS button labels, so OS labels can differ from the actual 15-second jump. Render back → play → forward in DOM order and let `dir="rtl"` place them; never swap handlers or icons for RTL. The icon itself is mirrored in RTL (`rtl:-scale-x-100`) so each arrow points outward toward its own side.
+- Car/headset next/previous go to the queue neighbour, else skip inside the lesson by 15 seconds in either direction.
 - Queues are built only with `getLessonTracks(lesson)` / `getOfflineLessonTracks(meta)` (`src/lib/lesson-tracks.ts`): one track per part with original `partIndex`/`partCount`, even for a partially saved offline lesson. Old audio-file tracks without a known count cannot mark a lesson complete. Every list query that renders playable cards selects `LESSON_AUDIO_FILES` (`src/lib/supabase/lesson-selects.ts`).
 - Starting a lesson from anywhere goes through `playLesson` / `playLessons` (`src/lib/play-lesson.ts`): the loaded, unfinished lesson keeps its live position; a newly selected lesson resumes from saved progress. Rules live in `src/lib/lesson-progress.ts`: one entry per lesson (`audioFileId` + position and observed duration, `playback_progress.audio_file_id`, migration 017); a lesson is heard when its last part reaches its final minute (or last 5% of a short clip); a nearly finished earlier part resumes at the next part.
 - Bookmarks and notes store their part (`audioFileId`); moments without one belong to the first part (`isMomentInPart`). Seek-bar markers show only the displayed part's bookmarks.

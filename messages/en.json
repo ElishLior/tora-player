@@ -192,7 +192,7 @@
   "player": {
     "play": "Play",
     "pause": "Pause",
-    "skipForward": "Skip 30 seconds forward",
+    "skipForward": "Skip 15 seconds forward",
     "skipBackward": "Back 15 seconds",
     "speed": "Speed",
     "volume": "Volume",
@@ -212,7 +212,7 @@
     "noActiveLesson": "No active lesson",
     "clipMode": "Clip Mode",
     "skipBackwardShort": "-15",
-    "skipForwardShort": "+30",
+    "skipForwardShort": "+15",
     "seek": "Position in lesson",
     "closePlayer": "Close player",
     "lessonFallback": "Torah lesson",
@@ -714,5 +714,20 @@
     "title": "Page not found",
     "description": "The page you are looking for does not exist or has moved.",
     "backHome": "Back to home"
+  },
+  "diagnostics": {
+    "title": "Playback log",
+    "intro": "A device check tool. While it is on, the player records which events arrived from headphones, the lock screen and the system. The log stays on this device and is never sent anywhere.",
+    "enable": "Turn log on",
+    "disable": "Turn log off",
+    "statusOn": "Log is on",
+    "statusOff": "Log is off",
+    "copy": "Copy",
+    "copied": "Copied",
+    "copyFailed": "Copy failed. Select the text and copy it by hand.",
+    "refresh": "Refresh",
+    "clear": "Clear",
+    "entries": "{count} entries",
+    "empty": "No entries yet. Turn the log on, play a lesson, then run the check."
   }
 }

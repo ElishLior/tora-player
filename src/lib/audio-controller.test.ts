@@ -7,8 +7,11 @@ import {
   pause,
   play,
   playTrack,
+  skipBackward,
+  skipForward,
   startAudioController,
 } from "./audio-controller";
+import { getResumePoint } from "./lesson-progress";
 import { playLesson } from "./play-lesson";
 
 // Browser globals the controller and its stores touch at import time.
@@ -143,6 +146,13 @@ function becomePlaying(duration = 3600) {
   element().emit("playing");
 }
 
+function useRetryClock() {
+  vi.useFakeTimers();
+  vi.spyOn(window, "setTimeout").mockImplementation(((callback: () => void, delay: number) =>
+    globalThis.setTimeout(callback, delay)) as unknown as typeof window.setTimeout);
+  vi.spyOn(window, "clearTimeout").mockImplementation((id) => globalThis.clearTimeout(id));
+}
+
 let stop: () => void;
 
 describe("audio controller", () => {
@@ -163,6 +173,7 @@ describe("audio controller", () => {
     getOfflineAudioUrl.mockResolvedValue(null);
     audioEngine.unload();
     element()?.emit("emptied");
+    vi.useRealTimers();
   });
 
   it("starts a tapped lesson inside the tap (no await before play)", () => {
@@ -188,6 +199,99 @@ describe("audio controller", () => {
     expect(element().currentTime).toBe(1800);
   });
 
+  it("keeps successful explicit resume uninterrupted when an old error retry is due", () => {
+    useRetryClock();
+    playTrack(makeTrack("a"));
+    becomePlaying();
+    element().currentTime = 100;
+    element().error = { code: 2 };
+    element().emit("error");
+
+    pause();
+    play();
+    becomePlaying();
+    expect(element().currentTime).toBe(100);
+    element().currentTime = 105;
+    const loads = element().load.mock.calls.length;
+    const plays = element().play.mock.calls.length;
+
+    vi.advanceTimersByTime(1000);
+
+    expect(element().load).toHaveBeenCalledTimes(loads);
+    expect(element().play).toHaveBeenCalledTimes(plays);
+    expect(element().currentTime).toBe(105);
+    expect(element().paused).toBe(false);
+    expect(useAudioStore.getState().currentTrack?.id).toBe("a");
+    expect(elements).toHaveLength(1);
+  });
+
+  it("still retries errors at the same position with bounded backoff", () => {
+    useRetryClock();
+    playTrack(makeTrack("retry-backoff"));
+    becomePlaying();
+    element().currentTime = 100;
+
+    for (const delay of [1000, 2000, 4000]) {
+      element().error = { code: 2 };
+      element().emit("error");
+      expect(useAudioStore.getState().playbackIssue).toBe("retrying");
+      const loads = element().load.mock.calls.length;
+      const plays = element().play.mock.calls.length;
+
+      vi.advanceTimersByTime(delay - 1);
+      expect(element().load).toHaveBeenCalledTimes(loads);
+      vi.advanceTimersByTime(1);
+      expect(element().load).toHaveBeenCalledTimes(loads + 1);
+      expect(element().play).toHaveBeenCalledTimes(plays + 1);
+      becomePlaying();
+      expect(element().currentTime).toBe(100);
+    }
+
+    element().error = { code: 2 };
+    element().emit("error");
+    expect(useAudioStore.getState().playbackIssue).toBe("failed");
+    expect(useAudioStore.getState().isPlaying).toBe(false);
+  });
+
+  it("does not resume paused intent when an error retry is due", () => {
+    useRetryClock();
+    playTrack(makeTrack("a"));
+    becomePlaying();
+    element().currentTime = 100;
+    element().error = { code: 2 };
+    element().emit("error");
+    pause();
+    const loads = element().load.mock.calls.length;
+    const plays = element().play.mock.calls.length;
+
+    vi.advanceTimersByTime(1000);
+
+    expect(element().load).toHaveBeenCalledTimes(loads);
+    expect(element().play).toHaveBeenCalledTimes(plays);
+    expect(element().paused).toBe(true);
+    expect(useAudioStore.getState().isPlaying).toBe(false);
+  });
+
+  it("does not retry the previous track after a track switch", () => {
+    useRetryClock();
+    playTrack(makeTrack("a"));
+    becomePlaying();
+    element().error = { code: 2 };
+    element().emit("error");
+    playTrack(makeTrack("b"));
+    becomePlaying();
+    element().currentTime = 200;
+    const loads = element().load.mock.calls.length;
+    const plays = element().play.mock.calls.length;
+
+    vi.advanceTimersByTime(1000);
+
+    expect(element().load).toHaveBeenCalledTimes(loads);
+    expect(element().play).toHaveBeenCalledTimes(plays);
+    expect(element().currentTime).toBe(200);
+    expect(useAudioStore.getState().currentTrack?.id).toBe("b");
+  });
+
   it("starts the next queued lesson from the ended event itself", () => {
     const tracks = [makeTrack("a"), makeTrack("b")];
     playTrack(tracks[0], { queue: tracks, queueIndex: 0 });
@@ -203,7 +307,27 @@ describe("audio controller", () => {
     expect(element().paused).toBe(false);
   });
 
-  it("skips inside the lesson when car 'next' has no next lesson", () => {
+  it.each([
+    { direction: "backward", action: skipBackward, start: 100, expected: 85 },
+    { direction: "forward", action: skipForward, start: 100, expected: 115 },
+    { direction: "backward at the start", action: skipBackward, start: 10, expected: 0 },
+    { direction: "forward at the end", action: skipForward, start: 590, expected: 600 },
+  ])("skips 15 seconds $direction from the live position within track bounds", ({ action, start, expected }) => {
+    playTrack(makeTrack("a"));
+    becomePlaying(600);
+    // The live element can be ahead of the last store update in the background.
+    useAudioStore.getState().setCurrentTime(50);
+    element().currentTime = start;
+
+    action();
+
+    expect(element().currentTime).toBe(expected);
+    expect(useAudioStore.getState().currentTime).toBe(expected);
+    expect(useAudioStore.getState().resumePosition).toBe(expected);
+    expect(useAudioStore.getState().currentTrack?.id).toBe("a");
+  });
+
+  it("skips 15 seconds inside the lesson when car 'next' has no next lesson", () => {
     playTrack(makeTrack("a"));
     becomePlaying();
     element().currentTime = 100;
@@ -211,7 +335,7 @@ describe("audio controller", () => {
     nextTrackOrSkip();
 
     expect(useAudioStore.getState().currentTrack?.id).toBe("a");
-    expect(element().currentTime).toBe(130);
+    expect(element().currentTime).toBe(115);
   });
 
   it("shows play (not a stuck pause) when the browser blocks playback", async () => {
@@ -497,7 +621,9 @@ describe("audio controller", () => {
     let resolveOld!: (url: string) => void;
     getOfflineAudioUrl.mockImplementation(async (lessonId) => {
       if (lessonId === "b" && !resolveOld) {
-        return new Promise<string>((resolve) => { resolveOld = resolve; });
+        return new Promise<string>((resolve) => {
+          resolveOld = resolve;
+        });
       }
       return lessonId === "c" ? "blob:c" : "blob:new-b";
     });
@@ -539,5 +665,169 @@ describe("audio controller", () => {
       duration: 540,
       completed: false,
     });
+  });
+});
+
+describe("audio controller duration evidence", () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    stop = startAudioController();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  afterEach(() => {
+    stop();
+    pause();
+    useAudioStore.setState({ currentTrack: null, queue: [], queueIndex: -1, sleepTimer: null });
+    useProgressStore.setState({ progressMap: {} });
+    vi.restoreAllMocks();
+    getDownloadedLessons.mockResolvedValue([]);
+    getOfflineAudioUrl.mockResolvedValue(null);
+    audioEngine.unload();
+    element()?.emit("emptied");
+    vi.useRealTimers();
+  });
+
+  /** Final part of a two-part lesson: catalog 3819 s, like the 25 Sep 2026 lesson. */
+  function playFinalPart(catalogDuration: number) {
+    const parts = makeParts("lesson", 2).map((part) => ({ ...part, duration: catalogDuration }));
+    playTrack(parts[1], { queue: parts, queueIndex: 1 });
+  }
+
+  function listenTo(position: number) {
+    element().currentTime = position;
+    element().emit("timeupdate");
+    element().paused = true;
+    element().emit("pause");
+  }
+
+  it("does not mark the lesson heard when the browser under-reports the length and the listener pauses before the real last minute", () => {
+    playFinalPart(3819);
+    becomePlaying(3712.2); // desktop WebKit measured 3712.2 for the real 3819.05 s file
+    listenTo(3655); // inside the last minute of the estimate, 164 s before the real end
+
+    expect(useProgressStore.getState().progressMap.lesson).toMatchObject({ position: 3655, completed: false });
+  });
+
+  it("never jumps backwards on a forward skip after playback ran past the browser's short length", () => {
+    playFinalPart(3819);
+    becomePlaying(3712.2);
+    element().currentTime = 3750; // still playing, 38 s past the browser's estimate
+
+    skipForward();
+    expect(element().currentTime).toBe(3750);
+
+    nextTrackOrSkip(); // car/headset "next" on the last part skips forward too
+    expect(element().currentTime).toBe(3750);
+  });
+
+  it("shows the longer catalog length while the browser under-reports it", () => {
+    playFinalPart(3819);
+    becomePlaying(3712.2);
+
+    expect(useAudioStore.getState().duration).toBe(3819);
+  });
+
+  it("shows the browser length when the catalog length is unknown", () => {
+    playFinalPart(0);
+    becomePlaying(540);
+
+    expect(useAudioStore.getState().duration).toBe(540);
+  });
+
+  it("never reports a length shorter than the position the audio has reached", () => {
+    playFinalPart(0);
+    becomePlaying(100); // an estimate that playback has already passed
+    element().currentTime = 106;
+    element().emit("timeupdate");
+
+    expect(useAudioStore.getState().duration).toBeGreaterThanOrEqual(106);
+  });
+
+  it("keeps an unknown length unknown while the audio plays", () => {
+    playFinalPart(0);
+    becomePlaying(Number.POSITIVE_INFINITY); // streamed file with no usable browser length
+    element().currentTime = 42;
+    element().emit("timeupdate");
+
+    expect(useAudioStore.getState().duration).toBe(0);
+    expect(useAudioStore.getState().currentTime).toBe(42);
+  });
+
+  it("opens the next part when an earlier part ends while the browser length is short", () => {
+    const parts = makeParts("lesson", 2).map((part) => ({ ...part, duration: 3819 }));
+    playTrack(parts[0], { queue: parts, queueIndex: 0 });
+    becomePlaying(3712.2);
+    endCurrentFile();
+
+    const progress = useProgressStore.getState().progressMap.lesson;
+    expect(getResumePoint(parts, progress)).toEqual({ index: 1, position: 0 });
+  });
+
+  it("does not mark the lesson heard by position once playback has passed a length that was too short", () => {
+    playFinalPart(0); // catalog unknown: only the browser's estimate exists
+    becomePlaying(100);
+    listenTo(106);
+
+    expect(useProgressStore.getState().progressMap.lesson).toMatchObject({ position: 106, completed: false });
+  });
+
+  it("saves the end of a file that ended while paused when the listener then switches lessons", () => {
+    const [lastPart] = makeParts("lesson", 1).map((part) => ({ ...part, duration: 600 }));
+    playTrack(lastPart);
+    becomePlaying(600);
+    pause(); // paused just before the end; the checkpoint saved position 0
+    element().currentTime = 600;
+    element().ended = true;
+    element().emit("ended"); // reaction none: no finishTrack, nothing saved
+    playTrack(makeTrack("other"));
+
+    expect(useProgressStore.getState().progressMap.lesson).toMatchObject({ position: 600, completed: true });
+  });
+
+  it("does not skip the switch save for a finished part that was played again", () => {
+    const parts = makeParts("lesson", 2).map((part) => ({ ...part, duration: 600 }));
+    playTrack(parts[0], { queue: parts, queueIndex: 0 });
+    becomePlaying(600);
+    endCurrentFile(); // finishTrack runs and advances to part 2
+    playTrack(parts[0], { queue: parts, queueIndex: 0 }); // back to part 1
+    becomePlaying(600);
+    element().currentTime = 200;
+    element().emit("timeupdate");
+    playTrack(parts[1], { queue: parts, queueIndex: 1 }); // switch away mid-way
+
+    expect(useProgressStore.getState().progressMap.lesson).toMatchObject({
+      audioFileId: "lesson-part-1",
+      position: 200,
+    });
+  });
+
+  it("keeps the shown length at or above the position when the browser revises its estimate downward", () => {
+    playFinalPart(0);
+    becomePlaying(100);
+    element().currentTime = 106;
+    element().emit("timeupdate"); // passed the estimate: length follows the position
+    element().duration = 104;
+    element().emit("durationchange");
+
+    expect(useAudioStore.getState().duration).toBeGreaterThanOrEqual(106);
+  });
+
+  it("still marks the lesson heard inside the last minute when both lengths agree", () => {
+    playFinalPart(3819);
+    becomePlaying(3819.05);
+    listenTo(3780);
+
+    expect(useProgressStore.getState().progressMap.lesson).toMatchObject({ completed: true });
+  });
+
+  it("marks the lesson heard when the audio really ends, even if the catalog length is longer", () => {
+    const parts = makeParts("lesson", 1).map((part) => ({ ...part, duration: 1200 }));
+    playTrack(parts[0]);
+    becomePlaying(1000);
+    endCurrentFile();
+
+    expect(useProgressStore.getState().progressMap.lesson).toMatchObject({ completed: true });
   });
 });

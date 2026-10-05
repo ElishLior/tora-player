@@ -12,6 +12,7 @@ import {
 import { getAudioContentType, getAudioDirectUrl } from '@/lib/audio-download';
 import { normalizeAudioUrl } from '@/lib/audio-url';
 import { formatDuration } from '@/lib/utils';
+import { parshaLabel } from '@/lib/parsha-label';
 import type { LessonAudio, LessonWithRelations, Series } from '@/types/database';
 
 /** Search and link previews cut descriptions around this length. */
@@ -67,7 +68,7 @@ export function lessonDescription(lesson: DescribedLesson): string {
   if (own?.trim()) return truncateText(own);
   const facts = [
     lesson.hebrew_date || lesson.date,
-    lesson.parsha,
+    lesson.parsha && parshaLabel(lesson.parsha),
     lesson.series?.hebrew_name || lesson.series?.name,
     lesson.duration > 0 ? formatDuration(lesson.duration) : null,
   ].filter(Boolean);
