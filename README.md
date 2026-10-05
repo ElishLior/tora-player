@@ -69,7 +69,7 @@ Expected healthy production shape:
 
 ## Current Shipped State
 
-Last production release: September 25, 2026, via PR #19 (deployment `dpl_3wT2VG4MqZshsGgGPRqDemiSEC4T`).
+Last production release: October 5, 2026, via PR #37 (deployment `dpl_FJeXJC4m7zS3hAnr8CNNePpeHtQA`). The previous release, September 25, 2026 via PR #19 (`dpl_3wT2VG4MqZshsGgGPRqDemiSEC4T`), is the rollback target: `npx vercel promote dpl_3wT2VG4MqZshsGgGPRqDemiSEC4T`.
 
 The current app includes:
 
@@ -80,6 +80,9 @@ The current app includes:
 - Player UI state recovery when native/browser audio resumes outside React state.
 - Mobile/responsive QA coverage for compact player controls.
 - Production smoke coverage for lesson loading, player behavior, offline playback, and download headers.
+- 15-second skips in both directions, in the app and from lock-screen and headset controls.
+- Holiday Friday titles named by the holiday ("חג הסוכות", "שבת חול המועד פסח").
+- An opt-in, on-device playback log at `/he/diagnostics` for real-phone checks.
 
 ## Listening And Podcast Feeds
 
