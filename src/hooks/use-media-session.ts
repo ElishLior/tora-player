@@ -7,9 +7,9 @@ import {
   play,
   previousTrackOrSkip,
   seekTo,
-  skipBackward,
-  skipForward,
+  skipBy,
 } from "@/lib/audio-controller";
+import { SKIP_BACK_SECONDS, SKIP_FORWARD_SECONDS, systemSkipSeconds } from "@/lib/player-track-actions";
 import { getTransportState, useAudioStore, type AudioPlayerState, type AudioTrack } from "@/stores/audio-store";
 import { DEFAULT_LOCALE, SITE_NAME } from "@/config/site";
 import { diag } from "@/lib/playback-diagnostics";
@@ -17,6 +17,10 @@ import { diag } from "@/lib/playback-diagnostics";
 // Normal playback moves the position by < 1s per timeupdate even at 2x speed;
 // a bigger jump is a seek the OS must be told about.
 const SEEK_JUMP_SECONDS = 2;
+
+function isAppleTouchDevice() {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
 
 function toAbsoluteUrl(path: string) {
   if (path.startsWith("http")) return path;
@@ -83,13 +87,17 @@ export function useMediaSession() {
     if (!("mediaSession" in navigator)) return;
     const session = navigator.mediaSession;
 
+    const appleTouchDevice = isAppleTouchDevice();
+    const systemSkip = (details: MediaSessionActionDetails, appSeconds: number) =>
+      systemSkipSeconds({ seekOffset: details.seekOffset, appleTouchDevice, appSeconds });
+
     const handlers: [MediaSessionAction, MediaSessionActionHandler][] = [
       ["play", () => play()],
       ["pause", () => pause()],
       ["stop", () => pause()],
-      // Relative skips always use the app's 15-second interval, regardless of OS seekOffset.
-      ["seekbackward", () => skipBackward()],
-      ["seekforward", () => skipForward()],
+      // Lock-screen skips move as far as the number the OS draws on its icon.
+      ["seekbackward", (details) => skipBy(-systemSkip(details, SKIP_BACK_SECONDS))],
+      ["seekforward", (details) => skipBy(systemSkip(details, SKIP_FORWARD_SECONDS))],
       [
         "seekto",
         (details) => {

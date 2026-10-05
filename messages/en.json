@@ -361,8 +361,8 @@
     "includePart": "Upload this recording",
     "partType": "Part type",
     "noType": "No type",
-    "customType": "Other…",
-    "customTypePlaceholder": "Part type",
+    "customType": "New type…",
+    "customTypePlaceholder": "e.g. Likutei Moharan",
     "tooShort": "Under 2 minutes — probably not a lesson part",
     "duplicate": "Already exists in lesson: {title}",
     "willTranscode": "Will be converted to Opus before upload",
@@ -600,6 +600,7 @@
       "button": "Sign in"
     },
     "loading": "Loading…",
+    "diagnosticsLink": "Playback log · device check tool",
     "lessonFallback": "Lesson",
     "continue": {
       "resume": "Resume from <bdi>{time}</bdi>",

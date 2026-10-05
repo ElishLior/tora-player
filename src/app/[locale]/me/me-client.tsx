@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import {
+  Activity,
   Bell,
   Bookmark,
   CheckCircle,
@@ -580,6 +581,15 @@ export default function MeClient({ locale, account }: { locale: string; account:
           </Section>
         </>
       )}
+
+      {/* The installed app has no address bar, so the opt-in playback log needs a way in. */}
+      <Link
+        href={`/${locale}/diagnostics`}
+        className="flex items-center justify-center gap-2 py-2 text-xs text-muted-foreground hover:text-foreground"
+      >
+        <Activity className="h-3.5 w-3.5" />
+        {t('diagnosticsLink')}
+      </Link>
     </div>
   );
 }

@@ -551,6 +551,8 @@ export function skipBy(seconds: number) {
   // Playback can run past a browser's too-short length estimate, and seeks clamp to that
   // estimate, so a forward skip from there would jump backwards. Stay put instead.
   const elementEnd = onTrack ? audioEngine.getDuration() : 0;
+  // The element's "seeked" entry that follows shows where the skip actually landed.
+  diag("ctrl:skip", { by: seconds, from: current, end: elementEnd });
   if (seconds > 0 && elementEnd > 0 && current >= elementEnd) return;
   seekTo(current + seconds);
 }

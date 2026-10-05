@@ -17,9 +17,9 @@ import {
 } from 'lucide-react';
 import { Link } from '@/i18n/routing';
 import { TagInput } from '@/components/tags/tag-input';
+import { PartTypeField } from '@/components/lessons/part-type-field';
 import { formatFileSize } from '@/lib/audio-utils';
 import { generateLessonMetadata } from '@/lib/hebrew-date';
-import { LESSON_PART_TYPES, SHORTS_AUDIO_TYPE } from '@/lib/lesson-naming';
 import {
   appendTarget,
   formatDraftDay,
@@ -35,8 +35,6 @@ import { formatDuration } from '@/lib/utils';
 import type { CategoryWithChildren } from '@/types/database';
 import { inputClass, type DraftRun, type FileEntry, type RowStatus } from './upload-state';
 
-const KNOWN_PART_TYPES: readonly string[] = [...LESSON_PART_TYPES, SHORTS_AUDIO_TYPE];
-const CUSTOM_TYPE = '__custom';
 const iconButton = 'rounded p-0.5 disabled:opacity-30';
 
 interface DraftRowProps {
@@ -336,6 +334,7 @@ function DraftEditor({ draft, run, status, open, files, categories, onChange, on
                     {part.durationSec ? formatDuration(part.durationSec) : '—'}
                   </bdi>
                   <PartTypeField
+                    className="flex-1"
                     value={part.audioType}
                     disabled={locked || !part.include}
                     onChange={(audioType) => editPart(part.fileId, { audioType })}
@@ -522,54 +521,6 @@ function DraftEditor({ draft, run, status, open, files, categories, onChange, on
         </div>
       )}
     </div>
-  );
-}
-
-/** Part type: סידור / עץ חיים / קצרים, none, or a custom label. */
-function PartTypeField({
-  value,
-  disabled,
-  onChange,
-}: {
-  value: string | null;
-  disabled: boolean;
-  onChange: (value: string | null) => void;
-}) {
-  const t = useTranslations('upload');
-  const [custom, setCustom] = useState(value != null && !KNOWN_PART_TYPES.includes(value));
-  return (
-    <span className="flex min-w-0 flex-1 gap-1.5">
-      <select
-        value={custom ? CUSTOM_TYPE : (value ?? '')}
-        disabled={disabled}
-        aria-label={t('partType')}
-        onChange={(e) => {
-          const next = e.target.value;
-          setCustom(next === CUSTOM_TYPE);
-          onChange(next === CUSTOM_TYPE || next === '' ? null : next);
-        }}
-        className="min-w-0 rounded-md border-0 bg-[hsl(var(--surface-elevated))] px-2 py-1 text-xs disabled:opacity-60"
-      >
-        <option value="">{t('noType')}</option>
-        {KNOWN_PART_TYPES.map((type) => (
-          <option key={type} value={type}>{type}</option>
-        ))}
-        <option value={CUSTOM_TYPE}>{t('customType')}</option>
-      </select>
-      {custom && (
-        <input
-          type="text"
-          dir="auto"
-          value={value ?? ''}
-          maxLength={50}
-          disabled={disabled}
-          placeholder={t('customTypePlaceholder')}
-          aria-label={t('partType')}
-          onChange={(e) => onChange(e.target.value.trim() ? e.target.value : null)}
-          className="min-w-0 flex-1 rounded-md border-0 bg-[hsl(var(--surface-elevated))] px-2 py-1 text-xs disabled:opacity-60"
-        />
-      )}
-    </span>
   );
 }
 

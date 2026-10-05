@@ -361,8 +361,8 @@
     "includePart": "להעלות את ההקלטה",
     "partType": "סוג החלק",
     "noType": "ללא סוג",
-    "customType": "אחר…",
-    "customTypePlaceholder": "סוג החלק",
+    "customType": "סוג חדש…",
+    "customTypePlaceholder": "למשל: ליקוטי מוהר״ן",
     "tooShort": "פחות מ-2 דקות — כנראה לא חלק מהשיעור",
     "duplicate": "כבר קיים בשיעור: {title}",
     "willTranscode": "יומר ל-Opus לפני ההעלאה",
@@ -600,6 +600,7 @@
       "button": "התחברות"
     },
     "loading": "טוען…",
+    "diagnosticsLink": "יומן נגינה · כלי בדיקה למכשיר",
     "lessonFallback": "שיעור",
     "continue": {
       "resume": "המשך מ-<bdi>{time}</bdi>",

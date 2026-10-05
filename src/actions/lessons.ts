@@ -6,6 +6,7 @@ import { createAdminSupabaseClient } from '@/lib/supabase/admin';
 import { lessonReadClient } from '@/lib/supabase/admin-lesson';
 import { isAdmin, requireAdmin } from '@/lib/auth/admin';
 import { normalizeTags } from '@/lib/tags';
+import { normalizePartType } from '@/lib/part-types';
 import { notifyNewLesson } from '@/lib/notifications/notify';
 import { updateLessonSchema } from '@/lib/validators';
 import type { Lesson, LessonWithRelations, LessonAudio, LessonImage } from '@/types/database';
@@ -204,14 +205,15 @@ export async function updateAudioType(fileId: string, audioType: string | null) 
   }
   const supabase = createAdminSupabaseClient();
 
+  const type = normalizePartType(audioType);
   const { error } = await supabase
     .from('lesson_audio')
-    .update({ audio_type: audioType || null })
+    .update({ audio_type: type })
     .eq('id', fileId);
 
   if (error) return { error: error.message };
   revalidateCatalog();
-  return { success: true };
+  return { success: true, audioType: type };
 }
 
 export async function reorderAudioFiles(lessonId: string, fileIds: string[]) {

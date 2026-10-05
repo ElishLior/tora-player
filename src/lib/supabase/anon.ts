@@ -14,6 +14,7 @@ import {
   getSeriesById,
 } from './queries';
 import { getShortLessons } from './shorts';
+import { partTypeOptions } from '@/lib/part-types';
 
 /** Every cached catalog read carries this tag; catalog writes call revalidateCatalog(). */
 const CATALOG_TAG = 'catalog';
@@ -114,6 +115,21 @@ export const getCachedSeriesLessons = unstable_cache(
 export const getCachedTagCounts = unstable_cache(
   () => fetchTagCounts(createAnonSupabaseClient()),
   ['catalog', 'tag-counts'],
+  CATALOG_CACHE,
+);
+
+/** Part types for the /lessons filter: built-in ones plus any in use on published lessons. */
+export const getCachedPartTypes = unstable_cache(
+  async () => {
+    const { data, error } = await createAnonSupabaseClient()
+      .from('lesson_audio')
+      .select('audio_type')
+      .not('audio_type', 'is', null)
+      .limit(5000);
+    if (error) throw new Error(error.message);
+    return partTypeOptions((data as { audio_type: string | null }[]).map((row) => row.audio_type));
+  },
+  ['catalog', 'part-types'],
   CATALOG_CACHE,
 );
 
