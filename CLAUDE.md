@@ -5,8 +5,9 @@ Tora Player is a Hebrew Torah lesson audio player PWA. Treat the product like a 
 ## Current Status
 
 - Production URL: https://tora-player.vercel.app
-- Last confirmed production release: May 11, 2026, via PR #9 (`dev` then `main`)
-- PRs #15 (listening) and #16 (quality/SEO) are release candidates targeting `dev`, not proof of a production deploy
+- Last confirmed production release: October 5, 2026, via PR #37 (`dev` then `main`), deployment `dpl_FJeXJC4m7zS3hAnr8CNNePpeHtQA`. Rollback target: the September 25 release, `npx vercel promote dpl_3wT2VG4MqZshsGgGPRqDemiSEC4T`
+- Production deploys are CLI-only (`npx vercel --prod --yes` from a clean `main` worktree); merging into `main` does not deploy. Every Vercel env var is scoped to Production, so a preview deploy has no Supabase or R2 and cannot serve lessons; `npx vercel --prod --skip-domain` builds with production data without going live, then `npx vercel promote <url>`
+- Real-device playback evidence comes from the opt-in log at `/he/diagnostics` (`src/lib/playback-diagnostics.ts`); session notes for the October 2026 playback work are in `docs/handoffs/2026-10-04-playback/`
 - Production health: `/api/health` reports database/schema/R2 status and the current published count; do not pin that count in this file
 - Real production deploy target: Vercel project `tora-player`
 
