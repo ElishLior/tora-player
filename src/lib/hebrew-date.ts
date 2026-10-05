@@ -1,4 +1,5 @@
 import { HDate, Sedra, Locale } from '@hebcal/core';
+import { parshaLabel } from './parsha-label';
 
 const HEBREW_DAYS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
 
@@ -20,18 +21,13 @@ function stripNikud(str: string): string {
   return str.replace(/[\u0591-\u05C7]/g, '');
 }
 
-const CHOL_HAMOED_SHABBAT = /^(.+) שבת חול המועד$/;
-
 /**
  * "חג הסוכות" for Sukkot itself; "שבת חול המועד סוכות" (Shabbat first, as people
  * say it) for the Shabbat of the intermediate days of Sukkot or Pesach; any other
  * holiday keeps the calendar's Hebrew name.
  */
 function holidayTitleFor(englishName: string, hebrewName: string): string {
-  const exact = HOLIDAY_TITLES[englishName];
-  if (exact) return exact;
-  const cholHamoed = hebrewName.match(CHOL_HAMOED_SHABBAT);
-  return cholHamoed ? `שבת חול המועד ${cholHamoed[1]}` : hebrewName;
+  return HOLIDAY_TITLES[englishName] ?? parshaLabel(hebrewName);
 }
 
 /**

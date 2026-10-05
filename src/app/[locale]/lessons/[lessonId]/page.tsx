@@ -5,6 +5,7 @@ import { lessonReadClient } from '@/lib/supabase/admin-lesson';
 import { getLessonById } from '@/lib/supabase/queries';
 import { notFound } from 'next/navigation';
 import { formatDuration } from '@/lib/utils';
+import { parshaLabel } from '@/lib/parsha-label';
 import { Link } from '@/i18n/routing';
 import { ArrowRight, Calendar, Clock, Edit, MapPin, User, BookOpen, Hash } from 'lucide-react';
 import { isAdmin } from '@/lib/auth/admin';
@@ -124,7 +125,7 @@ export default async function LessonDetailPage({ params }: Props) {
         {lesson.parsha && (
           <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 text-primary px-3 py-1 text-xs font-medium">
             <BookOpen className="h-3.5 w-3.5" />
-            {lesson.parsha}
+            {parshaLabel(lesson.parsha)}
           </span>
         )}
         {lesson.hebrew_date && (

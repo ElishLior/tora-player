@@ -546,7 +546,12 @@ export function seekTo(time: number) {
 }
 
 export function skipBy(seconds: number) {
-  const current = isEngineOnCurrentTrack() ? audioEngine.getCurrentTime() : getState().currentTime;
+  const onTrack = isEngineOnCurrentTrack();
+  const current = onTrack ? audioEngine.getCurrentTime() : getState().currentTime;
+  // Playback can run past a browser's too-short length estimate, and seeks clamp to that
+  // estimate, so a forward skip from there would jump backwards. Stay put instead.
+  const elementEnd = onTrack ? audioEngine.getDuration() : 0;
+  if (seconds > 0 && elementEnd > 0 && current >= elementEnd) return;
   seekTo(current + seconds);
 }
 

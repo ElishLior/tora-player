@@ -24,6 +24,7 @@ Building blocks to compose before writing new code. Each has a small interface, 
 | Block | Where | Interface | Use it for |
 |---|---|---|---|
 | `generateLessonMetadata(date)` | `src/lib/hebrew-date.ts` | date string in, `title`, `hebrewDate`, `parsha`, `isHolidayReading`, `readingLabel`, ... | Every lesson title and Hebrew date. Holiday wording lives in `HOLIDAY_TITLES` / `holidayTitleFor`. |
+| `parshaLabel(parsha)` | `src/lib/parsha-label.ts` | stored `lessons.parsha` in, display text out | Showing any stored reading name (cards, lesson page, SEO text). Puts the Chol HaMoed Shabbat first; no calendar import, so client components can use it. |
 | Tag helpers | `src/lib/tags.ts`, `src/lib/tag-links.ts` | `normalizeTags`, tag URL builders | Every tag write and link. |
 | Site identity | `src/config/site.ts` | `SITE_URL`, `localePath`, `pageUrl`, `lessonPath`, ... | Any origin, name or URL. Never hardcode them. |
 

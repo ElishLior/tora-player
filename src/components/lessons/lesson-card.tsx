@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/routing';
 import { Link } from '@/i18n/routing';
 import { formatDuration } from '@/lib/utils';
+import { parshaLabel } from '@/lib/parsha-label';
 import { useAudioStore } from '@/stores/audio-store';
 import { useProgressStore } from '@/stores/progress-store';
 import { isNewSince, useVisitStore } from '@/stores/visit-store';
@@ -81,7 +82,7 @@ export function LessonCard({ lesson, showProgress, selectable, selected, onToggl
         {lesson.hebrew_title || lesson.title}
       </h3>
       <p className="text-xs text-muted-foreground truncate mt-0.5" dir="rtl">
-        {lesson.parsha && <span className="text-primary/80">{lesson.parsha}</span>}
+        {lesson.parsha && <span className="text-primary/80">{parshaLabel(lesson.parsha)}</span>}
         {lesson.parsha && ' · '}
         {lesson.hebrew_date || new Date(lesson.date).toLocaleDateString('he-IL')}
         {lesson.duration > 0 && ` · ${formatDuration(lesson.duration)}`}
