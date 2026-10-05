@@ -710,6 +710,18 @@ describe("audio controller duration evidence", () => {
     expect(useProgressStore.getState().progressMap.lesson).toMatchObject({ position: 3655, completed: false });
   });
 
+  it("never jumps backwards on a forward skip after playback ran past the browser's short length", () => {
+    playFinalPart(3819);
+    becomePlaying(3712.2);
+    element().currentTime = 3750; // still playing, 38 s past the browser's estimate
+
+    skipForward();
+    expect(element().currentTime).toBe(3750);
+
+    nextTrackOrSkip(); // car/headset "next" on the last part skips forward too
+    expect(element().currentTime).toBe(3750);
+  });
+
   it("shows the longer catalog length while the browser under-reports it", () => {
     playFinalPart(3819);
     becomePlaying(3712.2);
