@@ -76,3 +76,24 @@ export function isTrackDownloadedInLesson(track: AudioTrack, downloadedLesson: O
 /** The "back" control always rewinds this much; "forward" always advances SKIP_FORWARD_SECONDS. */
 export const SKIP_BACK_SECONDS = 15;
 export const SKIP_FORWARD_SECONDS = 15;
+
+/** The iPhone/iPad lock screen draws "10" on its skip icons; a web app cannot change that number. */
+const APPLE_LOCK_SCREEN_SKIP_SECONDS = 10;
+
+/**
+ * How far a lock-screen / notification skip moves, so it matches the number the
+ * OS shows: the OS's own interval when it sends one, 10s on iOS (its icons say
+ * 10), else the in-app interval (Android's notification shows no number).
+ */
+export function systemSkipSeconds({
+  seekOffset,
+  appleTouchDevice,
+  appSeconds,
+}: {
+  seekOffset: number | null | undefined;
+  appleTouchDevice: boolean;
+  appSeconds: number;
+}): number {
+  if (seekOffset && seekOffset > 0) return seekOffset;
+  return appleTouchDevice ? APPLE_LOCK_SCREEN_SKIP_SECONDS : appSeconds;
+}

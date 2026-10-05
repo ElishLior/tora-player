@@ -28,6 +28,7 @@ import type { LessonAudio, LessonImage, CategoryWithChildren } from '@/types/dat
 import { getCategories } from '@/actions/categories';
 import { generateLessonMetadata } from '@/lib/hebrew-date';
 import { TagInput } from '@/components/tags/tag-input';
+import { PartTypeField } from '@/components/lessons/part-type-field';
 
 interface MetadataSuggestion {
   title: string;
@@ -854,28 +855,22 @@ export default function EditLessonPage() {
                   )}
                 </div>
 
-                {/* Audio type tag */}
-                <select
-                  value={file.audio_type || ''}
-                  onChange={async (e) => {
-                    const newType = e.target.value || null;
+                {/* Part type */}
+                <PartTypeField
+                  value={file.audio_type}
+                  disabled={savingFiles}
+                  className="flex-shrink-0 max-w-[9rem]"
+                  onChange={async (newType) => {
                     setSavingFiles(true);
                     const result = await updateAudioType(file.id, newType);
                     if (!result.error) {
                       setAudioFiles((prev) =>
-                        prev.map((f) => (f.id === file.id ? { ...f, audio_type: newType } : f))
+                        prev.map((f) => (f.id === file.id ? { ...f, audio_type: result.audioType ?? null } : f))
                       );
                     }
                     setSavingFiles(false);
                   }}
-                  disabled={savingFiles}
-                  className="rounded-md bg-[hsl(var(--surface-highlight))] px-2 py-1 text-xs text-foreground border-0 focus:outline-none focus:ring-1 focus:ring-primary/50 flex-shrink-0"
-                  dir="rtl"
-                >
-                  <option value="">ללא סוג</option>
-                  <option value="סידור">סידור</option>
-                  <option value="עץ חיים">עץ חיים</option>
-                </select>
+                />
 
                 {/* Actions */}
                 {editingFileId !== file.id && (
