@@ -600,6 +600,7 @@
       "button": "Sign in"
     },
     "loading": "Loading…",
+    "diagnosticsLink": "Playback log · device check tool",
     "lessonFallback": "Lesson",
     "continue": {
       "resume": "Resume from <bdi>{time}</bdi>",
