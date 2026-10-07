@@ -414,10 +414,11 @@ describe("audio controller", () => {
   });
 
   it.each([
-    { action: "seekforward" as const, seekOffset: 10, apple: false, expected: 115 },
+    { action: "seekforward" as const, seekOffset: 10, apple: false, expected: 110 },
     { action: "seekforward" as const, seekOffset: undefined, apple: false, expected: 115 },
-    { action: "seekforward" as const, seekOffset: 10, apple: true, expected: 115 },
-    { action: "seekbackward" as const, seekOffset: 10, apple: true, expected: 85 },
+    { action: "seekforward" as const, seekOffset: undefined, apple: true, expected: 110 },
+    { action: "seekbackward" as const, seekOffset: undefined, apple: true, expected: 90 },
+    { action: "seekbackward" as const, seekOffset: 15, apple: true, expected: 85 },
   ])("Media Session $action (offset $seekOffset, Apple $apple) makes exactly one seek to $expected", ({ action, seekOffset, apple, expected }) => {
     const handlers = new Map<MediaSessionAction, MediaSessionActionHandler | null>();
     vi.stubGlobal("navigator", {

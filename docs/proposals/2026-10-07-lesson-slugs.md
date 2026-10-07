@@ -1,6 +1,6 @@
-# Lesson slug options (proposal, awaiting owner approval)
+# Lesson slug options
 
-Status: **proposal only**. No URL, route, migration or lesson row changes. Hebrew display titles stay as they are.
+Status: **format approved by the owner on October 8, 2026: `<topic>-<DD-MM-YYYY>`** (see "Approved format"). Nothing is implemented yet: no URL, route, migration or lesson row changes. Hebrew display titles stay as they are.
 
 Source: written by Claude Opus 5.5 in the October 7, 2026 session. The app has no AI provider integration, so these were not generated inside the app. Every option uses only the stored title, `parsha`, `date`, tags and description of published lessons (anon read on October 7, 2026: 245 published lessons). No topic or date was added that the record doesn't contain.
 
@@ -29,14 +29,28 @@ Each row: 3–5 candidates, recommended one first.
 | [`f7602b35…`](https://tora-player.vercel.app/he/lessons/f7602b35-e3fa-45f7-8711-17eb367e7d3d) (short) | 2026-02-10 · "תורה יד ליקוטי מוהרן" | `likutei-moharan-14-2026-02-10` · `likutei-moharan-torah-14` · `likutei-moharan-teaching-14` |
 | [`fda5369b…`](https://tora-player.vercel.app/he/lessons/fda5369b-f7b0-4c6b-82fb-7ba923bdc4ff), [`93d640b8…`](https://tora-player.vercel.app/he/lessons/93d640b8-8dae-4616-8203-7cbd28bda1b7), [`c90d8fff…`](https://tora-player.vercel.app/he/lessons/c90d8fff-1963-449e-9cef-10fc82dd4e27) (three shorts) | 2025-09-12 · all titled "שיעור קצר - 12.09.2025" | `short-2025-09-12`, `short-2025-09-12-2`, `short-2025-09-12-3` · `shiur-katzar-2025-09-12(-2/-3)` |
 
-## Recommendation
+## Approved format
 
-Use **topic + date**: `<topic>-<YYYY-MM-DD>`.
+`<topic>-<DD-MM-YYYY>`, in that order (owner, October 8, 2026). Candidates in the table above that use `YYYY-MM-DD` are superseded by this format.
 
-- The topic for a full lesson is the transliterated reading from `lessons.parsha`, or the holiday name.
-- The topic for a short lesson is its transliterated title. Drop dates and names already in the title.
-- The date always comes from the stored `date` column, never parsed from the displayed Hebrew date.
-- An admin confirms each generated slug before it is saved. A topic that only an admin can name (tags, description lines) stays optional.
+- **Topic, full lesson:** the transliterated reading from `lessons.parsha`, or the holiday name.
+- **Topic, short lesson:** its transliterated title, without any date or name the title already contains.
+- **Date:** the stored `date` column, written day-month-year. It is never parsed from the displayed Hebrew date.
+- **Collisions:** `-2`, `-3` after the date, in `created_at` order.
+- **Review:** an admin confirms each generated slug before it is saved.
+
+| Lesson | Slug |
+|---|---|
+| `fb296bdf…` 2026-09-25, חג הסוכות | `sukkot-25-09-2026` |
+| `4509463c…` 2026-09-18, פרשת האזינו | `haazinu-18-09-2026` |
+| `88ffb04c…` 2026-09-24, parsha סוכות | `sukkot-24-09-2026` |
+| `e764e1d7…` 2026-08-23, parsha כיתבוא | `ki-tavo-23-08-2026` |
+| `2cb933ef…` 2026-07-10, פרשת מטות-מסעי | `matot-masei-10-07-2026` |
+| `ab19cf31…` short, שורש נשמתינו חלק 1 | `shoresh-nishmatenu-1-12-02-2026` |
+| `f7602b35…` short, תורה יד ליקוטי מוהרן | `likutei-moharan-14-10-02-2026` |
+| `fda5369b…`, `93d640b8…`, `c90d8fff…` three shorts on 2025-09-12 | `short-12-09-2025`, `short-12-09-2025-2`, `short-12-09-2025-3` |
+
+A topic that ends in a number puts that number right before the date (`likutei-moharan-14-10-02-2026`). If that reads badly, an admin can add a word to the topic (`likutei-moharan-torah-14-10-02-2026`).
 
 ## Publication path (only after approval)
 

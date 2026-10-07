@@ -11,6 +11,7 @@ Building blocks to compose before writing new code. Each has a small interface, 
 | Track builders | `src/lib/lesson-tracks.ts` | `getLessonTracks(lesson)`, `getOfflineLessonTracks(meta)` | Building queues: one track per part with `partIndex`/`partCount`. |
 | `trustedPartDuration` | `src/lib/part-duration.ts` | `({ catalog, element }) => seconds` (0 = unknown) | Which length of a part to believe for "heard by position" and the shown length. Keeps the longer known value; a natural end still finishes the part. Read its header comment before changing the rule. |
 | Progress rules | `src/lib/lesson-progress.ts` | `isNearPartEnd`, `isLastPart`, `getResumePoint`, `getListenedFraction` | Heard / resume / progress-bar decisions. Pure. |
+| `systemSkipSeconds` | `src/lib/player-track-actions.ts` | `({ seekOffset, appleTouchDevice, appSeconds }) => seconds` | Lock-screen / notification skip length, so it matches the number the OS shows. |
 | `PlayerShareButton` | `src/components/player/player-share-button.tsx` | `<PlayerShareButton compact? />`; `sharePlayingLesson(track)` (`src/lib/player-share.ts`) | Sharing the loaded lesson from any player surface: native sheet, clipboard, manual-copy fallback. Never touches playback. |
 | `getTransportState` | `src/stores/audio-store.ts` | store state in, `"playing" \| "loading" \| "paused"` | Every play/pause icon. Do not read `isPlaying`. |
 
