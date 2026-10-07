@@ -89,12 +89,12 @@ describe("Media Session", () => {
 
   it.each([
     { action: "seekbackward" as const, seekOffset: undefined, expected: 85 },
-    { action: "seekbackward" as const, seekOffset: 10, expected: 85 },
-    { action: "seekbackward" as const, seekOffset: 30, expected: 85 },
+    { action: "seekbackward" as const, seekOffset: 10, expected: 90 },
+    { action: "seekbackward" as const, seekOffset: 30, expected: 70 },
     { action: "seekforward" as const, seekOffset: undefined, expected: 115 },
-    { action: "seekforward" as const, seekOffset: 10, expected: 115 },
-    { action: "seekforward" as const, seekOffset: 30, expected: 115 },
-  ])("$action always moves 15 seconds with OS seekOffset $seekOffset", ({ action, seekOffset, expected }) => {
+    { action: "seekforward" as const, seekOffset: 10, expected: 110 },
+    { action: "seekforward" as const, seekOffset: 30, expected: 130 },
+  ])("$action moves by the OS seekOffset $seekOffset, else 15 seconds", ({ action, seekOffset, expected }) => {
     useAudioStore.getState().setTrack(makeTrack("lesson", 600));
     useAudioStore.getState().setCurrentTime(100);
     useMediaSession();
@@ -108,9 +108,9 @@ describe("Media Session", () => {
   });
 
   it.each([
-    { action: "seekbackward" as const, expected: 85 },
-    { action: "seekforward" as const, expected: 115 },
-  ])("$action on an iPhone without a seekOffset moves 15 seconds", ({ action, expected }) => {
+    { action: "seekbackward" as const, expected: 90 },
+    { action: "seekforward" as const, expected: 110 },
+  ])("$action on an iPhone without a seekOffset matches its 10-second lock-screen icon", ({ action, expected }) => {
     vi.stubGlobal("navigator", { mediaSession: session, userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)" });
     useAudioStore.getState().setTrack(makeTrack("lesson", 600));
     useAudioStore.getState().setCurrentTime(100);
