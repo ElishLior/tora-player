@@ -152,18 +152,25 @@ export function LessonCard({ lesson, showProgress, selectable, selected, onToggl
               {infoContent}
             </Link>
           )}
-          <div onClick={(event) => event.stopPropagation()}>
-            <LessonDateLink date={lesson.date} hebrewDate={lesson.hebrew_date} />
-            {(lesson.tags?.length ?? 0) > 0 && (
-              <ul className="mt-1 flex flex-wrap gap-1.5">
-                {lesson.tags.map((tag) => (
-                  <li key={tag} className="max-w-full">
-                    <LessonTagLink tag={tag} />
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+          {selectable ? (
+            /* Bulk-select mode: a tap toggles the card, so the date is plain text. */
+            <p className="text-xs text-muted-foreground" dir="rtl">
+              <bdi>{lesson.hebrew_date || lesson.date.split('-').reverse().join('.')}</bdi>
+            </p>
+          ) : (
+            <div>
+              <LessonDateLink date={lesson.date} hebrewDate={lesson.hebrew_date} />
+              {(lesson.tags?.length ?? 0) > 0 && (
+                <ul className="mt-1 flex flex-wrap gap-1.5">
+                  {lesson.tags.map((tag) => (
+                    <li key={tag} className="max-w-full">
+                      <LessonTagLink tag={tag} />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Category badge (show in selection mode) */}
