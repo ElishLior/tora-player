@@ -6,7 +6,7 @@ import {
   loadPaginatedLessonList,
   type LessonListFailureCode,
 } from '@/lib/supabase/lesson-list';
-import { tagFromSearchParam } from '@/lib/tag-links';
+import { dateFromSearchParam, tagFromSearchParam } from '@/lib/tag-links';
 import type { LessonWithRelations } from '@/types/database';
 
 export async function getLessonsPaginated(
@@ -15,6 +15,7 @@ export async function getLessonsPaginated(
   audioType?: string,
   categoryId?: string,
   tag?: string,
+  date?: string,
 ): Promise<{
   lessons: LessonWithRelations[];
   hasMore: boolean;
@@ -29,6 +30,7 @@ export async function getLessonsPaginated(
       audioTypeFilter: audioType,
       categoryFilter: categoryId,
       tagFilter: tagFromSearchParam(tag),
+      dateFilter: dateFromSearchParam(date),
     },
   );
 

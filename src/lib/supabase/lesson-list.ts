@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Category, LessonWithRelations } from '@/types/database';
-import { matchTags, type TagCount } from '@/lib/tag-links';
+import { dateFromSearchParam, matchTags, type TagCount } from '@/lib/tag-links';
 import { getAllCategories } from './queries';
 import { LESSON_AUDIO_FILES, LESSON_CARD_COLUMNS } from './lesson-selects';
 
@@ -46,6 +46,8 @@ export interface LessonQueryFilters {
   categoryIds?: string[];
   /** Only lessons carrying this (normalized) tag. */
   tag?: string;
+  /** Exact stored Postgres DATE, without time-zone conversion. */
+  date?: string;
 }
 
 export interface LessonListReader {
@@ -53,16 +55,8 @@ export interface LessonListReader {
   getChildCategoryIds(categoryId: string): Promise<string[]>;
   getTagCounts(): Promise<TagCount[]>;
   /** Text matches plus lessons carrying any of `matchedTags`, newest first. */
-  searchLessons(
-    query: string,
-    filters: LessonQueryFilters,
-    matchedTags: string[],
-  ): Promise<LessonWithRelations[]>;
-  getLessonsPage(
-    offset: number,
-    pageSize: number,
-    filters: LessonQueryFilters,
-  ): Promise<LessonWithRelations[]>;
+  searchLessons(query: string, filters: LessonQueryFilters, matchedTags: string[]): Promise<LessonWithRelations[]>;
+  getLessonsPage(offset: number, pageSize: number, filters: LessonQueryFilters): Promise<LessonWithRelations[]>;
 }
 
 export interface InitialLessonListParams {
@@ -70,6 +64,7 @@ export interface InitialLessonListParams {
   audioTypeFilter?: string;
   categoryFilter?: string;
   tagFilter?: string;
+  dateFilter?: string;
   pageSize?: number;
 }
 
@@ -79,6 +74,7 @@ export interface PaginatedLessonListParams {
   audioTypeFilter?: string;
   categoryFilter?: string;
   tagFilter?: string;
+  dateFilter?: string;
 }
 
 function classifyLessonListError(error: unknown): LessonListFailureCode {
@@ -145,7 +141,7 @@ function paginatedFailure(error: unknown): Extract<PaginatedLessonListResult, { 
 
 async function getFilters(
   reader: LessonListReader,
-  params: Pick<InitialLessonListParams, 'audioTypeFilter' | 'categoryFilter' | 'tagFilter'>,
+  params: Pick<InitialLessonListParams, 'audioTypeFilter' | 'categoryFilter' | 'tagFilter' | 'dateFilter'>,
 ): Promise<LessonQueryFilters> {
   const categoryIds = params.categoryFilter
     ? [params.categoryFilter, ...(await reader.getChildCategoryIds(params.categoryFilter))]
@@ -155,6 +151,7 @@ async function getFilters(
     audioType: params.audioTypeFilter || undefined,
     categoryIds,
     tag: params.tagFilter || undefined,
+    date: dateFromSearchParam(params.dateFilter),
   };
 }
 
@@ -167,12 +164,7 @@ const HEBREW_MARKS = /[\u0591-\u05BD\u05BF\u05C1\u05C2\u05C4\u05C5\u05C7]/g;
  * presentation forms like U+FB2A lose their marks too), whitespace collapsed.
  */
 export function normalizeSearchQuery(raw: string | undefined): string {
-  return (raw ?? '')
-    .normalize('NFD')
-    .replace(HEBREW_MARKS, '')
-    .normalize('NFC')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return (raw ?? '').normalize('NFD').replace(HEBREW_MARKS, '').normalize('NFC').replace(/\s+/g, ' ').trim();
 }
 
 export async function loadInitialLessonList(
@@ -282,14 +274,12 @@ export interface LessonFilterableQuery<Q> {
  * `AUDIO_TYPE_MATCH` inner embed (one request instead of an id list); the tag
  * uses array containment (`tags @> {tag}`, GIN-indexed).
  */
-export function applyLessonFilters<Q extends LessonFilterableQuery<Q>>(
-  query: Q,
-  filters: LessonQueryFilters,
-): Q {
+export function applyLessonFilters<Q extends LessonFilterableQuery<Q>>(query: Q, filters: LessonQueryFilters): Q {
   let next = query;
   if (filters.audioType) next = next.eq(`${AUDIO_TYPE_MATCH}.audio_type`, filters.audioType);
   if (filters.categoryIds) next = next.in('category_id', filters.categoryIds);
   if (filters.tag) next = next.contains('tags', [filters.tag]);
+  if (filters.date) next = next.eq('date', filters.date);
   return next;
 }
 
@@ -301,9 +291,7 @@ export function mergeSearchResults(
 ): LessonWithRelations[] {
   const byId = new Map<string, LessonWithRelations>();
   for (const lesson of [...a, ...b]) if (!byId.has(lesson.id)) byId.set(lesson.id, lesson);
-  return [...byId.values()]
-    .sort((x, y) => (x.date < y.date ? 1 : x.date > y.date ? -1 : 0))
-    .slice(0, limit);
+  return [...byId.values()].sort((x, y) => (x.date < y.date ? 1 : x.date > y.date ? -1 : 0)).slice(0, limit);
 }
 
 /** Tag cloud data from `lesson_tag_counts()` (published lessons only), most used first. */
@@ -328,10 +316,7 @@ export function createSupabaseLessonListReader(supabase: SupabaseClient): Lesson
     getTagCounts: () => fetchTagCounts(supabase),
 
     async getChildCategoryIds(categoryId) {
-      const result = await supabase
-        .from('categories')
-        .select('id')
-        .eq('parent_id', categoryId);
+      const result = await supabase.from('categories').select('id').eq('parent_id', categoryId);
       const data = throwIfError(result);
       return (data || []).map((row: { id: string }) => row.id);
     },

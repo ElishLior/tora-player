@@ -25,6 +25,7 @@ import {
   ImagePlus,
 } from 'lucide-react';
 import Link from 'next/link';
+import { Link as LocaleLink } from '@/i18n/routing';
 import { useLocale, useTranslations } from 'next-intl';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
@@ -1468,7 +1469,7 @@ interface LessonTagsProps {
  */
 export function LessonTags({ lessonId, tags: initialTags, admin }: LessonTagsProps) {
   const t = useTranslations('tagBrowse');
-  const locale = useLocale();
+  const browseT = useTranslations('lessonBrowse');
   const [tags, setTags] = useState(initialTags);
   const [draft, setDraft] = useState<string[] | null>(null);
   const [saving, setSaving] = useState(false);
@@ -1530,13 +1531,15 @@ export function LessonTags({ lessonId, tags: initialTags, admin }: LessonTagsPro
     <>
       <ul className="flex flex-wrap items-center gap-1.5" aria-label={t('lessonTags')}>
         {tags.map((tag) => (
-          <li key={tag}>
-            <Link
-              href={`/${locale}${tagPath(tag)}`}
-              className="inline-flex min-h-7 items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
+          <li key={tag} className="max-w-full">
+            <LocaleLink
+              href={tagPath(tag)}
+              aria-label={browseT('tagLink', { tag })}
+              data-lesson-tag={tag}
+              className="inline-flex min-h-7 max-w-full items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
             >
-              <bdi>#{tag}</bdi>
-            </Link>
+              <bdi className="break-words">#{tag}</bdi>
+            </LocaleLink>
           </li>
         ))}
         {admin && (
@@ -1547,7 +1550,13 @@ export function LessonTags({ lessonId, tags: initialTags, admin }: LessonTagsPro
               disabled={saving}
               className="inline-flex min-h-7 items-center gap-1 rounded-full border border-dashed border-border px-2.5 py-0.5 text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-60"
             >
-              {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : tags.length > 0 ? <Pencil className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
+              {saving ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : tags.length > 0 ? (
+                <Pencil className="h-3 w-3" />
+              ) : (
+                <Plus className="h-3 w-3" />
+              )}
               {saving ? t('saving') : tags.length > 0 ? t('editTags') : t('addTags')}
             </button>
           </li>
@@ -1555,7 +1564,10 @@ export function LessonTags({ lessonId, tags: initialTags, admin }: LessonTagsPro
       </ul>
       {error && (
         <div className="fixed inset-x-0 bottom-24 z-50 flex justify-center px-4">
-          <p role="alert" className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm font-medium text-red-400 shadow-lg backdrop-blur">
+          <p
+            role="alert"
+            className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm font-medium text-red-400 shadow-lg backdrop-blur"
+          >
             {error}
           </p>
         </div>

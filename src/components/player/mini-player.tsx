@@ -11,6 +11,7 @@ import { BookmarkDialog } from '@/components/bookmarks/bookmark-dialog';
 import { getTrackLessonId } from '@/lib/player-track-actions';
 import { PlayPauseIcon } from './player-controls';
 import { CastStatusMessage } from './cast-status';
+import { PlayerShareButton } from './player-share-button';
 
 export function MiniPlayer() {
   const t = useTranslations('player');
@@ -67,6 +68,8 @@ export function MiniPlayer() {
             <p role="status" className="sr-only">
               {playbackIssue ? t(`issue.${playbackIssue}`) : ''}
             </p>
+
+            <PlayerShareButton compact />
 
             <button
               type="button"

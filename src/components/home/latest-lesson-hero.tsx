@@ -13,6 +13,7 @@ import { formatDuration } from '@/lib/utils';
 import { getTransportState, useAudioStore } from '@/stores/audio-store';
 import { useProgressStore } from '@/stores/progress-store';
 import { PlayPauseIcon } from '@/components/player/player-controls';
+import { LessonDateLink } from '@/components/lessons/lesson-browse-links';
 import type { LessonWithRelations } from '@/types/database';
 
 interface LatestLessonHeroProps {
@@ -65,7 +66,7 @@ export function LatestLessonHero({ title, lesson }: LatestLessonHeroProps) {
             {lesson.hebrew_title || lesson.title}
           </Link>
           <p className="text-xs text-muted-foreground">
-            <bdi>{lesson.hebrew_date || new Date(lesson.date).toLocaleDateString('he-IL')}</bdi>
+            <LessonDateLink date={lesson.date} hebrewDate={lesson.hebrew_date} />
             {lesson.duration > 0 && (
               <>
                 {' · '}
