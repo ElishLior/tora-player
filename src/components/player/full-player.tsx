@@ -26,6 +26,8 @@ import { PlayPauseIcon, SkipButton } from './player-controls';
 import { SleepTimerControl } from './sleep-timer';
 import { UpNextSheet } from './up-next';
 import { CastStatusMessage } from './cast-status';
+import { PlayerShareButton } from './player-share-button';
+import { LessonDateLink } from '@/components/lessons/lesson-browse-links';
 import { audioEngine } from '@/lib/audio-engine';
 import { handleCastClick, isCastableSource } from '@/lib/cast-utils';
 import { useModalDialog } from '@/hooks/use-modal-dialog';
@@ -222,7 +224,7 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
                 </span>
               )}
               {currentTrack.date && currentTrack.seriesName && ' · '}
-              {currentTrack.date && <bdi>{currentTrack.date}</bdi>}
+              {currentTrack.date && <LessonDateLink date={currentTrack.date} onClick={onClose} />}
             </p>
             {currentTrack.description && (
               <p className="text-xs text-muted-foreground/80 leading-relaxed pt-1 line-clamp-2" dir="auto">
@@ -320,6 +322,7 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
 
           {/* Secondary actions */}
           <div className="flex items-center justify-center gap-6 pt-2 flex-wrap flex-shrink-0">
+            <PlayerShareButton />
             <button
               onClick={() => setBookmarkPosition(currentTime)}
               className={`flex flex-col items-center gap-1.5 transition-colors ${bookmarkCount > 0 ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}

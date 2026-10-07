@@ -197,11 +197,13 @@ describe('lesson list tag filter', () => {
       audioType: 'סידור',
       categoryIds: ['cat-1'],
       tag: 'שבת',
+      date: undefined,
     });
     expect(getLessonsPage).toHaveBeenNthCalledWith(2, 20, 20, {
       audioType: undefined,
       categoryIds: undefined,
       tag: 'שבת',
+      date: undefined,
     });
   });
 
@@ -211,10 +213,46 @@ describe('lesson list tag filter', () => {
 
     const result = await loadInitialLessonList(reader, { q: '#בטחון', tagFilter: 'שבת' });
 
-    expect(searchLessons).toHaveBeenCalledWith('#בטחון', expect.objectContaining({ tag: 'שבת' }), [
-      'אמונה ובטחון',
-    ]);
+    expect(searchLessons).toHaveBeenCalledWith('#בטחון', expect.objectContaining({ tag: 'שבת' }), ['אמונה ובטחון']);
     expect(result).toMatchObject({ ok: true, isSearchMode: true, matchedTags: ['אמונה ובטחון'] });
+  });
+});
+
+describe('lesson list date filter', () => {
+  it('uses exact DATE equality together with type, category and tag', () => {
+    expect(
+      applyLessonFilters(new RecordingQuery(), {
+        date: '2026-10-07',
+        audioType: 'סידור',
+        categoryIds: ['cat-1'],
+        tag: 'שבת',
+      }).calls,
+    ).toEqual([
+      ['eq', 'audio_type_match.audio_type', 'סידור'],
+      ['in', 'category_id', ['cat-1']],
+      ['contains', 'tags', ['שבת']],
+      ['eq', 'date', '2026-10-07'],
+    ]);
+  });
+
+  it('passes the date to initial, paginated and search reads', async () => {
+    const reader = createReader();
+    await loadInitialLessonList(reader, { dateFilter: '2026-10-07' });
+    await loadPaginatedLessonList(reader, { offset: 20, limit: 20, dateFilter: '2026-10-08' });
+    await loadInitialLessonList(reader, { q: 'שיעור', dateFilter: '2026-10-07', tagFilter: 'שבת' });
+    expect(reader.getLessonsPage).toHaveBeenNthCalledWith(1, 0, 20, expect.objectContaining({ date: '2026-10-07' }));
+    expect(reader.getLessonsPage).toHaveBeenNthCalledWith(2, 20, 20, expect.objectContaining({ date: '2026-10-08' }));
+    expect(reader.searchLessons).toHaveBeenCalledWith(
+      'שיעור',
+      expect.objectContaining({ date: '2026-10-07', tag: 'שבת' }),
+      [],
+    );
+  });
+
+  it('drops invalid dates before the reader sees them', async () => {
+    const reader = createReader();
+    await loadInitialLessonList(reader, { dateFilter: '2026-02-30' });
+    expect(reader.getLessonsPage).toHaveBeenCalledWith(0, 20, expect.objectContaining({ date: undefined }));
   });
 });
 

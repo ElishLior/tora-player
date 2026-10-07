@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { AlertTriangle, ArrowRight, Hash } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Hash, X } from 'lucide-react';
 import { Link } from '@/i18n/routing';
 import { isSupabaseConfigured } from '@/lib/supabase/server';
 import { createCatalogLessonListReader } from '@/lib/supabase/anon';
@@ -39,19 +39,19 @@ export default async function TagPage({ params }: Props) {
 
   const t = await getTranslations('tagBrowse');
   const commonT = await getTranslations('common');
+  const browseT = await getTranslations('lessonBrowse');
   const admin = await isAdmin();
 
-  const result = await loadInitialLessonList(
-    isSupabaseConfigured() ? createCatalogLessonListReader() : null,
-    { tagFilter: tag },
-  );
+  const result = await loadInitialLessonList(isSupabaseConfigured() ? createCatalogLessonListReader() : null, {
+    tagFilter: tag,
+  });
   if (!result.ok) {
     console.error('Failed to load tag page:', { tag, code: result.code, message: result.message });
   }
   const count = result.tagCounts.find((row) => row.tag === tag)?.lesson_count;
 
   return (
-    <div className="space-y-5 animate-fade-in">
+    <div className="animate-fade-in space-y-5">
       <div className="flex items-center gap-2">
         <Link
           href="/tags"
@@ -64,11 +64,19 @@ export default async function TagPage({ params }: Props) {
           <h1 className="truncate text-2xl font-bold text-primary">
             <bdi>#{tag}</bdi>
           </h1>
-          {count !== undefined && (
-            <p className="text-xs text-muted-foreground">{t('lessonCount', { count })}</p>
-          )}
+          {count !== undefined && <p className="text-xs text-muted-foreground">{t('lessonCount', { count })}</p>}
         </div>
       </div>
+
+      <Link
+        href="/lessons"
+        aria-label={browseT('clearTag', { tag })}
+        data-active-tag={tag}
+        className="inline-flex min-h-11 max-w-full items-center gap-2 rounded-full bg-primary/10 px-3.5 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+      >
+        <bdi className="min-w-0 break-words">{browseT('tagFilter', { tag })}</bdi>
+        <X className="h-4 w-4 shrink-0" aria-hidden />
+      </Link>
 
       {!result.ok ? (
         <EmptyState

@@ -14,6 +14,7 @@ import { LessonPlayerClient, LessonTags } from './lesson-player-client';
 import { JsonLd } from '@/components/seo/json-ld';
 import { OG_LOCALE, SITE_NAME, categoryPath, isSiteLocale, lessonPath, pageUrl } from '@/config/site';
 import { breadcrumbJsonLd, lessonDescription, lessonJsonLd, pageAlternates } from '@/lib/seo';
+import { lessonsHref } from '@/lib/tag-links';
 
 type Props = {
   params: Promise<{ locale: string; lessonId: string }>;
@@ -60,6 +61,7 @@ export default async function LessonDetailPage({ params }: Props) {
   const { locale, lessonId } = await params;
   setRequestLocale(locale);
   const t = await getTranslations('lessons');
+  const browseT = await getTranslations('lessonBrowse');
 
   const lesson = await loadLesson(lessonId);
   if (!lesson) notFound();
@@ -70,27 +72,32 @@ export default async function LessonDetailPage({ params }: Props) {
   const hasParts = lesson.parts && lesson.parts.length > 1;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6 animate-fade-in">
+    <div className="animate-fade-in mx-auto max-w-2xl space-y-6">
       <JsonLd
         data={[
           lessonJsonLd(lesson),
           breadcrumbJsonLd([
             { name: SITE_NAME.he, pathname: '/' },
-            ...(lesson.category ? [{ name: lesson.category.hebrew_name, pathname: categoryPath(lesson.category.id) }] : []),
+            ...(lesson.category
+              ? [{ name: lesson.category.hebrew_name, pathname: categoryPath(lesson.category.id) }]
+              : []),
             { name: lesson.hebrew_title || lesson.title, pathname: lessonPath(lesson.id) },
           ]),
         ]}
       />
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Link href="/lessons" className="rounded-full p-2 text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--surface-highlight))] transition-colors">
+        <Link
+          href="/lessons"
+          className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-[hsl(var(--surface-highlight))] hover:text-foreground"
+        >
           <ArrowRight className="h-5 w-5" />
         </Link>
         <div className="flex-1" />
         {admin && (
           <Link
             href={`/lessons/${lessonId}/edit`}
-            className="rounded-full p-2 text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--surface-highlight))] transition-colors"
+            className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-[hsl(var(--surface-highlight))] hover:text-foreground"
             aria-label="Edit"
           >
             <Edit className="h-5 w-5" />
@@ -123,22 +130,32 @@ export default async function LessonDetailPage({ params }: Props) {
       {/* Metadata pills */}
       <div className="flex flex-wrap gap-2">
         {lesson.parsha && (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 text-primary px-3 py-1 text-xs font-medium">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
             <BookOpen className="h-3.5 w-3.5" />
             {parshaLabel(lesson.parsha)}
           </span>
         )}
         {lesson.hebrew_date && (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-[hsl(var(--surface-elevated))] px-3 py-1 text-xs text-muted-foreground">
-            <Calendar className="h-3.5 w-3.5" />
-            {lesson.hebrew_date}
-          </span>
+          <Link
+            href={lessonsHref({ date: lesson.date })}
+            aria-label={browseT('dateLink', { date: `${lesson.hebrew_date} (${lesson.date})` })}
+            data-lesson-date={lesson.date}
+            className="inline-flex min-h-11 max-w-full items-center gap-1.5 rounded-full bg-[hsl(var(--surface-elevated))] px-3 py-1 text-xs text-muted-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+          >
+            <Calendar className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            <bdi className="break-words">{lesson.hebrew_date}</bdi>
+          </Link>
         )}
         {lesson.date && (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-[hsl(var(--surface-elevated))] px-3 py-1 text-xs text-muted-foreground">
-            <Calendar className="h-3.5 w-3.5" />
-            {lesson.date}
-          </span>
+          <Link
+            href={lessonsHref({ date: lesson.date })}
+            aria-label={browseT('dateLink', { date: lesson.date })}
+            data-lesson-date={lesson.date}
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-[hsl(var(--surface-elevated))] px-3 py-1 text-xs text-muted-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+          >
+            <Calendar className="h-3.5 w-3.5" aria-hidden />
+            <bdi>{lesson.date}</bdi>
+          </Link>
         )}
         {lesson.duration > 0 && (
           <span className="inline-flex items-center gap-1.5 rounded-full bg-[hsl(var(--surface-elevated))] px-3 py-1 text-xs text-muted-foreground">
@@ -169,10 +186,10 @@ export default async function LessonDetailPage({ params }: Props) {
       {/* Description / Summary */}
       {(lesson.description || lesson.summary) && (
         <div className="rounded-xl bg-[hsl(var(--surface-elevated))] p-4">
-          <h2 className="text-sm font-bold mb-2 text-muted-foreground">
+          <h2 className="mb-2 text-sm font-bold text-muted-foreground">
             {locale === 'he' ? 'תיאור השיעור' : 'Description'}
           </h2>
-          <p className="text-sm leading-relaxed whitespace-pre-wrap" dir="auto">
+          <p className="whitespace-pre-wrap text-sm leading-relaxed" dir="auto">
             {lesson.description || lesson.summary}
           </p>
         </div>
@@ -189,9 +206,7 @@ export default async function LessonDetailPage({ params }: Props) {
       {/* Multi-part links */}
       {hasParts && (
         <div className="rounded-xl bg-[hsl(var(--surface-elevated))] p-4">
-          <h2 className="text-sm font-bold mb-3 text-muted-foreground">
-            {locale === 'he' ? 'חלקים' : 'Parts'}
-          </h2>
+          <h2 className="mb-3 text-sm font-bold text-muted-foreground">{locale === 'he' ? 'חלקים' : 'Parts'}</h2>
           <div className="space-y-1">
             {lesson.parts!.map((part) => (
               <Link
@@ -199,15 +214,15 @@ export default async function LessonDetailPage({ params }: Props) {
                 href={`/lessons/${part.id}`}
                 className={`block rounded-md p-2.5 text-sm transition-colors ${
                   part.id === lesson.id
-                    ? 'bg-primary/10 text-primary font-medium'
+                    ? 'bg-primary/10 font-medium text-primary'
                     : 'hover:bg-[hsl(var(--surface-highlight))]'
                 }`}
               >
-                {part.part_number ? `${locale === 'he' ? 'חלק' : 'Part'} ${part.part_number}` : (part.hebrew_title || part.title)}
+                {part.part_number
+                  ? `${locale === 'he' ? 'חלק' : 'Part'} ${part.part_number}`
+                  : part.hebrew_title || part.title}
                 {part.duration > 0 && (
-                  <span className="text-xs text-muted-foreground mr-2">
-                    {formatDuration(part.duration)}
-                  </span>
+                  <span className="mr-2 text-xs text-muted-foreground">{formatDuration(part.duration)}</span>
                 )}
               </Link>
             ))}
@@ -218,22 +233,24 @@ export default async function LessonDetailPage({ params }: Props) {
       {/* Snippets */}
       {lesson.snippets && lesson.snippets.length > 0 && (
         <div>
-          <h2 className="text-sm font-bold mb-3 text-muted-foreground uppercase tracking-wider">
+          <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-muted-foreground">
             {locale === 'he' ? 'קטעים נבחרים' : 'Snippets'}
           </h2>
           <div className="space-y-2">
             {lesson.snippets.map((snippet) => (
               <div key={snippet.id} className="rounded-xl bg-[hsl(var(--surface-elevated))] p-4">
                 {snippet.title && (
-                  <h3 className="text-sm font-bold mb-1" dir="auto">{snippet.title}</h3>
+                  <h3 className="mb-1 text-sm font-bold" dir="auto">
+                    {snippet.title}
+                  </h3>
                 )}
                 {snippet.hebrew_title && snippet.hebrew_title !== snippet.title && (
-                  <p className="text-sm text-muted-foreground leading-relaxed" dir="auto">{snippet.hebrew_title}</p>
+                  <p className="text-sm leading-relaxed text-muted-foreground" dir="auto">
+                    {snippet.hebrew_title}
+                  </p>
                 )}
                 {snippet.start_time > 0 && (
-                  <p className="text-xs text-primary mt-2">
-                    {formatDuration(snippet.start_time)}
-                  </p>
+                  <p className="mt-2 text-xs text-primary">{formatDuration(snippet.start_time)}</p>
                 )}
               </div>
             ))}

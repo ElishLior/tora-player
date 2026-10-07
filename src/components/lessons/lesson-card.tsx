@@ -15,6 +15,7 @@ import { useHydrated } from '@/hooks/use-hydrated';
 import { getLessonTracks } from '@/lib/lesson-tracks';
 import { getListenedFraction } from '@/lib/lesson-progress';
 import { playLesson } from '@/lib/play-lesson';
+import { LessonDateLink, LessonTagLink } from './lesson-browse-links';
 import type { LessonWithRelations } from '@/types/database';
 
 interface LessonCardProps {
@@ -76,16 +77,18 @@ export function LessonCard({ lesson, showProgress, selectable, selected, onToggl
 
   const infoContent = (
     <>
-      <h3 className={`text-sm font-semibold truncate ${
-        isCurrentlyPlaying && !selectable ? 'text-primary' : 'text-foreground'
-      }`} dir="rtl">
+      <h3
+        className={`truncate text-sm font-semibold ${
+          isCurrentlyPlaying && !selectable ? 'text-primary' : 'text-foreground'
+        }`}
+        dir="rtl"
+      >
         {lesson.hebrew_title || lesson.title}
       </h3>
-      <p className="text-xs text-muted-foreground truncate mt-0.5" dir="rtl">
+      <p className="mt-0.5 truncate text-xs text-muted-foreground" dir="rtl">
         {lesson.parsha && <span className="text-primary/80">{parshaLabel(lesson.parsha)}</span>}
-        {lesson.parsha && ' · '}
-        {lesson.hebrew_date || new Date(lesson.date).toLocaleDateString('he-IL')}
-        {lesson.duration > 0 && ` · ${formatDuration(lesson.duration)}`}
+        {lesson.parsha && lesson.duration > 0 && ' · '}
+        {lesson.duration > 0 && <bdi>{formatDuration(lesson.duration)}</bdi>}
       </p>
     </>
   );
@@ -95,16 +98,20 @@ export function LessonCard({ lesson, showProgress, selectable, selected, onToggl
       <div className="flex items-center gap-3">
         {selectable ? (
           /* Checkbox for selection mode */
-          <div className="flex-shrink-0 h-10 w-10 rounded-md bg-[hsl(var(--surface-elevated))] flex items-center justify-center">
+          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md bg-[hsl(var(--surface-elevated))]">
             <div
-              className={`h-5 w-5 rounded border-2 flex items-center justify-center transition-colors ${
-                selected
-                  ? 'bg-primary border-primary'
-                  : 'border-muted-foreground/50'
+              className={`flex h-5 w-5 items-center justify-center rounded border-2 transition-colors ${
+                selected ? 'border-primary bg-primary' : 'border-muted-foreground/50'
               }`}
             >
               {selected && (
-                <svg className="h-3 w-3 text-primary-foreground" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg
+                  className="h-3 w-3 text-primary-foreground"
+                  viewBox="0 0 12 12"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
                   <path d="M2 6l3 3 5-5" />
                 </svg>
               )}
@@ -115,39 +122,63 @@ export function LessonCard({ lesson, showProgress, selectable, selected, onToggl
           <button
             type="button"
             onClick={handlePlay}
-            className="relative z-10 flex-shrink-0 h-10 w-10 rounded-md bg-[hsl(var(--surface-elevated))] flex items-center justify-center transition-all group-hover:bg-primary group-hover:shadow-lg group-hover:shadow-primary/25"
+            className="relative z-10 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md bg-[hsl(var(--surface-elevated))] transition-all group-hover:bg-primary group-hover:shadow-lg group-hover:shadow-primary/25"
             aria-label={t('play')}
           >
             {isCurrentlyPlaying && isPlaying ? (
               <div className="flex items-center gap-[2px] group-hover:hidden">
-                <div className="equalizer-bar bg-primary h-3" />
-                <div className="equalizer-bar bg-primary h-3" />
-                <div className="equalizer-bar bg-primary h-3" />
+                <div className="equalizer-bar h-3 bg-primary" />
+                <div className="equalizer-bar h-3 bg-primary" />
+                <div className="equalizer-bar h-3 bg-primary" />
               </div>
             ) : null}
             {isCurrentlyPlaying && isPlaying ? (
-              <Pause className="h-4 w-4 text-primary-foreground hidden group-hover:block" />
+              <Pause className="hidden h-4 w-4 text-primary-foreground group-hover:block" />
             ) : (
-              <Play className="h-4 w-4 ms-0.5 text-muted-foreground group-hover:text-primary-foreground" />
+              <Play className="ms-0.5 h-4 w-4 text-muted-foreground group-hover:text-primary-foreground" />
             )}
           </button>
         )}
 
-        {/* The lesson link covers the card, but never wraps the play or queue buttons. */}
-        {selectable ? (
-          <div className="flex-1 min-w-0">{infoContent}</div>
-        ) : (
-          <Link
-            href={`/lessons/${lesson.id}`}
-            className="flex-1 min-w-0 before:absolute before:inset-0 before:content-['']"
-          >
-            {infoContent}
-          </Link>
-        )}
+        {/* Metadata links are siblings of the stretched lesson link, never nested. */}
+        <div className="min-w-0 flex-1">
+          {selectable ? (
+            infoContent
+          ) : (
+            <Link
+              href={`/lessons/${lesson.id}`}
+              className="block min-w-0 before:absolute before:inset-0 before:content-['']"
+            >
+              {infoContent}
+            </Link>
+          )}
+          {selectable ? (
+            /* Bulk-select mode: a tap toggles the card, so the date is plain text. */
+            <p className="text-xs text-muted-foreground" dir="rtl">
+              <bdi>{lesson.hebrew_date || lesson.date.split('-').reverse().join('.')}</bdi>
+            </p>
+          ) : (
+            <div>
+              <LessonDateLink date={lesson.date} hebrewDate={lesson.hebrew_date} />
+              {(lesson.tags?.length ?? 0) > 0 && (
+                <ul className="mt-1 flex flex-wrap gap-1.5">
+                  {lesson.tags.map((tag) => (
+                    <li key={tag} className="max-w-full">
+                      <LessonTagLink tag={tag} />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Category badge (show in selection mode) */}
         {selectable && lesson.category && (
-          <span className="text-[10px] text-primary/80 bg-primary/10 px-2 py-0.5 rounded-full flex-shrink-0 truncate max-w-[100px]" dir="rtl">
+          <span
+            className="max-w-[100px] flex-shrink-0 truncate rounded-full bg-primary/10 px-2 py-0.5 text-[10px] text-primary/80"
+            dir="rtl"
+          >
             {lesson.category.hebrew_name}
           </span>
         )}
@@ -161,20 +192,18 @@ export function LessonCard({ lesson, showProgress, selectable, selected, onToggl
 
         {/* Part badge */}
         {lesson.part_number && !selectable && (
-          <span className="text-[10px] text-muted-foreground bg-[hsl(var(--surface-elevated))] px-2 py-0.5 rounded-full flex-shrink-0">
+          <span className="flex-shrink-0 rounded-full bg-[hsl(var(--surface-elevated))] px-2 py-0.5 text-[10px] text-muted-foreground">
             {lesson.part_number}
           </span>
         )}
 
         {/* Offline badge */}
         {isOffline && !selectable && (
-          <span className="flex-shrink-0 h-2 w-2 rounded-full bg-green-500" title={t('downloaded')} />
+          <span className="h-2 w-2 flex-shrink-0 rounded-full bg-green-500" title={t('downloaded')} />
         )}
 
         {/* Heard to the end */}
-        {isHeard && !selectable && (
-          <Check className="h-4 w-4 flex-shrink-0 text-primary" aria-label={t('heard')} />
-        )}
+        {isHeard && !selectable && <Check className="h-4 w-4 flex-shrink-0 text-primary" aria-label={t('heard')} />}
 
         {/* Queue after the current track */}
         {canPlayNext && !selectable && (
@@ -193,11 +222,8 @@ export function LessonCard({ lesson, showProgress, selectable, selected, onToggl
 
       {/* Progress bar */}
       {showProgress && !selectable && progressPercent > 0 && (
-        <div className="mt-2 ms-[52px] h-0.5 w-auto overflow-hidden rounded-full bg-[hsl(0,0%,24%)]">
-          <div
-            className="h-full rounded-full bg-primary"
-            style={{ width: `${progressPercent}%` }}
-          />
+        <div className="ms-[52px] mt-2 h-0.5 w-auto overflow-hidden rounded-full bg-[hsl(0,0%,24%)]">
+          <div className="h-full rounded-full bg-primary" style={{ width: `${progressPercent}%` }} />
         </div>
       )}
     </>
@@ -207,10 +233,8 @@ export function LessonCard({ lesson, showProgress, selectable, selected, onToggl
     return (
       <div
         onClick={() => onToggleSelect?.(lesson.id)}
-        className={`group block rounded-lg p-3 transition-all cursor-pointer ${
-          selected
-            ? 'bg-primary/10 ring-1 ring-primary/30'
-            : 'hover:bg-[hsl(var(--surface-highlight))]'
+        className={`group block cursor-pointer rounded-lg p-3 transition-all ${
+          selected ? 'bg-primary/10 ring-1 ring-primary/30' : 'hover:bg-[hsl(var(--surface-highlight))]'
         }`}
       >
         {cardContent}

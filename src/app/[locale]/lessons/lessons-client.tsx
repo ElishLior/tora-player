@@ -28,6 +28,7 @@ interface LessonsClientProps {
   audioTypeFilter?: string;
   categoryFilter?: string;
   tagFilter?: string;
+  dateFilter?: string;
   /** Show a "play all" button that queues the loaded lessons (tag pages). */
   showPlayAll?: boolean;
   admin?: boolean;
@@ -77,6 +78,7 @@ export function LessonsClient({
   audioTypeFilter,
   categoryFilter,
   tagFilter,
+  dateFilter,
   showPlayAll,
   admin,
   categories,
@@ -99,6 +101,7 @@ export function LessonsClient({
       audioTypeFilter || undefined,
       categoryFilter || undefined,
       tagFilter || undefined,
+      dateFilter || undefined,
     );
 
     if (result.error) {
@@ -109,7 +112,7 @@ export function LessonsClient({
     setPageError(null);
     setLessons((prev) => [...prev, ...result.lessons]);
     setHasMore(result.hasMore);
-  }, [lessons.length, audioTypeFilter, categoryFilter, tagFilter, locale]);
+  }, [lessons.length, audioTypeFilter, categoryFilter, tagFilter, dateFilter, locale]);
 
   const shouldAutoLoadMore = canAutoLoadMore({
     isSearchMode,

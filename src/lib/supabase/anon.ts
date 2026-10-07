@@ -136,6 +136,7 @@ export const getCachedPartTypes = unstable_cache(
 /**
  * Lesson list reader for public pages: anon client, with categories and tag
  * counts from the cache (the filtered lesson pages themselves are not cached).
+ * Date, tag and other list filters always reach a fresh query; no shared lesson-list cache key.
  */
 export function createCatalogLessonListReader(): LessonListReader {
   return {

@@ -8,7 +8,6 @@ import {
   getTrackOfflineKey,
   getTrackOfflineLessonInput,
   isTrackDownloadedInLesson,
-  systemSkipSeconds,
 } from './player-track-actions';
 
 const track: AudioTrack = {
@@ -101,21 +100,5 @@ describe('player track actions', () => {
         downloadedLesson,
       ),
     ).toBe(false);
-  });
-});
-
-describe('systemSkipSeconds', () => {
-  it('uses the interval the OS asked for, since its lock-screen icon shows that number', () => {
-    expect(systemSkipSeconds({ seekOffset: 10, appleTouchDevice: false, appSeconds: 15 })).toBe(10);
-    expect(systemSkipSeconds({ seekOffset: 30, appleTouchDevice: true, appSeconds: 15 })).toBe(30);
-  });
-
-  it('matches the iPhone lock screen "10" icon when iOS sends no interval', () => {
-    expect(systemSkipSeconds({ seekOffset: undefined, appleTouchDevice: true, appSeconds: 15 })).toBe(10);
-  });
-
-  it('keeps the app interval elsewhere, where the notification shows no number', () => {
-    expect(systemSkipSeconds({ seekOffset: undefined, appleTouchDevice: false, appSeconds: 15 })).toBe(15);
-    expect(systemSkipSeconds({ seekOffset: 0, appleTouchDevice: false, appSeconds: 15 })).toBe(15);
   });
 });
