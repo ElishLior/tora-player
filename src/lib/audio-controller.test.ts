@@ -11,11 +11,12 @@ import {
   skipForward,
   startAudioController,
 } from "./audio-controller";
+import { useMediaSession } from "@/hooks/use-media-session";
 import { getResumePoint } from "./lesson-progress";
 import { playLesson } from "./play-lesson";
 
 // Browser globals the controller and its stores touch at import time.
-const { elements, getOfflineAudioUrl, getDownloadedLessons } = vi.hoisted(() => {
+const { elements, getOfflineAudioUrl, getDownloadedLessons, mediaCleanups } = vi.hoisted(() => {
   class FakeAudioElement {
     paused = true;
     ended = false;
@@ -94,11 +95,23 @@ const { elements, getOfflineAudioUrl, getDownloadedLessons } = vi.hoisted(() => 
   });
   Object.defineProperty(globalThis, "navigator", { value: { onLine: true }, configurable: true });
   return {
+    mediaCleanups: [] as Array<() => void>,
     elements,
     getOfflineAudioUrl: vi.fn<(lessonId: string) => Promise<string | null>>(async () => null),
     getDownloadedLessons: vi.fn(async () => [] as { lessonId: string }[]),
   };
 });
+
+// Next navigation is unavailable in the Node hook harness.
+vi.mock("next-intl/navigation", () => ({ createNavigation: () => ({}) }));
+
+vi.mock("react", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react")>()),
+  useEffect: (setup: () => void | (() => void)) => {
+    const cleanup = setup();
+    if (cleanup) mediaCleanups.push(cleanup);
+  },
+}));
 
 vi.mock("@/lib/offline-storage", () => ({
   getDownloadedLessons,
@@ -164,6 +177,8 @@ describe("audio controller", () => {
   });
 
   afterEach(() => {
+    mediaCleanups.splice(0).forEach((cleanup) => cleanup());
+    vi.unstubAllGlobals();
     stop();
     pause();
     useAudioStore.setState({ currentTrack: null, queue: [], queueIndex: -1, sleepTimer: null });
@@ -313,7 +328,7 @@ describe("audio controller", () => {
     { direction: "backward at the start", action: skipBackward, start: 10, expected: 0 },
     { direction: "forward at the end", action: skipForward, start: 590, expected: 600 },
   ])("skips 15 seconds $direction from the live position within track bounds", ({ action, start, expected }) => {
-    playTrack(makeTrack("a"));
+    playTrack({ ...makeTrack("a"), duration: 600 });
     becomePlaying(600);
     // The live element can be ahead of the last store update in the background.
     useAudioStore.getState().setCurrentTime(50);
@@ -325,6 +340,111 @@ describe("audio controller", () => {
     expect(useAudioStore.getState().currentTime).toBe(expected);
     expect(useAudioStore.getState().resumePosition).toBe(expected);
     expect(useAudioStore.getState().currentTrack?.id).toBe("a");
+  });
+
+  it.each([
+    { action: skipForward, start: 100, expected: 115 },
+    { action: skipBackward, start: 100, expected: 85 },
+    { action: skipBackward, start: 5, expected: 0 },
+  ])("makes one seek from a paused element at $start to $expected", ({ action, start, expected }) => {
+    playTrack({ ...makeTrack("paused-skip"), duration: 600 });
+    becomePlaying(600);
+    pause();
+    element().currentTime = start;
+    const seek = vi.spyOn(audioEngine, "seek");
+
+    action();
+
+    expect(seek).toHaveBeenCalledExactlyOnceWith(expected);
+    expect(element().currentTime).toBe(expected);
+    expect(element().paused).toBe(true);
+  });
+
+  it("clamps a forward skip to the browser's end when it knows the longer length", () => {
+    playTrack({ ...makeTrack("trusted-skip"), duration: 590 });
+    becomePlaying(600);
+    pause();
+    element().currentTime = 595;
+    const seek = vi.spyOn(audioEngine, "seek");
+
+    skipForward();
+
+    expect(seek).toHaveBeenCalledExactlyOnceWith(600);
+    expect(element().currentTime).toBe(600);
+  });
+
+  it("stays put on a forward skip past a too-short browser end (a real seek there clamps backwards)", () => {
+    playTrack({ ...makeTrack("short-browser-end"), duration: 600 });
+    becomePlaying(590);
+    pause();
+    element().currentTime = 595;
+    const seek = vi.spyOn(audioEngine, "seek");
+
+    skipForward();
+
+    expect(seek).not.toHaveBeenCalled();
+    expect(element().currentTime).toBe(595);
+  });
+
+  it("keeps repeated presses separate: two paused forward presses seek twice and advance 30 seconds", () => {
+    playTrack(makeTrack("repeated-skip"));
+    becomePlaying();
+    pause();
+    element().currentTime = 100;
+    const seek = vi.spyOn(audioEngine, "seek");
+
+    skipForward();
+    skipForward();
+
+    expect(seek.mock.calls).toEqual([[115], [130]]);
+    expect(element().currentTime).toBe(130);
+  });
+
+  it("stays put when a forward skip starts beyond every known end", () => {
+    playTrack({ ...makeTrack("past-end"), duration: 600 });
+    becomePlaying(590);
+    pause();
+    element().currentTime = 605;
+    const seek = vi.spyOn(audioEngine, "seek");
+
+    skipForward();
+
+    expect(seek).not.toHaveBeenCalled();
+    expect(element().currentTime).toBe(605);
+  });
+
+  it.each([
+    { action: "seekforward" as const, seekOffset: 10, apple: false, expected: 115 },
+    { action: "seekforward" as const, seekOffset: undefined, apple: false, expected: 115 },
+    { action: "seekforward" as const, seekOffset: 10, apple: true, expected: 115 },
+    { action: "seekbackward" as const, seekOffset: 10, apple: true, expected: 85 },
+  ])("Media Session $action (offset $seekOffset, Apple $apple) makes exactly one seek to $expected", ({ action, seekOffset, apple, expected }) => {
+    const handlers = new Map<MediaSessionAction, MediaSessionActionHandler | null>();
+    vi.stubGlobal("navigator", {
+      onLine: true,
+      userAgent: apple ? "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)" : "Chromium",
+      mediaSession: {
+        metadata: null,
+        playbackState: "none",
+        setPositionState: vi.fn(),
+        setActionHandler: (name: MediaSessionAction, handler: MediaSessionActionHandler | null) => handlers.set(name, handler),
+      },
+    });
+    vi.stubGlobal("MediaMetadata", class {
+      constructor(init: MediaMetadataInit) { Object.assign(this, init); }
+    });
+    playTrack(makeTrack("os-skip"));
+    becomePlaying();
+    pause();
+    element().currentTime = 100;
+    useMediaSession();
+    const seek = vi.spyOn(audioEngine, "seek");
+
+    handlers.get(action)!({ action, seekOffset });
+
+    expect(seek).toHaveBeenCalledExactlyOnceWith(expected);
+    expect(element().currentTime).toBe(expected);
+    expect(element().paused).toBe(true);
   });
 
   it("skips 15 seconds inside the lesson when car 'next' has no next lesson", () => {

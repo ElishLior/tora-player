@@ -208,6 +208,12 @@
     "drivingMode": "Driving Mode",
     "markSnippet": "Mark Clip",
     "shareClip": "Share Clip",
+    "shareLesson": "Share lesson",
+    "shareAction": "Share",
+    "shareCopied": "Link copied",
+    "shareManualCopy": "Copy the lesson link",
+    "shareLink": "Lesson link",
+    "shareClose": "Close sharing",
     "openLesson": "Open lesson",
     "noActiveLesson": "No active lesson",
     "clipMode": "Clip Mode",
@@ -715,6 +721,18 @@
     "title": "Page not found",
     "description": "The page you are looking for does not exist or has moved.",
     "backHome": "Back to home"
+  },
+  "lessonBrowse": {
+    "dateLink": "Lessons from {date}",
+    "tagLink": "Lessons tagged {tag}",
+    "dateFilter": "Date: {date}",
+    "tagFilter": "Tag: #{tag}",
+    "dateHeading": "Lessons from {date}",
+    "tagHeading": "Lessons tagged #{tag}",
+    "combinedHeading": "Lessons from {date} tagged #{tag}",
+    "clearDate": "Clear date filter",
+    "clearTag": "Clear tag filter {tag}",
+    "filteredEmpty": "No lessons match these filters"
   },
   "diagnostics": {
     "title": "Playback log",

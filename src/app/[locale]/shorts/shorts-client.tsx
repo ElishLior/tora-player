@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import { AlertTriangle, Pause, Play, Scissors, Search } from 'lucide-react';
 import { Link } from '@/i18n/routing';
 import { EmptyState } from '@/components/shared/empty-state';
+import { LessonDateLink, LessonTagLink } from '@/components/lessons/lesson-browse-links';
 import { getLessonTracks } from '@/lib/lesson-tracks';
 import { playLessons } from '@/lib/play-lesson';
 import { formatDuration } from '@/lib/utils';
@@ -29,9 +30,7 @@ interface ShortsClientProps {
 function countTags(lessons: LessonWithRelations[]): string[] {
   const counts = new Map<string, number>();
   for (const lesson of lessons) for (const tag of lesson.tags ?? []) counts.set(tag, (counts.get(tag) ?? 0) + 1);
-  return [...counts.entries()]
-    .sort(([a, x], [b, y]) => y - x || a.localeCompare(b, 'he'))
-    .map(([tag]) => tag);
+  return [...counts.entries()].sort(([a, x], [b, y]) => y - x || a.localeCompare(b, 'he')).map(([tag]) => tag);
 }
 
 /** Keep `?tag=` in the address bar in sync without a navigation. */
@@ -124,48 +123,55 @@ export default function ShortsClient({ lessons, topics, loadFailed, initialTag }
     const isCurrent = currentTrack?.id === lesson.id;
     const topicLabel = topicTabs.find((tab) => tab.id === topicOf(lesson, topics))?.label;
     return (
-      <li key={lesson.id} className="flex items-center gap-3 rounded-lg p-2.5 hover:bg-[hsl(var(--surface-highlight))] transition-colors">
+      <li
+        key={lesson.id}
+        className="flex items-center gap-3 rounded-lg p-2.5 transition-colors hover:bg-[hsl(var(--surface-highlight))]"
+      >
         <button
           type="button"
           onClick={() => playFrom(lesson)}
           disabled={!lesson.audio_url}
           aria-label={isCurrent && isPlaying ? t('pause') : t('play')}
           className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-30 ${
-            isCurrent ? 'bg-primary text-primary-foreground' : 'bg-[hsl(var(--surface-elevated))] text-foreground hover:bg-primary hover:text-primary-foreground'
+            isCurrent
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-[hsl(var(--surface-elevated))] text-foreground hover:bg-primary hover:text-primary-foreground'
           }`}
         >
-          {isCurrent && isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 ms-0.5" />}
+          {isCurrent && isPlaying ? <Pause className="h-4 w-4" /> : <Play className="ms-0.5 h-4 w-4" />}
         </button>
-        <Link href={`/lessons/${lesson.id}`} className="min-w-0 flex-1">
-          <p className={`truncate text-sm font-semibold ${isCurrent ? 'text-primary' : ''}`} dir="auto">
-            {lesson.hebrew_title || lesson.title}
-          </p>
-          <p className="truncate text-xs text-muted-foreground">
+        <div className="min-w-0 flex-1">
+          <Link href={`/lessons/${lesson.id}`} className="block min-w-0">
+            <p className={`truncate text-sm font-semibold ${isCurrent ? 'text-primary' : ''}`} dir="auto">
+              {lesson.hebrew_title || lesson.title}
+            </p>
+          </Link>
+          <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
             {topicLabel && topicTabs.length > 1 && <span className="text-primary/80">{topicLabel} · </span>}
-            {lesson.hebrew_date || <bdi>{lesson.date}</bdi>}
+            <LessonDateLink date={lesson.date} hebrewDate={lesson.hebrew_date} />
             {lesson.duration > 0 && (
               <>
                 {' · '}
                 <bdi>{formatDuration(lesson.duration)}</bdi>
               </>
             )}
-          </p>
+          </div>
           {(lesson.tags?.length ?? 0) > 0 && (
-            <p className="truncate text-xs text-primary/80">
+            <ul className="mt-1 flex flex-wrap gap-1.5">
               {lesson.tags.map((tg) => (
-                <bdi key={tg} className="me-1.5">
-                  #{tg}
-                </bdi>
+                <li key={tg} className="max-w-full">
+                  <LessonTagLink tag={tg} />
+                </li>
               ))}
-            </p>
+            </ul>
           )}
-        </Link>
+        </div>
       </li>
     );
   };
 
   return (
-    <div className="space-y-5 animate-fade-in">
+    <div className="animate-fade-in space-y-5">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold">
@@ -269,7 +275,11 @@ export default function ShortsClient({ lessons, topics, loadFailed, initialTag }
       )}
 
       {loadFailed ? (
-        <EmptyState icon={AlertTriangle} title={tLessons('loadErrorTitle')} description={tLessons('loadErrorDescription')} />
+        <EmptyState
+          icon={AlertTriangle}
+          title={tLessons('loadErrorTitle')}
+          description={tLessons('loadErrorDescription')}
+        />
       ) : visible.length === 0 ? (
         <EmptyState icon={Scissors} title={lessons.length === 0 ? t('empty') : t('noResults')} />
       ) : (
@@ -277,7 +287,10 @@ export default function ShortsClient({ lessons, topics, loadFailed, initialTag }
           <section key={group.id} className="space-y-1">
             {group.tag ? (
               <h2 className="px-1 text-sm font-bold">
-                <Link href={tagPath(group.tag)} className="text-primary hover:underline">
+                <Link
+                  href={tagPath(group.tag)}
+                  className="inline-flex min-h-7 max-w-full items-center rounded text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                >
                   <bdi>{group.label}</bdi>
                 </Link>
               </h2>

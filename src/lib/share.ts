@@ -2,56 +2,71 @@
 
 import { SITE_URL, lessonPath, localePath } from '@/config/site';
 
-interface ShareOptions {
+export interface ShareOptions {
   title: string;
   text?: string;
   url: string;
   timestamp?: number;
 }
 
-export async function shareLesson(options: ShareOptions): Promise<boolean> {
-  const url = options.timestamp
-    ? `${options.url}?t=${Math.round(options.timestamp)}`
-    : options.url;
+export type LessonShareResult = 'shared' | 'copied' | 'cancelled' | 'failed';
 
-  // Try Web Share API first (mobile)
+/** Invoke directly from a click: navigator.share runs before the first await. */
+export async function shareLessonWithResult(options: ShareOptions): Promise<LessonShareResult> {
+  const url = options.timestamp ? `${options.url}?t=${Math.round(options.timestamp)}` : options.url;
+
+  const data = { title: options.title, text: options.text || '', url };
   if (typeof navigator !== 'undefined' && navigator.share) {
     try {
-      await navigator.share({
-        title: options.title,
-        text: options.text || '',
-        url,
-      });
-      return true;
+      if (!navigator.canShare || navigator.canShare(data)) {
+        await navigator.share(data);
+        return 'shared';
+      }
     } catch (error) {
-      // User cancelled - not an error
-      if ((error as Error).name === 'AbortError') return false;
+      if (error && typeof error === 'object' && 'name' in error && error.name === 'AbortError') {
+        return 'cancelled';
+      }
     }
   }
 
-  // Fallback: copy to clipboard
-  return copyToClipboard(url);
+  return (await copyToClipboard(url)) ? 'copied' : 'failed';
+}
+
+/** Keep the lesson-page share UI's boolean interface. */
+export async function shareLesson(options: ShareOptions): Promise<boolean> {
+  const result = await shareLessonWithResult(options);
+  return result === 'shared' || result === 'copied';
 }
 
 export async function copyToClipboard(text: string): Promise<boolean> {
   try {
-    if (navigator.clipboard) {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
       await navigator.clipboard.writeText(text);
       return true;
     }
+  } catch {
+    // Try the legacy copy command when clipboard access is denied.
+  }
 
-    // Fallback for older browsers
-    const textarea = document.createElement('textarea');
+  if (typeof document === 'undefined') return false;
+  const previousFocus = document.activeElement;
+  let textarea: HTMLTextAreaElement | undefined;
+  try {
+    // Keep the temporary field in the active modal's focus scope.
+    textarea = document.createElement('textarea');
     textarea.value = text;
     textarea.style.position = 'fixed';
     textarea.style.opacity = '0';
-    document.body.appendChild(textarea);
+    const container = previousFocus instanceof Element ? previousFocus.closest('[role="dialog"]') : null;
+    (container || document.body).appendChild(textarea);
+    textarea.focus();
     textarea.select();
-    document.execCommand('copy');
-    document.body.removeChild(textarea);
-    return true;
+    return document.execCommand('copy');
   } catch {
     return false;
+  } finally {
+    textarea?.remove();
+    if (previousFocus instanceof HTMLElement) previousFocus.focus();
   }
 }
 

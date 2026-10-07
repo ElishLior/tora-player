@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAudioStore, type AudioTrack } from "@/stores/audio-store";
+import * as controller from "@/lib/audio-controller";
 import { useMediaSession } from "./use-media-session";
 
 const { cleanups } = vi.hoisted(() => {
@@ -88,32 +89,36 @@ describe("Media Session", () => {
 
   it.each([
     { action: "seekbackward" as const, seekOffset: undefined, expected: 85 },
-    { action: "seekbackward" as const, seekOffset: 10, expected: 90 },
-    { action: "seekbackward" as const, seekOffset: 30, expected: 70 },
+    { action: "seekbackward" as const, seekOffset: 10, expected: 85 },
+    { action: "seekbackward" as const, seekOffset: 30, expected: 85 },
     { action: "seekforward" as const, seekOffset: undefined, expected: 115 },
-    { action: "seekforward" as const, seekOffset: 10, expected: 110 },
-    { action: "seekforward" as const, seekOffset: 30, expected: 130 },
-  ])("$action moves by the OS seekOffset $seekOffset, else 15 seconds", ({ action, seekOffset, expected }) => {
+    { action: "seekforward" as const, seekOffset: 10, expected: 115 },
+    { action: "seekforward" as const, seekOffset: 30, expected: 115 },
+  ])("$action always moves 15 seconds with OS seekOffset $seekOffset", ({ action, seekOffset, expected }) => {
     useAudioStore.getState().setTrack(makeTrack("lesson", 600));
     useAudioStore.getState().setCurrentTime(100);
     useMediaSession();
 
+    const skip = vi.spyOn(controller, "skipBy");
     invokeAction(action, { seekOffset });
+    expect(skip).toHaveBeenCalledExactlyOnceWith(expected - 100);
     expect(useAudioStore.getState().currentTime).toBe(expected);
     expect(session.positionState?.position).toBe(expected);
     expect(useAudioStore.getState().currentTrack?.id).toBe("lesson");
   });
 
   it.each([
-    { action: "seekbackward" as const, expected: 90 },
-    { action: "seekforward" as const, expected: 110 },
-  ])("$action on an iPhone without a seekOffset matches its 10-second lock-screen icon", ({ action, expected }) => {
+    { action: "seekbackward" as const, expected: 85 },
+    { action: "seekforward" as const, expected: 115 },
+  ])("$action on an iPhone without a seekOffset moves 15 seconds", ({ action, expected }) => {
     vi.stubGlobal("navigator", { mediaSession: session, userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)" });
     useAudioStore.getState().setTrack(makeTrack("lesson", 600));
     useAudioStore.getState().setCurrentTime(100);
     useMediaSession();
 
+    const skip = vi.spyOn(controller, "skipBy");
     invokeAction(action, {});
+    expect(skip).toHaveBeenCalledExactlyOnceWith(expected - 100);
     expect(useAudioStore.getState().currentTime).toBe(expected);
   });
 
@@ -206,6 +211,20 @@ describe("Media Session", () => {
     expect(limitedSession.metadata?.title).toBe("unknown");
     expect(() => useAudioStore.getState().setDuration(900)).not.toThrow();
     expect(useAudioStore.getState().duration).toBe(900);
+  });
+
+  it("swallows unsupported setActionHandler calls on mount and cleanup", () => {
+    const limitedSession = {
+      ...session,
+      setActionHandler: vi.fn(() => { throw new Error("Unsupported action"); }),
+    };
+    vi.stubGlobal("navigator", { mediaSession: limitedSession });
+    useAudioStore.getState().setTrack(makeTrack("lesson", 600));
+
+    expect(() => useMediaSession()).not.toThrow();
+    expect(limitedSession.setActionHandler).toHaveBeenCalledTimes(8);
+    expect(() => cleanups.splice(0).forEach((cleanup) => cleanup())).not.toThrow();
+    expect(limitedSession.setActionHandler).toHaveBeenCalledTimes(16);
   });
 
   it("does nothing when Media Session is unavailable", () => {

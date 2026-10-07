@@ -208,6 +208,12 @@
     "drivingMode": "מצב נהיגה",
     "markSnippet": "סימון קטע",
     "shareClip": "שתף קטע",
+    "shareLesson": "שתף את השיעור",
+    "shareAction": "שיתוף",
+    "shareCopied": "הקישור הועתק",
+    "shareManualCopy": "העתק את הקישור לשיעור",
+    "shareLink": "קישור לשיעור",
+    "shareClose": "סגור שיתוף",
     "openLesson": "פתח שיעור",
     "noActiveLesson": "אין שיעור פעיל",
     "clipMode": "מצב קטע",
@@ -715,6 +721,18 @@
     "title": "הדף לא נמצא",
     "description": "הדף שחיפשתם לא קיים או שהועבר.",
     "backHome": "חזרה לדף הבית"
+  },
+  "lessonBrowse": {
+    "dateLink": "שיעורים מתאריך {date}",
+    "tagLink": "שיעורים עם התגית {tag}",
+    "dateFilter": "תאריך: {date}",
+    "tagFilter": "תגית: #{tag}",
+    "dateHeading": "שיעורים מתאריך {date}",
+    "tagHeading": "שיעורים עם התגית #{tag}",
+    "combinedHeading": "שיעורים מתאריך {date} עם התגית #{tag}",
+    "clearDate": "ניקוי סינון התאריך",
+    "clearTag": "ניקוי סינון התגית {tag}",
+    "filteredEmpty": "לא נמצאו שיעורים שמתאימים לסינון"
   },
   "diagnostics": {
     "title": "יומן נגינה",
