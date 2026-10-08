@@ -1,6 +1,7 @@
 import { SITE_NAME, SITE_TAGLINE } from '@/config/site';
 import { OG_IMAGE_CONTENT_TYPE, OG_IMAGE_SIZE, renderOgImage } from '@/lib/og-image';
 import { createAnonSupabaseClient } from '@/lib/supabase/anon';
+import { resolveLessonRoute } from '@/lib/supabase/lesson-route';
 import { formatDuration } from '@/lib/utils';
 
 export const alt = SITE_NAME.he;
@@ -22,13 +23,16 @@ interface PreviewLesson {
  * get the generic brand card. Cached at the edge for an hour so title edits
  * show up.
  */
-export default async function Image({ params }: { params: { lessonId: string } }) {
+export default async function Image({ params }: { params: Promise<{ lessonId: string }> }) {
   let lesson: PreviewLesson | null = null;
   try {
-    const { data, error } = await createAnonSupabaseClient()
+    const { lessonId } = await params;
+    const client = createAnonSupabaseClient();
+    const route = await resolveLessonRoute(client, lessonId);
+    const { data, error } = route.kind === 'not-found' ? { data: null, error: null } : await client
       .from('lessons')
       .select('title, hebrew_title, date, hebrew_date, duration, series(name, hebrew_name)')
-      .eq('id', params.lessonId)
+      .eq('id', route.lessonId)
       .maybeSingle();
     if (error) throw error;
     lesson = data as PreviewLesson | null;

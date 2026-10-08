@@ -143,7 +143,7 @@ function podcastSeriesRef(series: Pick<Series, 'id' | 'name' | 'hebrew_name'> | 
 }
 
 export function lessonJsonLd(lesson: LessonWithRelations) {
-  const url = pageUrl(lessonPath(lesson.id));
+  const url = pageUrl(lessonPath(lesson));
   const audio = lessonEpisodeAudio(lesson.audio_files ?? []);
   return {
     '@context': 'https://schema.org',

@@ -1,3 +1,4 @@
+import { withLessonSlugSelect } from './lesson-slug-select';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Category, LessonWithRelations } from '@/types/database';
 import { dateFromSearchParam, matchTags, type TagCount } from '@/lib/tag-links';
@@ -302,11 +303,11 @@ export async function fetchTagCounts(supabase: SupabaseClient): Promise<TagCount
 
 export function createSupabaseLessonListReader(supabase: SupabaseClient): LessonListReader {
   /** Published lessons for a list, filtered; the audio type needs the inner-joined embed. */
-  const publishedLessons = (filters: LessonQueryFilters) => {
+  const publishedLessons = (filters: LessonQueryFilters, columns = LESSON_LIST_SELECT) => {
     // Widened to string: the select type parser can't handle this union; rows are typed with overrideTypes.
     const select: string = filters.audioType
-      ? `${LESSON_LIST_SELECT}, ${AUDIO_TYPE_MATCH}:lesson_audio!inner(audio_type)`
-      : LESSON_LIST_SELECT;
+      ? `${columns}, ${AUDIO_TYPE_MATCH}:lesson_audio!inner(audio_type)`
+      : columns;
     return applyLessonFilters(supabase.from('lessons').select(select).eq('is_published', true), filters);
   };
 
@@ -324,18 +325,18 @@ export function createSupabaseLessonListReader(supabase: SupabaseClient): Lesson
     async searchLessons(queryText, filters, matchedTags) {
       // LIKE-escape, then turn or() syntax characters into single-character wildcards.
       const pattern = `%${queryText.replace(/[%_\\]/g, '\\$&').replace(/[,()"]/g, '_')}%`;
-      const textQuery = publishedLessons(filters)
+      const textQuery = withLessonSlugSelect(LESSON_LIST_SELECT, (columns) => publishedLessons(filters, columns)
         .or(`title.ilike.${pattern},hebrew_title.ilike.${pattern},description.ilike.${pattern}`)
         .order('date', { ascending: false })
         .limit(SEARCH_RESULT_LIMIT)
-        .overrideTypes<LessonWithRelations[], { merge: false }>();
+        .overrideTypes<LessonWithRelations[], { merge: false }>());
       const tagQuery =
         matchedTags.length > 0
-          ? publishedLessons(filters)
+          ? withLessonSlugSelect(LESSON_LIST_SELECT, (columns) => publishedLessons(filters, columns)
               .overlaps('tags', matchedTags)
               .order('date', { ascending: false })
               .limit(SEARCH_RESULT_LIMIT)
-              .overrideTypes<LessonWithRelations[], { merge: false }>()
+              .overrideTypes<LessonWithRelations[], { merge: false }>())
           : null;
 
       const [textResult, tagResult] = await Promise.all([textQuery, tagQuery]);
@@ -345,10 +346,10 @@ export function createSupabaseLessonListReader(supabase: SupabaseClient): Lesson
     },
 
     async getLessonsPage(offset, pageSize, filters) {
-      const result = await publishedLessons(filters)
+      const result = await withLessonSlugSelect(LESSON_LIST_SELECT, (columns) => publishedLessons(filters, columns)
         .order('date', { ascending: false })
         .range(offset, offset + pageSize)
-        .overrideTypes<LessonWithRelations[], { merge: false }>();
+        .overrideTypes<LessonWithRelations[], { merge: false }>());
       return throwIfError(result) ?? [];
     },
   };

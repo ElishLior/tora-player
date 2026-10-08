@@ -30,11 +30,16 @@ Building blocks to compose before writing new code. Each has a small interface, 
 | Tag and date helpers | `src/lib/tags.ts`, `src/lib/tag-links.ts` | `normalizeTags`, `tagPath`, `lessonsHref({ q, type, cat, tag, date })`, `dateFromSearchParam` | Every tag write and every tag/date link or filter. |
 | Lesson browse links | `src/components/lessons/lesson-browse-links.tsx` | `<LessonDateLink date hebrewDate? onClick? />`, `<LessonTagLink tag />` | Showing a lesson's date or tag anywhere: an accessible link to its list, safe beside a card's stretched link. |
 | Part types | `src/lib/part-types.ts`, `src/components/lessons/part-type-field.tsx`, `getCachedPartTypes` (`src/lib/supabase/anon.ts`) | `normalizePartType`, `partTypeOptions(used)`; `<PartTypeField value onChange />` (commits a whole value, never per keystroke) | Any place that sets or lists a part's type (סידור / עץ חיים / admin-added types). |
+| Lesson slugs | `src/lib/lesson-slugs.ts` | `baseLessonSlug({ date, parsha, isShort, topic })`, `uniqueLessonSlug(base, isTaken)`, `isValidLessonSlug`, `isUuid`, `readingTopic` | Naming any lesson URL. Never hand-build a slug. |
+| Lesson routes | `src/lib/supabase/lesson-route.ts` | `resolveLessonRoute(client, param)`, `lessonRedirectUrl(path, locale, params)` | UUID, current slug and old slug resolution; preserve locale and playback query parameters. |
+| Slug creation | `src/lib/supabase/create-lesson-slug.ts` | `insertLessonWithSlug(client, row, input)` | Upload drafts: reserve current/history names, retry slug races, tolerate missing migration. |
+| Slug select compatibility | `src/lib/supabase/lesson-slug-select.ts` | `withLessonSlugSelect(columns, read)` | Explicit catalog selects before and after migration 020. |
 | Site identity | `src/config/site.ts` | `SITE_URL`, `localePath`, `pageUrl`, `lessonPath`, ... | Any origin, name or URL. Never hardcode them. |
 
 ## Verification
 
 | Block | Where | Use it for |
 |---|---|---|
+| Page loading skeleton | `src/components/shared/page-loading.tsx` and route-scoped `loading.tsx` exports | Keep loading UI outside lesson detail ancestors so asynchronous resolution can send HTTP 308/404 before streaming. |
 | CI script | `.factory/checks.sh` | The canonical local run: install, type-check, lint, unit tests, build. |
 | Controller test harness | `src/lib/audio-controller.test.ts` (fake audio element, `becomePlaying`, `endCurrentFile`) | Modeled playback scenarios. Results are "modeled", never "device verified". |

@@ -1,5 +1,7 @@
 'use client';
 
+import { lessonPath } from '@/config/site';
+
 import { useMemo } from 'react';
 import { Check, ListChecks, ListPlus, Play, Pause } from 'lucide-react';
 import { useTranslations } from 'next-intl';
@@ -65,14 +67,14 @@ export function LessonCard({ lesson, showProgress, selectable, selected, onToggl
     if (isCurrentlyPlaying && !isPlaying) {
       // Resume paused track — resume + navigate to lesson
       togglePlay();
-      router.push(`/lessons/${lesson.id}`);
+      router.push(lessonPath(lesson));
       return;
     }
 
     // New lesson — continue where the listener left it, then open its page
     if (tracks.length === 0) return;
     playLesson(tracks);
-    router.push(`/lessons/${lesson.id}`);
+    router.push(lessonPath(lesson));
   };
 
   const infoContent = (
@@ -146,7 +148,7 @@ export function LessonCard({ lesson, showProgress, selectable, selected, onToggl
             infoContent
           ) : (
             <Link
-              href={`/lessons/${lesson.id}`}
+              href={lessonPath(lesson)}
               className="block min-w-0 before:absolute before:inset-0 before:content-['']"
             >
               {infoContent}

@@ -120,6 +120,13 @@
     "loadFailed": "Loading users failed.",
     "empty": "No users found"
   },
+  "lessonSlug": {
+    "label": "Address (slug)",
+    "help": "Lowercase English letters, digits and hyphens. Leave empty to keep the current address. Previous addresses will still work.",
+    "invalid": "Use lowercase English letters, digits and single hyphens, up to 80 characters.",
+    "taken": "This address belongs to another lesson, including its previous addresses. Choose another address.",
+    "unavailable": "The address cannot be checked now. Try again after the database update."
+  },
   "common": {
     "appName": "Tora Player",
     "offline": "Offline",

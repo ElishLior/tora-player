@@ -3,7 +3,8 @@ import type { Metadata } from 'next';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { lessonReadClient } from '@/lib/supabase/admin-lesson';
 import { getLessonById } from '@/lib/supabase/queries';
-import { notFound } from 'next/navigation';
+import { lessonRedirectUrl, resolveLessonRoute, type LessonSearchParams } from '@/lib/supabase/lesson-route';
+import { notFound, permanentRedirect } from 'next/navigation';
 import { formatDuration } from '@/lib/utils';
 import { parshaLabel } from '@/lib/parsha-label';
 import { Link } from '@/i18n/routing';
@@ -18,28 +19,36 @@ import { lessonsHref } from '@/lib/tag-links';
 
 type Props = {
   params: Promise<{ locale: string; lessonId: string }>;
+  searchParams: Promise<LessonSearchParams>;
 };
 
 /**
- * One lesson read per request, shared by generateMetadata and the page. Admins
+ * One cached route/detail lookup per request, shared by generateMetadata and the page. Admins
  * read with the service role so drafts open (lessonReadClient); null when the
  * lesson is missing or hidden.
  */
 const loadLesson = cache(async (lessonId: string) => {
   try {
-    return await getLessonById(await lessonReadClient(), lessonId);
+    const client = await lessonReadClient();
+    const route = await resolveLessonRoute(client, lessonId);
+    if (route.kind === 'not-found') return null;
+    return { route, lesson: await getLessonById(client, route.lessonId) };
   } catch {
     return null;
   }
 });
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
   const { locale, lessonId } = await params;
-  const lesson = await loadLesson(lessonId);
-  if (!lesson) return {};
+  const loaded = await loadLesson(lessonId);
+  if (!loaded) notFound();
+  const { lesson, route } = loaded;
+  if (route.kind === 'redirect') {
+    permanentRedirect(lessonRedirectUrl(route.pathname, isSiteLocale(locale) ? locale : 'he', await searchParams));
+  }
   const title = lesson.hebrew_title || lesson.title;
   const description = lessonDescription(lesson);
-  const pathname = lessonPath(lesson.id);
+  const pathname = lessonPath(lesson);
   return {
     title,
     description,
@@ -57,14 +66,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-export default async function LessonDetailPage({ params }: Props) {
+export default async function LessonDetailPage({ params, searchParams }: Props) {
   const { locale, lessonId } = await params;
   setRequestLocale(locale);
-  const t = await getTranslations('lessons');
   const browseT = await getTranslations('lessonBrowse');
 
-  const lesson = await loadLesson(lessonId);
-  if (!lesson) notFound();
+  const loaded = await loadLesson(lessonId);
+  if (!loaded) notFound();
+  const { lesson, route } = loaded;
+  if (route.kind === 'redirect') {
+    permanentRedirect(lessonRedirectUrl(route.pathname, isSiteLocale(locale) ? locale : 'he', await searchParams));
+  }
 
   const admin = await isAdmin();
   const hasAudio = lesson.audio_url || (lesson.audio_files && lesson.audio_files.length > 0);
@@ -81,7 +93,7 @@ export default async function LessonDetailPage({ params }: Props) {
             ...(lesson.category
               ? [{ name: lesson.category.hebrew_name, pathname: categoryPath(lesson.category.id) }]
               : []),
-            { name: lesson.hebrew_title || lesson.title, pathname: lessonPath(lesson.id) },
+            { name: lesson.hebrew_title || lesson.title, pathname: lessonPath(lesson) },
           ]),
         ]}
       />
@@ -96,7 +108,7 @@ export default async function LessonDetailPage({ params }: Props) {
         <div className="flex-1" />
         {admin && (
           <Link
-            href={`/lessons/${lessonId}/edit`}
+            href={`${lessonPath(lesson)}/edit`}
             className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-[hsl(var(--surface-highlight))] hover:text-foreground"
             aria-label="Edit"
           >
@@ -104,7 +116,8 @@ export default async function LessonDetailPage({ params }: Props) {
           </Link>
         )}
         <ShareButton
-          lessonId={lessonId}
+          lessonId={lesson.id}
+          lessonSlug={lesson.slug}
           title={lesson.hebrew_title || lesson.title}
           seriesName={lesson.series?.hebrew_name || lesson.series?.name}
         />
@@ -211,7 +224,7 @@ export default async function LessonDetailPage({ params }: Props) {
             {lesson.parts!.map((part) => (
               <Link
                 key={part.id}
-                href={`/lessons/${part.id}`}
+                href={lessonPath(part)}
                 className={`block rounded-md p-2.5 text-sm transition-colors ${
                   part.id === lesson.id
                     ? 'bg-primary/10 font-medium text-primary'

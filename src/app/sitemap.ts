@@ -4,6 +4,7 @@ import { unstable_cache } from 'next/cache';
 import { categoryPath, lessonPath, pageUrl, playlistPath, seriesPath } from '@/config/site';
 import { createAnonSupabaseClient } from '@/lib/supabase/anon';
 import { fetchTagCounts } from '@/lib/supabase/lesson-list';
+import { withLessonSlugSelect } from '@/lib/supabase/lesson-slug-select';
 import { tagPath } from '@/lib/tag-links';
 
 // CI has no database: populate the public sitemap from live data on its first request.
@@ -17,19 +18,20 @@ const PAGE_SIZE = 1000;
 
 interface Row {
   id: string;
+  slug?: string | null;
   updated_at: string;
 }
 
 async function loadPublishedLessons(supabase: SupabaseClient): Promise<Row[]> {
   const rows: Row[] = [];
   for (let from = 0; ; from += PAGE_SIZE) {
-    const { data, error } = await supabase
+    const { data, error } = await withLessonSlugSelect('id, slug, updated_at', (columns) => supabase
       .from('lessons')
-      .select('id, updated_at')
+      .select(columns)
       .eq('is_published', true)
       .order('date', { ascending: false })
       .order('id')
-      .range(from, from + PAGE_SIZE - 1);
+      .range(from, from + PAGE_SIZE - 1).overrideTypes<Row[], { merge: false }>());
     if (error) throw error;
     rows.push(...((data ?? []) as Row[]));
     if (!data || data.length < PAGE_SIZE) return rows;
@@ -53,7 +55,7 @@ async function catalogEntries(): Promise<MetadataRoute.Sitemap> {
   ]);
   const entry = (pathname: string, row: Row) => ({ url: pageUrl(pathname), lastModified: row.updated_at });
   return [
-    ...lessons.map((row) => entry(lessonPath(row.id), row)),
+    ...lessons.map((row) => entry(lessonPath(row), row)),
     ...series.map((row) => entry(seriesPath(row.id), row)),
     ...categories.map((row) => entry(categoryPath(row.id), row)),
     ...playlists.map((row) => entry(playlistPath(row.id), row)),

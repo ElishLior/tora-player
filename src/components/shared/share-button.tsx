@@ -8,6 +8,7 @@ import { useTranslations } from 'next-intl';
 
 interface ShareButtonProps {
   lessonId: string;
+  lessonSlug?: string | null;
   title: string;
   seriesName?: string;
   className?: string;
@@ -28,7 +29,7 @@ function parseTime(str: string): number | null {
   return m * 60 + s;
 }
 
-export function ShareButton({ lessonId, title, seriesName, className = '' }: ShareButtonProps) {
+export function ShareButton({ lessonId, lessonSlug, title, seriesName, className = '' }: ShareButtonProps) {
   const [open, setOpen] = useState(false);
   const tCommon = useTranslations('common');
   const [includeTimestamp, setIncludeTimestamp] = useState(false);
@@ -82,7 +83,7 @@ export function ShareButton({ lessonId, title, seriesName, className = '' }: Sha
   };
 
   const getShareUrl = (): string => {
-    return getLessonShareUrl(lessonId, getTimestamp());
+    return getLessonShareUrl({ id: lessonId, slug: lessonSlug }, getTimestamp());
   };
 
   const handleCopyLink = async () => {

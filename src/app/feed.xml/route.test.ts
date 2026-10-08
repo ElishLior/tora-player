@@ -148,6 +148,17 @@ describe('GET /feed.xml', () => {
     expect(single).toContain('type="audio/mpeg"');
   });
 
+  it('changes episode links to slugs while keeping every audio GUID', async () => {
+    vi.mocked(createAnonSupabaseClient).mockReturnValue(fakeSupabase({
+      categories: { data: [], error: null },
+      lessons: { data: lessons.map((lesson) => ({ ...lesson, slug: `slug-${lesson.id}` })), error: null },
+    }) as unknown as SupabaseClient);
+    const xml = await feedXml();
+    expect(xml).toContain('<link>https://torah.example/he/lessons/slug-lesson-1</link>');
+    expect(xml.match(/<guid isPermaLink="false">.*?<\/guid>/g)).toEqual([
+      '<guid isPermaLink="false">part-a</guid>', '<guid isPermaLink="false">part-b</guid>', '<guid isPermaLink="false">only</guid>',
+    ]);
+  });
   it('keeps older published lessons after the first feed page', async () => {
     const manyLessons = Array.from({ length: 225 }, (_, index) => ({
       ...lessons[1],

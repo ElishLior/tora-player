@@ -19,6 +19,9 @@ const track: AudioTrack = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('loaded lesson share data', () => {
+  it('uses a known lesson slug while old persisted tracks keep the UUID', () => {
+    expect(getPlayingLessonShareData({ ...track, lessonSlug: 'sukkot-25-09-2026' }).url).toBe(lessonUrl({ id: track.lessonId!, slug: 'sukkot-25-09-2026' }));
+  });
   it('uses the canonical Hebrew lesson URL rather than the current page or offline source', () => {
     vi.stubGlobal('window', { location: { origin: 'https://preview.example.test', pathname: '/en/admin' } });
     expect(getPlayingLessonShareData(track)).toEqual({

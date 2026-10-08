@@ -26,6 +26,7 @@ interface ShareClipDialogProps {
   isOpen: boolean;
   onClose: () => void;
   lessonId: string;
+  lessonSlug?: string | null;
   currentTime: number;
   duration: number;
   lessonTitle: string;
@@ -35,6 +36,7 @@ export function ShareClipDialog({
   isOpen,
   onClose,
   lessonId,
+  lessonSlug,
   currentTime,
   duration,
   lessonTitle,
@@ -70,8 +72,8 @@ export function ShareClipDialog({
   const isValid = endTotal > startTotal && startTotal >= 0 && endTotal <= Math.ceil(duration);
 
   const generateUrl = useCallback(
-    () => `${getLessonShareUrl(lessonId)}?start=${startTotal}&end=${endTotal}`,
-    [lessonId, startTotal, endTotal],
+    () => `${getLessonShareUrl({ id: lessonId, slug: lessonSlug })}?start=${startTotal}&end=${endTotal}`,
+    [lessonId, lessonSlug, startTotal, endTotal],
   );
 
   const shareText = useCallback(() => {
