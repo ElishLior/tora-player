@@ -3,8 +3,8 @@ import he from '../../messages/he.json';
 import type { AudioTrack } from '../../src/stores/audio-store';
 
 // The runner and local server use the same configured public origin.
-const lessonUrl = (id: string) =>
-  new URL(`/he/lessons/${encodeURIComponent(id)}`, process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').href;
+const lessonUrl = (track: AudioTrack) =>
+  new URL(`/he/lessons/${encodeURIComponent(track.lessonSlug || track.lessonId || track.id)}`, process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').href;
 
 declare global {
   interface Window {
@@ -133,8 +133,8 @@ test.beforeEach(async ({ context, page }) => {
 test('native share uses the loaded lesson after navigation, without a playback change', async ({ page }) => {
   await installHarness(page, 'native');
   const track = await startLesson(page);
-  const expectedUrl = lessonUrl(track.lessonId || track.id);
-  const loadedPath = `/he/lessons/${encodeURIComponent(track.lessonId || track.id)}`;
+  const expectedUrl = lessonUrl(track);
+  const loadedPath = `/he/lessons/${encodeURIComponent(track.lessonSlug || track.lessonId || track.id)}`;
   const otherLesson = page.locator(`main a[href*="/lessons/"]:not([href="${loadedPath}"])`).first();
   const otherHref = await otherLesson.getAttribute('href');
   await otherLesson.click();
@@ -181,7 +181,7 @@ test('clipboard fallback copies the canonical URL and shows inline confirmation'
   const before = await playbackSnapshot(page);
   await page.getByRole('dialog').getByRole('button', { name: he.player.shareLesson }).click();
   await expect(page.getByRole('status').filter({ hasText: he.player.shareCopied })).toBeVisible();
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(lessonUrl(track.lessonId || track.id));
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(lessonUrl(track));
   await expectPlaybackUnchanged(page, before);
   await expectNoOverflow(page);
 });
@@ -194,7 +194,7 @@ test('copy failure selects a manual URL field and traps focus until close', asyn
   const share = page.getByRole('dialog').getByRole('button', { name: he.player.shareLesson });
   await share.click();
   const field = page.getByRole('textbox', { name: he.player.shareLink });
-  const url = lessonUrl(track.lessonId || track.id);
+  const url = lessonUrl(track);
   await expect(field).toHaveValue(url);
   await expect(field).toHaveAttribute('readonly', '');
   await expect(field).toBeFocused();
@@ -224,7 +224,7 @@ test('mini share stays beside the expand button and follows a switched lesson', 
   await share.click();
   await expect(share).toBeEnabled();
   expect(await page.evaluate(() => window.__lessonShareCalls)).toEqual([
-    { title: track.hebrewTitle || track.title, text: '', url: lessonUrl(track.lessonId || track.id) },
+    { title: track.hebrewTitle || track.title, text: '', url: lessonUrl(track) },
   ]);
   await expect(page.locator('header').getByRole('button', { name: he.player.pause })).toBeVisible();
   await expectNoOverflow(page);

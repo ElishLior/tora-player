@@ -1,5 +1,7 @@
 'use client';
 
+import { lessonPath, localePath, type SiteLocale } from '@/config/site';
+
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Play,
@@ -1178,7 +1180,7 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
                     </button>
                   ) : (
                     <Link
-                      href={`/${locale}/auth/sign-in?next=${encodeURIComponent(`/${locale}/lessons/${lesson.id}`)}`}
+                      href={`/${locale}/auth/sign-in?next=${encodeURIComponent(localePath(lessonPath(lesson), locale as SiteLocale))}`}
                       className="flex items-center gap-1.5 rounded-full bg-[hsl(var(--surface-highlight))] px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground"
                     >
                       <ImagePlus className="h-3.5 w-3.5" />

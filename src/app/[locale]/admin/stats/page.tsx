@@ -1,3 +1,5 @@
+
+import { lessonPath, localePath, type SiteLocale } from '@/config/site';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
@@ -315,7 +317,7 @@ export default async function AdminStatsPage({ params, searchParams }: Props) {
                   {list.lessons.map((lesson, index) => (
                     <li key={lesson.lessonId} className="border-b border-border/30 last:border-b-0">
                       <Link
-                        href={`/${locale}/lessons/${lesson.lessonId}`}
+                        href={localePath(lessonPath(lesson.lessonId), locale as SiteLocale)}
                         className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-[hsl(var(--surface-highlight))]"
                       >
                         <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium tabular-nums text-primary">

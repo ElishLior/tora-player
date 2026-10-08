@@ -7,7 +7,7 @@ import type { AudioTrack } from '@/stores/audio-store';
 export function getPlayingLessonShareData(track: AudioTrack): ShareOptions {
   return {
     title: track.hebrewTitle || track.title,
-    url: lessonUrl(getTrackLessonId(track)),
+    url: lessonUrl({ id: getTrackLessonId(track), slug: track.lessonSlug }),
   };
 }
 

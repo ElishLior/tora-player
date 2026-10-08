@@ -1,5 +1,6 @@
 'use server';
 
+import { insertLessonWithSlug } from '@/lib/supabase/create-lesson-slug';
 import { revalidateCatalog } from '@/lib/supabase/anon';
 import { AdminRequiredError, requireAdmin } from '@/lib/auth/admin';
 import { createAdminSupabaseClient } from '@/lib/supabase/admin';
@@ -47,11 +48,11 @@ export async function createDraftLesson(fields: DraftLessonFields): Promise<Acti
     return { error: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ') };
   }
 
-  const { data, error } = await createAdminSupabaseClient()
-    .from('lessons')
-    .insert({ ...parsed.data, is_published: false })
-    .select('id')
-    .single();
+  const { data, error } = await insertLessonWithSlug(
+    createAdminSupabaseClient(),
+    { ...parsed.data, is_published: false },
+    { date: parsed.data.date, parsha: parsed.data.parsha, isShort: parsed.data.lesson_type === SHORT_LESSON_TYPE || parsed.data.category_id === SHORTS_CATEGORY_ID },
+  );
   if (error) return { error: error.message };
   return { data: { id: data.id as string } };
 }

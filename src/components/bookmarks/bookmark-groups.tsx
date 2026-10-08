@@ -1,5 +1,8 @@
 'use client';
 
+import type { LessonWithRelations } from '@/types/database';
+import { lessonPath } from '@/config/site';
+
 import { useState } from 'react';
 import { Clock, Play, Trash2 } from 'lucide-react';
 import { getTagInfo } from '@/components/bookmarks/bookmark-dialog';
@@ -13,7 +16,7 @@ import { useBookmarksStore } from '@/stores/bookmarks-store';
  * Bookmarks grouped by lesson (most recent lesson first), each linking into
  * the lesson at its position (`?t=`). Deleting asks for a second tap.
  */
-export function BookmarkGroups({ bookmarks, locale }: { bookmarks: LocalBookmark[]; locale: string }) {
+export function BookmarkGroups({ bookmarks, locale, lessons }: { bookmarks: LocalBookmark[]; locale: string; lessons?: Record<string, LessonWithRelations> | null }) {
   const removeBookmark = useBookmarksStore((s) => s.removeBookmark);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const isRTL = locale === 'he';
@@ -49,7 +52,7 @@ export function BookmarkGroups({ bookmarks, locale }: { bookmarks: LocalBookmark
         return (
           <div key={lessonId} className="space-y-2">
             <Link
-              href={`/lessons/${lessonId}`}
+              href={lessonPath(lessons?.[lessonId] ?? lessonId)}
               className="text-sm font-bold text-primary hover:underline truncate block"
               dir="auto"
             >
@@ -67,7 +70,7 @@ export function BookmarkGroups({ bookmarks, locale }: { bookmarks: LocalBookmark
                     className="flex items-start gap-3 rounded-xl bg-[hsl(var(--surface-elevated))] p-3 group"
                   >
                     <Link
-                      href={lessonMomentPath(bm.lessonId, bm.position, bm.audioFileId)}
+                      href={lessonMomentPath(lessons?.[bm.lessonId] ?? bm.lessonId, bm.position, bm.audioFileId)}
                       className="flex items-center gap-1.5 text-primary hover:text-primary/80 flex-shrink-0 mt-0.5"
                     >
                       <Play className="h-3.5 w-3.5 fill-current" />

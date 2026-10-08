@@ -1,3 +1,4 @@
+import { withLessonSlugSelect } from './lesson-slug-select';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { SHORT_LESSON_TYPE, SHORTS_CATEGORY_ID } from '@/lib/upload-drafts';
 import type { Category, LessonWithRelations } from '@/types/database';
@@ -22,15 +23,15 @@ export async function getShortLessons(supabase: SupabaseClient, limit = 500): Pr
   if (topicsError) throw topicsError;
 
   const categoryIds = [SHORTS_CATEGORY_ID, ...(topics ?? []).map((t) => t.id)];
-  const { data, error } = await supabase
+  const { data, error } = await withLessonSlugSelect(`${LESSON_CARD_COLUMNS}, category:categories(id, hebrew_name, parent_id), ${LESSON_AUDIO_FILES}`, (columns) => supabase
     .from('lessons')
-    .select(`${LESSON_CARD_COLUMNS}, category:categories(id, hebrew_name, parent_id), ${LESSON_AUDIO_FILES}`)
+    .select(columns)
     .eq('is_published', true)
     .or(`lesson_type.eq.${SHORT_LESSON_TYPE},category_id.in.(${categoryIds.join(',')})`)
     .order('date', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(limit)
-    .overrideTypes<LessonWithRelations[], { merge: false }>();
+    .overrideTypes<LessonWithRelations[], { merge: false }>());
   if (error) throw error;
 
   return { lessons: data ?? [], topics: (topics ?? []) as Category[] };

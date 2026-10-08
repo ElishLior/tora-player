@@ -1,5 +1,7 @@
 'use server';
 
+import { getTranslations } from 'next-intl/server';
+import { isValidLessonSlug } from '@/lib/lesson-slugs';
 import { revalidateCatalog } from '@/lib/supabase/anon';
 import { requireServerSupabaseClient } from '@/lib/supabase/server';
 import { createAdminSupabaseClient } from '@/lib/supabase/admin';
@@ -15,6 +17,7 @@ export async function updateLesson(id: string, formData: FormData) {
   if (!(await isAdmin())) {
     return { error: { _form: ['Unauthorized'] } };
   }
+  await requireAdmin();
   const supabase = createAdminSupabaseClient();
 
   const raw: Record<string, unknown> = {};
@@ -48,14 +51,30 @@ export async function updateLesson(id: string, formData: FormData) {
     return { error: { _form: ['Invalid tags'] } };
   }
 
+  const slugField = formData.get('slug');
+  const slug = typeof slugField === 'string' ? slugField.trim() : '';
+  const tSlug = await getTranslations('lessonSlug');
+  if ((slugField !== null && typeof slugField !== 'string') || (slug && !isValidLessonSlug(slug))) {
+    return { error: { slug: [tSlug('invalid')] } };
+  }
+  if (slug) {
+    const [current, history] = await Promise.all([
+      supabase.from('lessons').select('id').eq('slug', slug).neq('id', id).maybeSingle(),
+      supabase.from('lesson_slug_history').select('lesson_id').eq('slug', slug).neq('lesson_id', id).maybeSingle(),
+    ]);
+    if (current.error || history.error) return { error: { slug: [tSlug('unavailable')] } };
+    if (current.data || history.data) return { error: { slug: [tSlug('taken')] } };
+  }
+  const updates = { ...parsed.data, ...(tags === undefined ? {} : { tags }), ...(slug ? { slug } : {}) };
   const { data, error } = await supabase
     .from('lessons')
-    .update(tags === undefined ? parsed.data : { ...parsed.data, tags })
+    .update(updates)
     .eq('id', id)
     .select()
     .single();
 
   if (error) {
+    if (error.code === '23505' && /slug/.test(error.message)) return { error: { slug: [tSlug('taken')] } };
     return { error: { _form: [error.message] } };
   }
 

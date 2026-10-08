@@ -1,5 +1,7 @@
 'use client';
 
+import { lessonPath } from '@/config/site';
+
 import { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { Link } from '@/i18n/routing';
@@ -59,7 +61,7 @@ export function LatestLessonHero({ title, lesson }: LatestLessonHeroProps) {
             </p>
           )}
           <Link
-            href={`/lessons/${lesson.id}`}
+            href={lessonPath(lesson)}
             className="line-clamp-2 text-base font-bold text-foreground hover:underline"
             dir="auto"
           >

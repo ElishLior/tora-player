@@ -1,5 +1,7 @@
 'use client';
 
+import { lessonPath, localePath, type SiteLocale } from '@/config/site';
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
@@ -683,7 +685,7 @@ export default function AdminSnippetsPage() {
                       {/* Result lesson link */}
                       {sub.result_lesson_id && (
                         <Link
-                          href={`/${locale}/lessons/${sub.result_lesson_id}`}
+                          href={localePath(lessonPath(sub.result_lesson_id), locale as SiteLocale)}
                           className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
                         >
                           <Music className="h-3 w-3" />

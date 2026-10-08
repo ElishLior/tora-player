@@ -1,6 +1,6 @@
 # Lesson slug options
 
-Status: **format approved by the owner on October 8, 2026: `<topic>-<DD-MM-YYYY>`** (see "Approved format"). Nothing is implemented yet: no URL, route, migration or lesson row changes. Hebrew display titles stay as they are.
+Status: **format approved by the owner on October 8, 2026: `<topic>-<DD-MM-YYYY>`** (see "Approved format"). Implemented October 8, 2026: migration 020 applied to production and all 245 lessons given slugs (`scripts/backfill-lesson-slugs.mjs`). Hebrew display titles stay as they are.
 
 Source: written by Claude Opus 5.5 in the October 7, 2026 session. The app has no AI provider integration, so these were not generated inside the app. Every option uses only the stored title, `parsha`, `date`, tags and description of published lessons (anon read on October 7, 2026: 245 published lessons). No topic or date was added that the record doesn't contain.
 

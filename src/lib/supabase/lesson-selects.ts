@@ -12,4 +12,4 @@ export const LESSON_AUDIO_FILES =
  * are typed LessonWithRelations (`overrideTypes`); other columns are absent.
  */
 export const LESSON_CARD_COLUMNS =
-  'id, title, hebrew_title, description, summary, date, hebrew_date, parsha, duration, file_size, audio_url, audio_url_fallback, part_number, category_id, lesson_type, tags, created_at';
+  'id, slug, title, hebrew_title, description, summary, date, hebrew_date, parsha, duration, file_size, audio_url, audio_url_fallback, part_number, category_id, lesson_type, tags, created_at';

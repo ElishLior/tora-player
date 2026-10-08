@@ -1,3 +1,4 @@
+import { withLessonSlugSelect } from './lesson-slug-select';
 import { SupabaseClient } from '@supabase/supabase-js';
 import type { LessonWithRelations, Playlist, PlaylistWithLessons, Series, Category, CategoryWithChildren } from '@/types/database';
 import { LESSON_AUDIO_FILES, LESSON_CARD_COLUMNS } from './lesson-selects';
@@ -6,14 +7,14 @@ import { LESSON_AUDIO_FILES, LESSON_CARD_COLUMNS } from './lesson-selects';
 
 /** Latest published daily lessons; short lessons have their own section (lib/supabase/shorts). */
 export async function getRecentLessons(supabase: SupabaseClient, limit = 20) {
-  const { data, error } = await supabase
+  const { data, error } = await withLessonSlugSelect(`${LESSON_CARD_COLUMNS}, series(name, hebrew_name), category:categories(id, hebrew_name), ${LESSON_AUDIO_FILES}`, (columns) => supabase
     .from('lessons')
-    .select(`${LESSON_CARD_COLUMNS}, series(name, hebrew_name), category:categories(id, hebrew_name), ${LESSON_AUDIO_FILES}`)
+    .select(columns)
     .eq('is_published', true)
     .or('lesson_type.is.null,lesson_type.neq.short_clip')
     .order('date', { ascending: false })
     .limit(limit)
-    .overrideTypes<LessonWithRelations[], { merge: false }>();
+    .overrideTypes<LessonWithRelations[], { merge: false }>());
 
   if (error) throw error;
   return data;
@@ -43,13 +44,13 @@ export async function getLessonById(supabase: SupabaseClient, id: string) {
 }
 
 export async function getLessonsBySeries(supabase: SupabaseClient, seriesId: string) {
-  const { data, error } = await supabase
+  const { data, error } = await withLessonSlugSelect(`${LESSON_CARD_COLUMNS}, ${LESSON_AUDIO_FILES}`, (columns) => supabase
     .from('lessons')
-    .select(`${LESSON_CARD_COLUMNS}, ${LESSON_AUDIO_FILES}`)
+    .select(columns)
     .eq('series_id', seriesId)
     .eq('is_published', true)
     .order('date', { ascending: false })
-    .overrideTypes<LessonWithRelations[], { merge: false }>();
+    .overrideTypes<LessonWithRelations[], { merge: false }>());
 
   if (error) throw error;
   return data;
@@ -98,14 +99,14 @@ export async function getLessonsByCategory(supabase: SupabaseClient, categoryId:
 
   const categoryIds = [categoryId, ...(children || []).map(c => c.id)];
 
-  const { data, error } = await supabase
+  const { data, error } = await withLessonSlugSelect(`${LESSON_CARD_COLUMNS}, series(name, hebrew_name), category:categories(id, hebrew_name), ${LESSON_AUDIO_FILES}`, (columns) => supabase
     .from('lessons')
-    .select(`${LESSON_CARD_COLUMNS}, series(name, hebrew_name), category:categories(id, hebrew_name), ${LESSON_AUDIO_FILES}`)
+    .select(columns)
     .eq('is_published', true)
     .in('category_id', categoryIds)
     .order('date', { ascending: false })
     .limit(limit)
-    .overrideTypes<LessonWithRelations[], { merge: false }>();
+    .overrideTypes<LessonWithRelations[], { merge: false }>());
 
   if (error) throw error;
   return data;
@@ -159,11 +160,11 @@ export async function getAllPlaylists(supabase: SupabaseClient) {
 }
 
 export async function getPlaylistWithLessons(supabase: SupabaseClient, playlistId: string) {
-  const { data, error } = await supabase
+  const { data, error } = await withLessonSlugSelect(`*, playlist_lessons(*, lesson:lessons(${LESSON_CARD_COLUMNS}, ${LESSON_AUDIO_FILES}))`, (columns) => supabase
     .from('playlists')
-    .select(`*, playlist_lessons(*, lesson:lessons(${LESSON_CARD_COLUMNS}, ${LESSON_AUDIO_FILES}))`)
+    .select(columns)
     .eq('id', playlistId)
-    .single();
+    .single().overrideTypes<PlaylistWithLessons & { playlist_lessons?: Array<{ position: number }> }, { merge: false }>());
 
   if (error) throw error;
 

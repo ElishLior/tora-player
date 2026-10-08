@@ -13,6 +13,7 @@ export function defaultNotifyMode(lessonCount: number): NotifyMode {
 
 export interface AnnouncedLesson {
   id: string;
+  slug?: string | null;
   title: string;
   /** YYYY-MM-DD */
   date: string;

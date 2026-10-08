@@ -1,4 +1,4 @@
-import { routing } from '@/i18n/routing';
+import { routing } from '@/i18n/routing-config';
 
 /*
  * Single source for the site's public identity: origin, name, tagline and the
@@ -68,12 +68,15 @@ export function pageUrl(pathname: string, locale: SiteLocale = DEFAULT_LOCALE): 
 }
 
 /** Locale-less lesson pathname (pass to the i18n `Link` or `localePath`). */
-export function lessonPath(lessonId: string): string {
-  return `/lessons/${encodeURIComponent(lessonId)}`;
+export type LessonLink = string | { id: string; slug?: string | null };
+
+export function lessonPath(lesson: LessonLink): string {
+  const segment = typeof lesson === 'string' ? lesson : lesson.slug || lesson.id;
+  return `/lessons/${encodeURIComponent(segment)}`;
 }
 
-export function lessonUrl(lessonId: string, locale: SiteLocale = DEFAULT_LOCALE): string {
-  return pageUrl(lessonPath(lessonId), locale);
+export function lessonUrl(lesson: LessonLink, locale: SiteLocale = DEFAULT_LOCALE): string {
+  return pageUrl(lessonPath(lesson), locale);
 }
 
 export function seriesPath(seriesId: string): string {

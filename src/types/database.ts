@@ -29,6 +29,7 @@ export interface Series {
 
 export interface Lesson {
   id: string;
+  slug?: string | null;
   title: string;
   hebrew_title: string | null;
   description: string | null;

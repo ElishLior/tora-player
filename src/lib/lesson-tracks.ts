@@ -1,3 +1,4 @@
+import { lessonPath, type LessonLink } from '@/config/site';
 import { normalizeAudioUrl } from '@/lib/audio-url';
 import { getOfflineKey, type OfflineLessonMeta } from '@/lib/offline-storage';
 import type { AudioTrack } from '@/stores/audio-store';
@@ -84,6 +85,7 @@ function createLessonTrack(
   return {
     id: lesson.id,
     lessonId: lesson.id,
+    lessonSlug: lesson.slug || undefined,
     audioFileId: asset.audioFileId,
     partIndex,
     partCount,
@@ -143,7 +145,7 @@ export function isMomentInPart(
  * Locale-less path that opens a lesson and plays from `position` seconds of
  * the given audio file (the main file when none). Read by the lesson page.
  */
-export function lessonMomentPath(lessonId: string, position: number, audioFileId?: string | null): string {
+export function lessonMomentPath(lesson: LessonLink, position: number, audioFileId?: string | null): string {
   const file = audioFileId ? `&file=${encodeURIComponent(audioFileId)}` : '';
-  return `/lessons/${lessonId}?t=${Math.floor(position)}${file}`;
+  return `${lessonPath(lesson)}?t=${Math.floor(position)}${file}`;
 }

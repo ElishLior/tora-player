@@ -1,5 +1,7 @@
 'use client';
 
+import { lessonPath, localePath, type SiteLocale } from '@/config/site';
+
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
@@ -278,7 +280,7 @@ export default function MeClient({ locale, account }: { locale: string; account:
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <Link
-                        href={`/${locale}/lessons/${lesson.id}`}
+                        href={localePath(lessonPath(lesson), locale as SiteLocale)}
                         className="line-clamp-2 text-sm font-bold hover:underline"
                         dir="auto"
                       >
@@ -355,7 +357,7 @@ export default function MeClient({ locale, account }: { locale: string; account:
               return (
                 <li key={lesson.id}>
                   <Link
-                    href={`/${locale}/lessons/${lesson.id}`}
+                    href={localePath(lessonPath(lesson), locale as SiteLocale)}
                     className="flex items-center gap-3 px-4 py-3 hover:bg-[hsl(var(--surface-highlight))]"
                   >
                     <div className="min-w-0 flex-1">
@@ -404,7 +406,7 @@ export default function MeClient({ locale, account }: { locale: string; account:
         ) : bookmarks.length === 0 ? (
           <Muted>{t('bookmarks.empty')}</Muted>
         ) : (
-          <BookmarkGroups bookmarks={bookmarks} locale={locale} />
+          <BookmarkGroups bookmarks={bookmarks} locale={locale} lessons={lessons} />
         )}
       </Section>
 
@@ -448,7 +450,7 @@ export default function MeClient({ locale, account }: { locale: string; account:
                     <li key={note.id} className={`${CARD} space-y-2 p-4`}>
                       <div className="flex items-center justify-between gap-3">
                         <Link
-                          href={`/${locale}/lessons/${note.lessonId}`}
+                          href={localePath(lessonPath(lessons?.[note.lessonId] ?? note.lessonId), locale as SiteLocale)}
                           className="min-w-0 truncate text-xs font-bold text-primary hover:underline"
                           dir="auto"
                         >
@@ -456,7 +458,7 @@ export default function MeClient({ locale, account }: { locale: string; account:
                         </Link>
                         {note.position !== null && (
                           <Link
-                            href={`/${locale}${lessonMomentPath(note.lessonId, note.position, note.audioFileId)}`}
+                            href={`/${locale}${lessonMomentPath(lessons?.[note.lessonId] ?? note.lessonId, note.position, note.audioFileId)}`}
                             className="flex shrink-0 items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 font-mono text-[11px] font-bold text-primary hover:bg-primary/20"
                             aria-label={t('notes.playFrom', { time: formatDuration(note.position) })}
                           >
@@ -519,7 +521,7 @@ export default function MeClient({ locale, account }: { locale: string; account:
                 const confirmKey = `download:${lesson.lessonId}`;
                 return (
                   <li key={lesson.lessonId} className="flex items-center gap-3 px-4 py-3">
-                    <Link href={`/${locale}/lessons/${lesson.lessonId}`} className="min-w-0 flex-1 hover:underline">
+                    <Link href={localePath(lessonPath(lesson.lessonId), locale as SiteLocale)} className="min-w-0 flex-1 hover:underline">
                       <p className="truncate text-sm font-medium" dir="auto">
                         {lesson.hebrewTitle || lesson.title}
                       </p>
