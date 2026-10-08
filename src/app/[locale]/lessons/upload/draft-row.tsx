@@ -1,3 +1,5 @@
+
+import { lessonPath } from '@/config/site';
 import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
@@ -489,11 +491,11 @@ function DraftEditor({ draft, run, status, open, files, categories, onChange, on
         {run.lessonId && (
           <span className="ms-auto flex gap-3">
             {run.phase === 'published' && (
-              <Link href={`/lessons/${run.lessonId}`} className="font-bold underline">
+              <Link href={lessonPath(run.lessonId!)} className="font-bold underline">
                 {t('openLesson')}
               </Link>
             )}
-            <Link href={`/lessons/${run.lessonId}/edit`} className="text-muted-foreground underline">
+            <Link href={`${lessonPath(run.lessonId!)}/edit`} className="text-muted-foreground underline">
               {t('editLesson')}
             </Link>
           </span>

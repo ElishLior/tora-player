@@ -1,5 +1,7 @@
 'use client';
 
+import { lessonPath } from '@/config/site';
+
 import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { AlertTriangle, Pause, Play, Scissors, Search } from 'lucide-react';
@@ -141,7 +143,7 @@ export default function ShortsClient({ lessons, topics, loadFailed, initialTag }
           {isCurrent && isPlaying ? <Pause className="h-4 w-4" /> : <Play className="ms-0.5 h-4 w-4" />}
         </button>
         <div className="min-w-0 flex-1">
-          <Link href={`/lessons/${lesson.id}`} className="block min-w-0">
+          <Link href={lessonPath(lesson)} className="block min-w-0">
             <p className={`truncate text-sm font-semibold ${isCurrent ? 'text-primary' : ''}`} dir="auto">
               {lesson.hebrew_title || lesson.title}
             </p>

@@ -3,6 +3,7 @@ import { getAudioContentType, getAudioDirectUrl } from '@/lib/audio-download';
 import { normalizeAudioUrl } from '@/lib/audio-url';
 import { PODCAST_COVER_PATH, SITE_AUTHOR, absoluteUrl, lessonUrl } from '@/config/site';
 import { lessonDescription, lessonEpisodeAudio, type EpisodeAudio } from '@/lib/seo';
+import { withLessonSlugSelect } from '@/lib/supabase/lesson-slug-select';
 import { LESSON_AUDIO_FILES } from '@/lib/supabase/lesson-selects';
 import { SHORT_LESSON_TYPE, SHORTS_CATEGORY_ID } from '@/lib/upload-drafts';
 import type { LessonWithRelations } from '@/types/database';
@@ -18,6 +19,7 @@ const FEED_PAGE_SIZE = 200;
 export type FeedLesson = Pick<
   LessonWithRelations,
   | 'id'
+  | 'slug'
   | 'title'
   | 'hebrew_title'
   | 'description'
@@ -32,7 +34,7 @@ export type FeedLesson = Pick<
   | 'audio_files'
 >;
 
-const FEED_LESSON_COLUMNS = `id, title, hebrew_title, description, summary, date, hebrew_date, parsha, duration, audio_url, file_size, series(id, name, hebrew_name), ${LESSON_AUDIO_FILES}`;
+const FEED_LESSON_COLUMNS = `id, slug, title, hebrew_title, description, summary, date, hebrew_date, parsha, duration, audio_url, file_size, series(id, name, hebrew_name), ${LESSON_AUDIO_FILES}`;
 
 export interface FeedChannel {
   title: string;
@@ -64,20 +66,22 @@ export async function loadFeedLessons(
 
   const lessons: FeedLesson[] = [];
   for (let offset = 0; ; offset += FEED_PAGE_SIZE) {
-    let query = supabase.from('lessons').select(FEED_LESSON_COLUMNS).eq('is_published', true);
-    if (options.seriesId) {
-      query = query.eq('series_id', options.seriesId);
-    } else if (shortCategoryIds) {
-      query = query
-        .or(`lesson_type.is.null,lesson_type.neq.${SHORT_LESSON_TYPE}`)
-        .or(`category_id.is.null,category_id.not.in.(${shortCategoryIds.join(',')})`);
-    }
+    const { data, error } = await withLessonSlugSelect(FEED_LESSON_COLUMNS, (columns) => {
+      let query = supabase.from('lessons').select(columns).eq('is_published', true);
+      if (options.seriesId) {
+        query = query.eq('series_id', options.seriesId);
+      } else if (shortCategoryIds) {
+        query = query
+          .or(`lesson_type.is.null,lesson_type.neq.${SHORT_LESSON_TYPE}`)
+          .or(`category_id.is.null,category_id.not.in.(${shortCategoryIds.join(',')})`);
+      }
 
-    const { data, error } = await query
-      .order('date', { ascending: false })
-      .order('created_at', { ascending: false })
-      .order('id', { ascending: false })
-      .range(offset, offset + FEED_PAGE_SIZE - 1);
+      return query
+        .order('date', { ascending: false })
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
+        .range(offset, offset + FEED_PAGE_SIZE - 1);
+    });
     if (error) throw error;
     const page = (data ?? []) as unknown as FeedLesson[];
     lessons.push(...page);
@@ -103,7 +107,7 @@ function renderItems(lessons: readonly FeedLesson[]): string[] {
   return lessons.flatMap((lesson) => {
     const title = lesson.hebrew_title || lesson.title;
     const description = lessonDescription(lesson);
-    const link = lessonUrl(lesson.id);
+    const link = lessonUrl(lesson);
     // Lesson day (UTC midnight); each part a minute later so apps keep part order.
     const day = Date.parse(`${lesson.date}T00:00:00Z`);
     const audioFiles = lesson.audio_files ?? [];

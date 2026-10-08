@@ -6,6 +6,7 @@ import type { AudioEngineStatus } from "@/lib/audio-engine";
 export interface AudioTrack {
   id: string;
   lessonId?: string;
+  lessonSlug?: string;
   audioFileId?: string;
   /** Position of this file among the lesson's parts (0-based) and how many there are. */
   partIndex?: number;

@@ -7,7 +7,7 @@ import { createCatalogLessonListReader, getCachedPartTypes } from '@/lib/supabas
 import { LESSON_PART_TYPES, SHORTS_AUDIO_TYPE } from '@/lib/lesson-naming';
 import { loadInitialLessonList, type LessonListFailureCode } from '@/lib/supabase/lesson-list';
 import { EmptyState } from '@/components/shared/empty-state';
-import { LessonsClient } from './lessons-client';
+import { LessonsClient } from '../lessons-client';
 import { Link } from '@/i18n/routing';
 import { AlertTriangle, BookOpen, Plus, Search, X } from 'lucide-react';
 import { isAdmin } from '@/lib/auth/admin';

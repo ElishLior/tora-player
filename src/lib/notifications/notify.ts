@@ -6,12 +6,14 @@ import { sendNewLessonEmails, sendNewLessonsDigestEmails } from '@/lib/notificat
 import { loadAllPushSubscriptions, sendPush, type PushPayload } from '@/lib/notifications/push';
 import { summarizeBatch, type AnnouncedLesson, type NotifyMode } from '@/lib/notifications/batch-rules';
 import { SHORT_LESSON_TYPE, SHORTS_CATEGORY_ID } from '@/lib/upload-drafts';
+import { withLessonSlugSelect } from '@/lib/supabase/lesson-slug-select';
 import { lessonPath, localePath } from '@/config/site';
 
-const CLAIMED_COLUMNS = 'id, title, hebrew_title, date, hebrew_date, lesson_type, category_id';
+const CLAIMED_COLUMNS = 'id, slug, title, hebrew_title, date, hebrew_date, lesson_type, category_id';
 
 interface ClaimedRow {
   id: string;
+  slug?: string | null;
   title: string;
   hebrew_title: string | null;
   date: string;
@@ -23,6 +25,7 @@ interface ClaimedRow {
 function toAnnounced(row: ClaimedRow): AnnouncedLesson {
   return {
     id: row.id,
+    slug: row.slug,
     title: row.hebrew_title || row.title,
     date: row.date,
     hebrewDate: row.hebrew_date,
@@ -45,10 +48,10 @@ async function announceLesson(lesson: AnnouncedLesson): Promise<void> {
     pushToAll({
       title: t('newLessonTitle'),
       body: lesson.title,
-      url: localePath(lessonPath(lesson.id)),
+      url: localePath(lessonPath(lesson)),
       tag: `lesson-${lesson.id}`,
     }),
-    sendNewLessonEmails({ id: lesson.id, title: lesson.title }),
+    sendNewLessonEmails(lesson),
   ]);
   console.info('[notify] lesson', lesson.id, { push, emailsSent: email.sent });
 }
@@ -63,14 +66,14 @@ async function announceLesson(lesson: AnnouncedLesson): Promise<void> {
  */
 export async function notifyNewLesson(lessonId: string): Promise<void> {
   try {
-    const { data, error } = await createAdminSupabaseClient()
+    const { data, error } = await withLessonSlugSelect(CLAIMED_COLUMNS, (columns) => createAdminSupabaseClient()
       .from('lessons')
       .update({ notified_at: new Date().toISOString() })
       .eq('id', lessonId)
       .eq('is_published', true)
       .is('notified_at', null)
-      .select(CLAIMED_COLUMNS)
-      .maybeSingle();
+      .select(columns)
+      .maybeSingle().overrideTypes<ClaimedRow, { merge: false }>());
     if (error) throw new Error(error.message);
     if (!data) return; // draft, deleted, or already announced
     await announceLesson(toAnnounced(data as ClaimedRow));
@@ -97,13 +100,13 @@ export async function notifyNewLessons(lessonIds: string[], mode: NotifyMode): P
       return;
     }
 
-    const { data, error } = await createAdminSupabaseClient()
+    const { data, error } = await withLessonSlugSelect(CLAIMED_COLUMNS, (columns) => createAdminSupabaseClient()
       .from('lessons')
       .update({ notified_at: new Date().toISOString() })
       .in('id', ids)
       .eq('is_published', true)
       .is('notified_at', null)
-      .select(CLAIMED_COLUMNS);
+      .select(columns).overrideTypes<ClaimedRow[], { merge: false }>());
     if (error) throw new Error(error.message);
     const claimed = ((data ?? []) as ClaimedRow[]).map(toAnnounced);
     if (mode === 'none' || claimed.length === 0) {
@@ -127,7 +130,7 @@ export async function notifyNewLessons(lessonIds: string[], mode: NotifyMode): P
       pushToAll({
         title: t('title', { count: summary.count }),
         body: range,
-        url: localePath(lessonPath(summary.newest.id)),
+        url: localePath(lessonPath(summary.newest)),
         tag: `lessons-batch-${summary.newest.id}`,
       }),
       sendNewLessonsDigestEmails({

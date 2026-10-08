@@ -53,6 +53,10 @@ function audio(id: string, sortOrder: number, duration: number): LessonAudio {
 }
 
 describe('lesson audio part metadata', () => {
+  it('carries a slug without changing the lesson identity', () => {
+    const [track] = getLessonTracks({ ...lesson, slug: 'sukkot-25-09-2026', audio_url: '/single.mp3' });
+    expect(track).toMatchObject({ id: lesson.id, lessonId: lesson.id, lessonSlug: 'sukkot-25-09-2026' });
+  });
   it('keeps source order independent of database sort order and preserves unknown file duration', () => {
     const multipart = { ...lesson, audio_files: [audio('third', 30, 300), audio('first', 10, 0), audio('second', 20, 600)] };
     expect(getLessonAudioAssets(multipart).map(({ audioFileId, partIndex, partCount }) => ({ audioFileId, partIndex, partCount }))).toEqual([

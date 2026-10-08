@@ -1,5 +1,7 @@
 'use client';
 
+import { lessonPath, localePath, type SiteLocale } from '@/config/site';
+
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ChevronDown,
@@ -186,7 +188,7 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
           <button
             onClick={() => {
               onClose();
-              router.push(`/${locale}/lessons/${lessonId}`);
+              router.push(localePath(lessonPath({ id: lessonId, slug: currentTrack.lessonSlug }), locale as SiteLocale));
             }}
             className="rounded-full p-2 text-muted-foreground hover:text-foreground transition-colors"
             aria-label={t('openLesson')}
@@ -431,6 +433,7 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
         isOpen={showShareClipDialog}
         onClose={() => setShowShareClipDialog(false)}
         lessonId={lessonId}
+        lessonSlug={currentTrack?.lessonSlug}
         currentTime={currentTime}
         duration={duration}
         lessonTitle={currentTrack.hebrewTitle || currentTrack.title}

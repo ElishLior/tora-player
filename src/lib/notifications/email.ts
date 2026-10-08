@@ -106,14 +106,14 @@ ${content.bodyHtml}
 }
 
 /** One new lesson: its title and a button to it. */
-export function sendNewLessonEmails(lesson: { id: string; title: string }): Promise<{ sent: number }> {
+export function sendNewLessonEmails(lesson: { id: string; slug?: string | null; title: string }): Promise<{ sent: number }> {
   const t = createTranslator({ locale: 'he', messages: heMessages, namespace: 'notifications.email' });
   return sendToSubscribers(() => ({
     subject: t('subject', { title: lesson.title }),
     heading: t('heading'),
     bodyHtml: `<p style="margin:0 0 20px;font-size:17px"><bdi>${escapeHtml(lesson.title)}</bdi></p>`,
     bodyText: lesson.title,
-    cta: { label: t('cta'), url: lessonUrl(lesson.id) },
+    cta: { label: t('cta'), url: lessonUrl(lesson) },
   }));
 }
 
@@ -125,7 +125,7 @@ export function sendNewLessonsDigestEmails(digest: {
 }): Promise<{ sent: number }> {
   const t = createTranslator({ locale: 'he', messages: heMessages, namespace: 'notifications.batch' });
   return sendToSubscribers(() => {
-    const items = digest.lessons.map((lesson) => ({ ...lesson, url: lessonUrl(lesson.id) }));
+    const items = digest.lessons.map((lesson) => ({ ...lesson, url: lessonUrl(lesson) }));
     const list = items
       .map(
         (item) =>
