@@ -21,7 +21,7 @@ async function openLesson(page: Page, tagged = false) {
 }
 
 async function expectDateResults(page: Page, date: string) {
-  await expect(page.locator('[data-active-date]')).toHaveAttribute('data-active-date', date);
+  await expect(page.locator('[data-active-date]:visible')).toHaveAttribute('data-active-date', date);
   await expect(page.locator('main h1')).toContainText(date);
   const dates = page.locator('main [data-lesson-date]');
   await expect(dates.first()).toBeVisible();
@@ -66,7 +66,7 @@ test('date links filter by stored DATE, clear it, and preserve browser Back', as
   await expectDateResults(page, date);
   await page.getByRole('link', { name: he.lessonBrowse.clearDate, exact: true }).click();
   await expect(page).toHaveURL(/\/he\/lessons$/);
-  await expect(page.locator('[data-active-date]')).toHaveCount(0);
+  await expect(page.locator('[data-active-date]:visible')).toHaveCount(0);
   await page.goBack();
   await expectDateResults(page, date);
   await page.goBack();
@@ -80,17 +80,17 @@ test('lesson tags open their tag list, clear it, and preserve browser Back', asy
   const href = (await tagLink.getAttribute('href'))!;
   await tagLink.click();
   await expect.poll(() => new URL(page.url()).pathname).toBe(href);
-  await expect(page.locator('[data-active-tag]')).toHaveAttribute('data-active-tag', tag);
+  await expect(page.locator('[data-active-tag]:visible')).toHaveAttribute('data-active-tag', tag);
   await expect(page.locator('main h1')).toContainText(tag);
   const cards = page.locator('main .group.relative');
   await expect(cards.first()).toBeVisible();
   for (const card of await cards.all()) {
     await expect(card.locator('[data-lesson-tag]').filter({ hasText: `#${tag}` })).toHaveCount(1);
   }
-  await page.locator('[data-active-tag]').click();
+  await page.locator('[data-active-tag]:visible').click();
   await expect(page).toHaveURL(/\/he\/lessons$/);
   await page.goBack();
-  await expect(page.locator('[data-active-tag]')).toHaveAttribute('data-active-tag', tag);
+  await expect(page.locator('[data-active-tag]:visible')).toHaveAttribute('data-active-tag', tag);
   await page.goBack();
   await expect(page).toHaveURL(lessonURL);
 });
@@ -102,26 +102,29 @@ test('date and tag query filters compose, clear separately, and have noindex met
   const params = new URLSearchParams({ date, tag });
   await page.goto(`/he/lessons?${params}`);
   await expectDateResults(page, date);
-  await expect(page.locator('[data-active-tag]')).toHaveAttribute('data-active-tag', tag);
+  await expect(page.locator('[data-active-tag]:visible')).toHaveAttribute('data-active-tag', tag);
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', /noindex/);
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', /\/he\/lessons$/);
-  await page.locator('[data-active-date]').click();
+  await page.locator('[data-active-date]:visible').click();
   await expect.poll(() => new URL(page.url()).searchParams.get('date')).toBeNull();
   expect(new URL(page.url()).searchParams.get('tag')).toBe(tag);
+  // Let the cleared list render before going back (Back during a pending transition races).
+  await expect(page.locator('[data-active-date]:visible')).toHaveCount(0);
+  await expect(page.locator('main h1')).not.toContainText(date);
   await page.goBack();
-  await expect(page.locator('[data-active-date]')).toBeVisible();
-  await page.locator('[data-active-tag]').click();
+  await expect(page.locator('[data-active-date]:visible')).toBeVisible();
+  await page.locator('[data-active-tag]:visible').click();
   await expect.poll(() => new URL(page.url()).searchParams.get('tag')).toBeNull();
   expect(new URL(page.url()).searchParams.get('date')).toBe(date);
 });
 
 test('a real date with no lessons has an empty state; an invalid date is ignored', async ({ page }) => {
   await page.goto('/he/lessons?date=2001-01-01');
-  await expect(page.locator('[data-active-date]')).toHaveAttribute('data-active-date', '2001-01-01');
+  await expect(page.locator('[data-active-date]:visible')).toHaveAttribute('data-active-date', '2001-01-01');
   await expect(page.getByText(he.lessonBrowse.filteredEmpty, { exact: true })).toBeVisible();
   await expect(page.locator('main [data-lesson-date]')).toHaveCount(0);
   await page.goto('/he/lessons?date=2026-02-30');
-  await expect(page.locator('[data-active-date]')).toHaveCount(0);
+  await expect(page.locator('[data-active-date]:visible')).toHaveCount(0);
   await expect(page.locator('main [data-lesson-date]').first()).toBeVisible();
 });
 
@@ -145,6 +148,8 @@ test('date navigation keeps the same audio element, mini-player lesson, queue an
   await installMediaHarness(page);
   await page.goto('/he/lessons');
   await page.getByRole('main').getByRole('button', { name: he.player.play, exact: true }).first().click();
+  // Play on a card also opens that lesson's page; wait for it before the next tap.
+  await expect.poll(() => new URL(page.url()).pathname, { timeout: 45_000 }).toMatch(/^\/he\/lessons\/[^/]+$/);
   await expect(page.locator('main [data-lesson-date]').first()).toBeVisible();
   await expect(page.locator('header').getByRole('button', { name: he.player.pause, exact: true })).toBeVisible();
   const mini = page.locator('[data-player-expand]');
@@ -157,7 +162,7 @@ test('date navigation keeps the same audio element, mini-player lesson, queue an
     time: window.__lastAudio!.currentTime,
   }));
   await page.locator('main [data-lesson-date]').first().click();
-  await expect(page.locator('[data-active-date]')).toBeVisible();
+  await expect(page.locator('[data-active-date]:visible')).toBeVisible();
   await expect(mini).toHaveAttribute('aria-label', miniName!);
   await expect(page.locator('header').getByRole('button', { name: he.player.pause, exact: true })).toBeVisible();
   expect(await page.evaluate((original) => window.__lastAudio === original, audio)).toBe(true);
@@ -188,9 +193,9 @@ test('card, shorts and date-filter links fit a 360px viewport and meet touch tar
     ).toBeLessThanOrEqual(0);
   }
   await page.locator('main [data-lesson-date]').first().click();
-  await expect(page.locator('[data-active-date]')).toBeVisible();
+  await expect(page.locator('[data-active-date]:visible')).toBeVisible();
   expect(
-    await page.locator('[data-active-date]').evaluate((link) => link.getBoundingClientRect().height),
+    await page.locator('[data-active-date]:visible').evaluate((link) => link.getBoundingClientRect().height),
   ).toBeGreaterThanOrEqual(44);
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth),
