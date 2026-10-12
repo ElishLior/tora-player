@@ -254,7 +254,7 @@ function throwIfError<T>(result: { data: T | null; error: unknown }) {
   return result.data;
 }
 
-const LESSON_LIST_SELECT = `${LESSON_CARD_COLUMNS}, series(name, hebrew_name), category:categories(id, hebrew_name), ${LESSON_AUDIO_FILES}`;
+const LESSON_LIST_SELECT = `${LESSON_CARD_COLUMNS}, series(id, name, hebrew_name), category:categories(id, hebrew_name), ${LESSON_AUDIO_FILES}`;
 export const SEARCH_RESULT_LIMIT = 50;
 
 /**

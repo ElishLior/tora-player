@@ -129,7 +129,8 @@ export async function mergeLessonTags(lessonId: string, tags: string[]): Promise
  * Publish a lesson once its uploads are complete. Refuses lessons without
  * audio so listeners never get an empty lesson. `newlyPublished` is false
  * when it was already public. With `notify` (single-lesson callers) the
- * lesson is announced; batch callers announce once via announceUploadedLessons.
+ * lesson is announced; the upload page announces its session once via
+ * announceUploadedLessons.
  */
 export async function publishUploadedLesson(
   lessonId: string,
@@ -161,7 +162,11 @@ export async function publishUploadedLesson(
   return { data: { id: lessonId, newlyPublished } };
 }
 
-/** Announce the lessons one upload batch published, once, in the admin's chosen mode. */
+/**
+ * Announce what one upload session published, in the admin's chosen mode: pass
+ * every lesson it touched (new lessons and published lessons it appended parts
+ * to). The server claims only what was never announced, so repeats send nothing.
+ */
 export async function announceUploadedLessons(lessonIds: string[], mode: NotifyMode): Promise<ActionResult<null>> {
   const denied = await authorize();
   if (denied) return { error: denied };

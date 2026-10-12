@@ -56,7 +56,7 @@ export function InstallPrompt() {
   if (!showBanner) return null;
 
   return (
-    <div className="fixed top-16 inset-x-0 z-40 mx-4 sm:mx-auto sm:max-w-md animate-in slide-in-from-top-2 duration-300">
+    <div data-install-prompt className="fixed top-16 inset-x-0 z-40 mx-4 sm:mx-auto sm:max-w-md animate-in slide-in-from-top-2 duration-300">
       <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 shadow-lg">
         <div className="flex-shrink-0 rounded-full bg-primary/10 p-2">
           <Download className="h-5 w-5 text-primary" />

@@ -3,10 +3,12 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { LessonCard } from '@/components/lessons/lesson-card';
+import { LessonCardList } from '@/components/lessons/lesson-card-list';
 import { LessonCardSkeleton } from '@/components/lessons/lesson-card-skeleton';
 import { useInfiniteScroll } from '@/hooks/use-infinite-scroll';
 import { getLessonsPaginated } from '@/actions/lessons-paginated';
 import { bulkUpdateLessonCategory } from '@/actions/lessons';
+import { CategoryPicker } from '@/components/categories/category-picker';
 import {
   canAutoLoadMore,
   getLoadMoreErrorMessage,
@@ -305,7 +307,7 @@ export function LessonsClient({
           <h2 className="text-sm font-bold mb-2 text-muted-foreground uppercase tracking-wider">
             {group.label}
           </h2>
-          <div className="space-y-0.5">
+          <LessonCardList>
             {group.lessons.map((lesson) => (
               <LessonCard
                 key={lesson.id}
@@ -316,17 +318,17 @@ export function LessonsClient({
                 onToggleSelect={toggleSelect}
               />
             ))}
-          </div>
+          </LessonCardList>
         </section>
       ))}
 
       {/* Loading skeletons (normal mode only) */}
       {!isSearchMode && isLoading && (
-        <div className="space-y-0.5">
+        <LessonCardList>
           {Array.from({ length: 4 }).map((_, i) => (
             <LessonCardSkeleton key={`skeleton-${i}`} />
           ))}
-        </div>
+        </LessonCardList>
       )}
 
       {!isSearchMode && pageError && (
@@ -361,33 +363,19 @@ export function LessonsClient({
         <div className="fixed bottom-20 inset-x-0 z-50 flex justify-center px-4" dir="rtl">
           <div className="bg-[hsl(var(--surface-elevated))] border border-[hsl(var(--border))] rounded-2xl shadow-2xl px-4 py-3 flex items-center gap-3 max-w-md w-full">
             {/* Category picker */}
-            <select
+            <CategoryPicker
               value={selectedCategoryId}
-              onChange={(e) => {
-                setSelectedCategoryId(e.target.value);
+              onChange={(categoryId) => {
+                setSelectedCategoryId(categoryId);
                 setBulkError(null);
               }}
+              categories={categoryTree}
+              placeholder={locale === 'he' ? 'בחר קטגוריה...' : 'Select category...'}
+              includeNone
+              noneValue="__clear__"
+              noneLabel={locale === 'he' ? '— ללא קטגוריה —' : '— No category —'}
               className="flex-1 bg-background text-foreground text-sm rounded-lg px-3 py-2 border border-[hsl(var(--border))] focus:outline-none focus:ring-2 focus:ring-primary/30"
-              dir="rtl"
-            >
-              <option value="">{locale === 'he' ? 'בחר קטגוריה...' : 'Select category...'}</option>
-              <option value="__clear__">{locale === 'he' ? '— ללא קטגוריה —' : '— No category —'}</option>
-              {categoryTree.map((parent) =>
-                parent.children.length > 0 ? (
-                  <optgroup key={parent.id} label={parent.hebrew_name}>
-                    {parent.children.map((child) => (
-                      <option key={child.id} value={child.id}>
-                        {child.hebrew_name}
-                      </option>
-                    ))}
-                  </optgroup>
-                ) : (
-                  <option key={parent.id} value={parent.id}>
-                    {parent.hebrew_name}
-                  </option>
-                )
-              )}
-            </select>
+            />
 
             {/* Save button */}
             <button

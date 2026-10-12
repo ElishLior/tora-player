@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { LessonAudio, LessonWithRelations } from '@/types/database';
-import { getLessonAudioAssets, getLessonTracks, getOfflineLessonTracks } from './lesson-tracks';
+import { getLessonAudioAssets, getLessonPartSeconds, getLessonTracks, getOfflineLessonTracks } from './lesson-tracks';
 
 const lesson: LessonWithRelations = {
   id: 'lesson-1',
@@ -65,6 +65,13 @@ describe('lesson audio part metadata', () => {
       { audioFileId: 'third', partIndex: 2, partCount: 3 },
     ]);
     expect(getLessonTracks(multipart)[0]).toMatchObject({ partIndex: 0, partCount: 3, duration: 0 });
+  });
+
+  it('lists each part length in play order for previews', () => {
+    const multipart = { ...lesson, audio_files: [audio('second', 20, 2280), audio('first', 10, 2700)] };
+    expect(getLessonPartSeconds(multipart)).toEqual([2700, 2280]);
+    expect(getLessonPartSeconds({ ...lesson, audio_url: '/single.mp3' })).toEqual([1800]);
+    expect(getLessonPartSeconds(lesson)).toEqual([]);
   });
 
   it('retains single-file lesson duration when there are no per-file assets', () => {

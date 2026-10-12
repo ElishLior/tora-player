@@ -84,8 +84,19 @@ test.describe('Tora Player Smoke Tests', () => {
   });
 
   test('Bottom navigation opens the lessons catalog', async ({ page }) => {
+    // The bottom bar is the phone/tablet navigation; from 1024px the side menu replaces it.
+    await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`${BASE_URL}/he`);
     const nav = page.getByRole('navigation', { name: he.nav.label });
+    await nav.getByRole('link', { name: he.nav.lessons }).click();
+    await expect(page).toHaveURL(`${BASE_URL}/he/lessons`);
+    await expect(page.getByRole('main').getByRole('heading', { name: he.lessons.title })).toBeVisible();
+  });
+
+  test('Side menu opens the lessons catalog on desktop', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto(`${BASE_URL}/he`);
+    const nav = page.getByRole('navigation', { name: he.nav.sidebarLabel });
     await nav.getByRole('link', { name: he.nav.lessons }).click();
     await expect(page).toHaveURL(`${BASE_URL}/he/lessons`);
     await expect(page.getByRole('main').getByRole('heading', { name: he.lessons.title })).toBeVisible();

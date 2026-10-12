@@ -15,7 +15,8 @@ import { ImageUnreadableError, uploadAudioFile, uploadImageFile } from '@/hooks/
 import { extractAudioMetadata } from '@/lib/audio-utils';
 import { shouldTranscode } from '@/lib/audio-transcode';
 import { mediaKindOf } from '@/lib/lesson-naming';
-import { defaultNotifyMode, type NotifyMode } from '@/lib/notifications/batch-rules';
+import { DEFAULT_NOTIFY_MODE, type NotifyMode } from '@/lib/notifications/batch-rules';
+import { pendingAnnouncementDecision, splitPendingForSendNow } from '@/lib/notifications/upload-announcement';
 import {
   appendTarget,
   applyUploadLookup,
@@ -75,6 +76,9 @@ export default function DailyUploadClient({ categories, shared }: { categories: 
   const [runJobs, setRunJobs] = useState<UploadJob[]>([]);
   const [lookup, setLookup] = useState<{ signature: string; error: string | null }>({ signature: '', error: null });
   const [sharedEmpty, setSharedEmpty] = useState(false);
+  /** Lessons finished by publish runs and not announced yet (see upload-announcement.ts). */
+  const [pendingNotice, setPendingNotice] = useState(0);
+  const [announcing, setAnnouncing] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const hasMiniPlayer = useAudioStore((s) => s.currentTrack != null);
 
@@ -83,6 +87,8 @@ export default function DailyUploadClient({ categories, shared }: { categories: 
   const draftsRef = useRef(drafts);
   const runsRef = useRef(runs);
   const runningRef = useRef(false);
+  const pendingRef = useRef<Set<string>>(new Set());
+  const pendingModeRef = useRef<NotifyMode>(DEFAULT_NOTIFY_MODE);
   filesRef.current = files;
   draftsRef.current = drafts;
   runsRef.current = runs;
@@ -93,13 +99,52 @@ export default function DailyUploadClient({ categories, shared }: { categories: 
     setFiles((prev) => (prev[id] ? { ...prev, [id]: { ...prev[id], ...patch } } : prev));
   }, []);
   const patchRun = useCallback((key: string, patch: Partial<DraftRun>) => {
+    // The ref follows at once: the end of a run decides on phases before React re-renders.
+    runsRef.current = { ...runsRef.current, [key]: { ...(runsRef.current[key] ?? NEW_RUN), ...patch } };
     setRuns((prev) => ({ ...prev, [key]: { ...(prev[key] ?? NEW_RUN), ...patch } }));
   }, []);
   const updateDraft = useCallback((key: string, update: (d: LessonDraft) => LessonDraft) => {
     setDrafts((prev) => prev.map((d) => (d.key === key ? update(d) : d)));
   }, []);
 
-  useUploadGuard(running, t('leaveWarning'));
+  useUploadGuard(
+    running || announcing > 0 || pendingNotice > 0,
+    running ? t('leaveWarning') : t('notifyPending.leaveWarning'),
+    running,
+  );
+
+  /**
+   * Announce pending lessons in the mode of the last publish run, once: the set
+   * is cleared before the call (a double click sends nothing more) and the ids
+   * come back if the call fails. The server claims what is new, so a repeat
+   * never notifies twice. `exceptLessonIds` stay pending.
+   */
+  const announcePending = useCallback(async (exceptLessonIds: Iterable<string> = []) => {
+    const { send, keep } = splitPendingForSendNow(pendingRef.current, exceptLessonIds);
+    if (send.length === 0) return;
+    pendingRef.current = new Set(keep);
+    setPendingNotice(keep.length);
+    setAnnouncing((n) => n + 1);
+    const res = await settle(announceUploadedLessons(send, pendingModeRef.current));
+    if (res.error) {
+      for (const id of send) pendingRef.current.add(id);
+      setPendingNotice(pendingRef.current.size);
+    }
+    setAnnouncing((n) => n - 1);
+  }, []);
+
+  // Leaving the page inside the app (side menu, bottom bar) unmounts it: announce what
+  // was published and is still pending. The set is cleared before the call so no other
+  // flush path sends it again; failed lessons never entered the set.
+  useEffect(
+    () => () => {
+      const ids = [...pendingRef.current];
+      if (ids.length === 0) return;
+      pendingRef.current = new Set();
+      void announceUploadedLessons(ids, pendingModeRef.current).catch(() => {});
+    },
+    [],
+  );
 
   // Revoke image previews when the page goes away.
   useEffect(
@@ -204,9 +249,9 @@ export default function DailyUploadClient({ categories, shared }: { categories: 
     batch.length === 0 &&
     blocked === 0 &&
     sortedDrafts.some((d) => ['published', 'saved'].includes(runOf(d.key).phase));
-  // Appends to a lesson that is already public are never announced.
-  const notifyMode =
-    notifyChoice ?? defaultNotifyMode(batch.filter((d) => !appendTarget(d)?.isPublished).length);
+  const notifyMode = notifyChoice ?? DEFAULT_NOTIFY_MODE;
+  const failedLessonIds = () =>
+    Object.values(runsRef.current).flatMap((run) => (run.phase === 'failed' && run.lessonId ? [run.lessonId] : []));
 
   const runBatch = async (keys: string[], publish: boolean) => {
     if (runningRef.current || keys.length === 0) return;
@@ -220,7 +265,7 @@ export default function DailyUploadClient({ categories, shared }: { categories: 
       Object.values(filesRef.current).map((e) => [e.id, e.status]),
     );
     const lessonIds: Record<string, string> = {};
-    const newlyPublished: string[] = [];
+    if (publish) pendingModeRef.current = mode;
     for (const draft of drafted) patchRun(draft.key, { phase: 'queued', error: null, publish });
 
     // 1. The lesson rows: created unpublished, or the existing lesson of that day.
@@ -289,7 +334,9 @@ export default function DailyUploadClient({ categories, shared }: { categories: 
         patchRun(draft.key, { phase: 'failed', error: t('publishFailed', { error: bidi(published.error) }) });
         return;
       }
-      if (published.data.newlyPublished) newlyPublished.push(published.data.id);
+      // New lessons and published lessons that got parts: the server announces what is new.
+      pendingRef.current.add(published.data.id);
+      setPendingNotice(pendingRef.current.size);
       patchRun(draft.key, { phase: 'published', error: null });
     };
 
@@ -334,8 +381,10 @@ export default function DailyUploadClient({ categories, shared }: { categories: 
       },
     );
 
-    // 4. One announcement for everything this run published ('none' still marks them announced).
-    if (publish && newlyPublished.length > 0) await settle(announceUploadedLessons(newlyPublished, mode));
+    // 4. One announcement for the whole session once nothing failed ('none' still marks it announced);
+    //    after a failure it waits for the retry or "send now".
+    const phases = draftsRef.current.map((d) => (runsRef.current[d.key] ?? NEW_RUN).phase);
+    if (pendingAnnouncementDecision(pendingRef.current.size, phases) === 'announce') await announcePending();
     runningRef.current = false;
     setRunning(false);
     setRunJobs([]);
@@ -352,6 +401,8 @@ export default function DailyUploadClient({ categories, shared }: { categories: 
   };
 
   const startOver = () => {
+    // Whatever finished is announced before the page forgets it.
+    void announcePending();
     for (const entry of Object.values(files)) {
       if (entry.previewUrl) URL.revokeObjectURL(entry.previewUrl);
     }
@@ -490,6 +541,9 @@ export default function DailyUploadClient({ categories, shared }: { categories: 
                 : null
             }
             failed={failed}
+            pendingNotice={pendingNotice}
+            announcing={announcing > 0}
+            onAnnounceNow={() => void announcePending(failedLessonIds())}
             finished={finished}
             onPublish={() => void runBatch(batch.map((d) => d.key), true)}
             onSaveDraft={() => void runBatch(batch.map((d) => d.key), false)}

@@ -1,15 +1,17 @@
 /**
- * How a batch of newly published lessons is announced. Pure, shared by the
- * upload page (default choice) and notifyNewLessons (summary content).
+ * How a batch of newly published lessons is announced. Pure and client-safe,
+ * shared by the upload page (mode choice) and the announcement builder
+ * (`announcement.ts`, summary ordering).
  */
 
 export const NOTIFY_MODES = ['none', 'summary', 'each'] as const;
 export type NotifyMode = (typeof NOTIFY_MODES)[number];
 
-/** One lesson → its own notification; several → one summary. */
-export function defaultNotifyMode(lessonCount: number): NotifyMode {
-  return lessonCount > 1 ? 'summary' : 'each';
-}
+/**
+ * Every upload batch, whatever its size, sends one consolidated notification
+ * (owner, October 12, 2026). A one-lesson summary reads like a single-lesson push.
+ */
+export const DEFAULT_NOTIFY_MODE: NotifyMode = 'summary';
 
 export interface AnnouncedLesson {
   id: string;

@@ -15,6 +15,10 @@ interface UploadActionBarProps {
   running: boolean;
   progress: { percent: number; done: number; total: number } | null;
   failed: number;
+  /** Lessons finished but not announced yet (waiting for a retry, or the send failed). */
+  pendingNotice: number;
+  announcing: boolean;
+  onAnnounceNow: () => void;
   finished: boolean;
   onPublish: () => void;
   onSaveDraft: () => void;
@@ -32,6 +36,9 @@ export function UploadActionBar({
   running,
   progress,
   failed,
+  pendingNotice,
+  announcing,
+  onAnnounceNow,
   finished,
   onPublish,
   onSaveDraft,
@@ -39,6 +46,16 @@ export function UploadActionBar({
 }: UploadActionBarProps) {
   const t = useTranslations('upload');
   const disabled = running || checking || blocked > 0 || count === 0;
+  const sendNow = pendingNotice > 0 && (
+    <button
+      type="button"
+      onClick={onAnnounceNow}
+      disabled={announcing}
+      className="flex-shrink-0 rounded-full bg-[hsl(var(--surface-elevated))] px-3 py-1.5 text-xs font-bold hover:bg-[hsl(var(--surface-highlight))] disabled:opacity-40"
+    >
+      {t('notifyPending.sendNow')}
+    </button>
+  );
 
   return (
     <div
@@ -66,6 +83,7 @@ export function UploadActionBar({
               <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
               {t('allDone')}
             </p>
+            {sendNow}
             <button
               type="button"
               onClick={onStartOver}
@@ -104,6 +122,13 @@ export function UploadActionBar({
               <p className={`text-xs ${blocked > 0 || failed > 0 ? 'text-amber-400' : 'text-muted-foreground'}`}>
                 {blocked > 0 ? t('blocked', { count: blocked }) : checking ? t('checkingExisting') : t('someFailed', { count: failed })}
               </p>
+            )}
+
+            {sendNow && (
+              <div className="flex items-center gap-2">
+                <p className="min-w-0 flex-1 text-xs text-muted-foreground">{failed > 0 && t('notifyPending.hint')}</p>
+                {sendNow}
+              </div>
             )}
 
             <div className="flex gap-2">

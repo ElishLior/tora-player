@@ -7,10 +7,10 @@ import { useTranslations } from 'next-intl';
 import { AlertTriangle, Pause, Play, Scissors, Search } from 'lucide-react';
 import { Link } from '@/i18n/routing';
 import { EmptyState } from '@/components/shared/empty-state';
-import { LessonDateLink, LessonTagLink } from '@/components/lessons/lesson-browse-links';
-import { getLessonTracks } from '@/lib/lesson-tracks';
+import { LessonDateLink, LessonTagList } from '@/components/lessons/lesson-browse-links';
+import { PartDurations } from '@/components/lessons/part-durations';
+import { getLessonPartSeconds, getLessonTracks } from '@/lib/lesson-tracks';
 import { playLessons } from '@/lib/play-lesson';
-import { formatDuration } from '@/lib/utils';
 import { tagPath } from '@/lib/tag-links';
 import { useAudioStore } from '@/stores/audio-store';
 import type { Category, LessonWithRelations } from '@/types/database';
@@ -124,17 +124,19 @@ export default function ShortsClient({ lessons, topics, loadFailed, initialTag }
   const renderRow = (lesson: LessonWithRelations) => {
     const isCurrent = currentTrack?.id === lesson.id;
     const topicLabel = topicTabs.find((tab) => tab.id === topicOf(lesson, topics))?.label;
+    const partSeconds = getLessonPartSeconds(lesson);
     return (
       <li
         key={lesson.id}
-        className="flex items-center gap-3 rounded-lg p-2.5 transition-colors hover:bg-[hsl(var(--surface-highlight))]"
+        className="relative flex items-center gap-3 rounded-lg p-2.5 transition-colors hover:bg-[hsl(var(--surface-highlight))] has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-primary/50"
       >
+        {/* Play and metadata links are siblings of the stretched lesson link, never nested. */}
         <button
           type="button"
           onClick={() => playFrom(lesson)}
           disabled={!lesson.audio_url}
           aria-label={isCurrent && isPlaying ? t('pause') : t('play')}
-          className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-30 ${
+          className={`relative z-10 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-30 ${
             isCurrent
               ? 'bg-primary text-primary-foreground'
               : 'bg-[hsl(var(--surface-elevated))] text-foreground hover:bg-primary hover:text-primary-foreground'
@@ -143,30 +145,24 @@ export default function ShortsClient({ lessons, topics, loadFailed, initialTag }
           {isCurrent && isPlaying ? <Pause className="h-4 w-4" /> : <Play className="ms-0.5 h-4 w-4" />}
         </button>
         <div className="min-w-0 flex-1">
-          <Link href={lessonPath(lesson)} className="block min-w-0">
+          <Link href={lessonPath(lesson)} className="block min-w-0 before:absolute before:inset-0 before:content-['']">
             <p className={`truncate text-sm font-semibold ${isCurrent ? 'text-primary' : ''}`} dir="auto">
               {lesson.hebrew_title || lesson.title}
             </p>
           </Link>
-          <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-            {topicLabel && topicTabs.length > 1 && <span className="text-primary/80">{topicLabel} · </span>}
-            <LessonDateLink date={lesson.date} hebrewDate={lesson.hebrew_date} />
-            {lesson.duration > 0 && (
-              <>
-                {' · '}
-                <bdi>{formatDuration(lesson.duration)}</bdi>
-              </>
+          <div className="flex min-w-0 items-baseline gap-1 text-xs text-muted-foreground">
+            {topicLabel && topicTabs.length > 1 && <span className="flex-shrink-0 text-primary/80">{topicLabel} · </span>}
+            <span className="flex-shrink-0">
+              <LessonDateLink date={lesson.date} hebrewDate={lesson.hebrew_date} />
+            </span>
+            {partSeconds.some((seconds) => seconds > 0) && (
+              <span aria-hidden="true" className="flex-shrink-0">
+                ·
+              </span>
             )}
+            <PartDurations seconds={partSeconds} className="flex-1" />
           </div>
-          {(lesson.tags?.length ?? 0) > 0 && (
-            <ul className="mt-1 flex flex-wrap gap-1.5">
-              {lesson.tags.map((tg) => (
-                <li key={tg} className="max-w-full">
-                  <LessonTagLink tag={tg} />
-                </li>
-              ))}
-            </ul>
-          )}
+          <LessonTagList tags={lesson.tags} />
         </div>
       </li>
     );

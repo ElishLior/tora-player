@@ -55,3 +55,4 @@ Lessons DB/
 
 # Per-machine agent settings (may contain tokens)
 .claude/settings.local.json
+test-results/

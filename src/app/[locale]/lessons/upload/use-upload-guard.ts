@@ -1,20 +1,25 @@
 import { useEffect } from 'react';
 
 /**
- * While `active`: warn before the page is closed or reloaded, and keep the
- * screen awake (Screen Wake Lock, where supported) so a phone doesn't sleep
- * and stall a long upload. The lock is re-taken when the page becomes
+ * While `active`: warn before the page is closed or reloaded (an upload, or a
+ * notification that was not sent yet). While `keepAwake` (default: `active`):
+ * keep the screen awake (Screen Wake Lock, where supported) so a phone doesn't
+ * sleep and stall a long upload. The lock is re-taken when the page becomes
  * visible again, since browsers drop it on hide.
  */
-export function useUploadGuard(active: boolean, leaveWarning: string) {
+export function useUploadGuard(active: boolean, leaveWarning: string, keepAwake: boolean = active) {
   useEffect(() => {
     if (!active) return;
-
     const warn = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = leaveWarning;
     };
     window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [active, leaveWarning]);
+
+  useEffect(() => {
+    if (!keepAwake) return;
 
     let lock: WakeLockSentinel | null = null;
     let stopped = false;
@@ -36,9 +41,8 @@ export function useUploadGuard(active: boolean, leaveWarning: string) {
 
     return () => {
       stopped = true;
-      window.removeEventListener('beforeunload', warn);
       document.removeEventListener('visibilitychange', onVisibility);
       void lock?.release().catch(() => undefined);
     };
-  }, [active, leaveWarning]);
+  }, [keepAwake]);
 }

@@ -1,7 +1,7 @@
 import 'server-only';
 import webpush from 'web-push';
 import { createAdminSupabaseClient } from '@/lib/supabase/admin';
-import { summarizePushOutcomes, type PushOutcome } from '@/lib/notifications/push-results';
+import { configRejectionsByService, summarizePushOutcomes, type PushOutcome } from '@/lib/notifications/push-results';
 
 export interface PushPayload {
   title: string;
@@ -17,6 +17,16 @@ export interface StoredPushSubscription {
   endpoint: string;
   p256dh: string;
   auth: string;
+  /** Owner of the device, when it was subscribed while signed in. */
+  user_id?: string | null;
+}
+
+export interface PushResult {
+  sent: number;
+  expired: number;
+  failed: number;
+  /** Subscription ids the push service accepted. */
+  deliveredIds: string[];
 }
 
 const SEND_CONCURRENCY = 25;
@@ -37,7 +47,7 @@ export async function loadAllPushSubscriptions(): Promise<StoredPushSubscription
   for (let from = 0; ; from += PAGE_SIZE) {
     const { data, error } = await supabase
       .from('push_subscriptions')
-      .select('id, endpoint, p256dh, auth')
+      .select('id, endpoint, p256dh, auth, user_id')
       .order('created_at', { ascending: true })
       .range(from, from + PAGE_SIZE - 1);
     if (error) throw new Error(error.message);
@@ -49,20 +59,25 @@ export async function loadAllPushSubscriptions(): Promise<StoredPushSubscription
 /**
  * Sends `payload` to every subscription, deletes subscriptions the push
  * service reports as gone (404/410) and stamps last_success_at on delivered
- * ones. Never throws; returns delivery counts.
+ * ones. 400/403 rejections are kept and logged per push service host.
+ * Urgency defaults to 'high': Android Doze holds 'normal' messages until the
+ * phone wakes, and a new lesson should arrive at once. TTL stays 24 hours.
+ * Never throws; returns delivery counts and the delivered ids.
  */
 export async function sendPush(
   subscriptions: StoredPushSubscription[],
   payload: PushPayload,
-): Promise<{ sent: number; expired: number; failed: number }> {
+  { urgency = 'high' }: { urgency?: 'very-low' | 'low' | 'normal' | 'high' } = {},
+): Promise<PushResult> {
   const vapidDetails = getVapidDetails();
   if (!vapidDetails) {
     console.warn('[push] VAPID keys are not configured; skipping push.');
-    return { sent: 0, expired: 0, failed: subscriptions.length };
+    return { sent: 0, expired: 0, failed: subscriptions.length, deliveredIds: [] };
   }
 
   const body = JSON.stringify(payload);
   const outcomes: PushOutcome[] = [];
+  const rejected: Array<{ endpoint: string; statusCode?: number }> = [];
   for (let i = 0; i < subscriptions.length; i += SEND_CONCURRENCY) {
     const batch = subscriptions.slice(i, i + SEND_CONCURRENCY);
     const settled = await Promise.allSettled(
@@ -70,7 +85,7 @@ export async function sendPush(
         webpush.sendNotification(
           { endpoint: subscription.endpoint, keys: { p256dh: subscription.p256dh, auth: subscription.auth } },
           body,
-          { vapidDetails, TTL: TTL_SECONDS, urgency: 'normal' },
+          { vapidDetails, TTL: TTL_SECONDS, urgency },
         ),
       ),
     );
@@ -81,6 +96,7 @@ export async function sendPush(
       } else {
         const statusCode = (result.reason as { statusCode?: number } | undefined)?.statusCode;
         outcomes.push({ id, ok: false, statusCode });
+        rejected.push({ endpoint: batch[index].endpoint, statusCode });
       }
     });
   }
@@ -107,5 +123,9 @@ export async function sendPush(
   if (failedIds.length > 0) {
     console.warn(`[push] ${failedIds.length} deliveries failed (kept for retry).`);
   }
-  return { sent: sentIds.length, expired: expiredIds.length, failed: failedIds.length };
+  const configRejections = configRejectionsByService(rejected);
+  if (Object.keys(configRejections).length > 0) {
+    console.warn('[push] rejected by the push service (check VAPID keys/subject):', configRejections);
+  }
+  return { sent: sentIds.length, expired: expiredIds.length, failed: failedIds.length, deliveredIds: sentIds };
 }
