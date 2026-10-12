@@ -86,7 +86,7 @@ export default async function HomePage({ params }: Props) {
           <ContinueListeningSection title={t('continueListening')} />
 
           {latestLesson ? (
-            <LatestLessonHero eyebrow={t('todayLesson')} lesson={latestLesson} />
+            <LatestLessonHero eyebrow={latestLesson.date === today ? t('todayLesson') : t('latestLesson')} lesson={latestLesson} />
           ) : (
             <EmptyState
               icon={BookOpen}

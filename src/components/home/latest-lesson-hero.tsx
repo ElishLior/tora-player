@@ -139,7 +139,7 @@ export function LatestLessonHero({ eyebrow, lesson }: LatestLessonHeroProps) {
           <LessonDateLink date={lesson.date} hebrewDate={lesson.hebrew_date} className="text-sm text-foreground/75" />
         </div>
 
-        {/* Each chip starts its own part, even when the listener's saved place is elsewhere. */}
+        {/* Each chip starts its own part, even when the listener's saved place is elsewhere. The part already loaded keeps its live position (resuming never seeks). */}
         <PartDurations
           variant="chips"
           seconds={partSeconds}

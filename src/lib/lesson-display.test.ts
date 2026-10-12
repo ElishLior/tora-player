@@ -20,6 +20,7 @@ describe('readingHue', () => {
 describe('hebrewDayMonth', () => {
   it('splits a stored Hebrew date into day and month', () => {
     expect(hebrewDayMonth('כ״ח תשרי תשפ״ז')).toEqual({ day: 'כ״ח', month: 'תשרי' });
+    expect(hebrewDayMonth('כ״ח אדר א׳ תשפ״ז')).toEqual({ day: 'כ״ח', month: 'אדר א׳' });
     expect(hebrewDayMonth('  י״ד   תשרי תשפ״ז ')).toEqual({ day: 'י״ד', month: 'תשרי' });
   });
 

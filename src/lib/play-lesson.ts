@@ -7,7 +7,7 @@ import { getTrackKey, useAudioStore, type AudioTrack } from "@/stores/audio-stor
 import { useProgressStore } from "@/stores/progress-store";
 
 export interface PlayLessonOptions {
-  /** Start with this part from its beginning, instead of the saved position (a tapped part chip). */
+  /** Start with this part from its beginning, instead of the saved position (a tapped part chip). If that part is the one already loaded, it resumes where it is (resuming never seeks). */
   startPart?: number;
 }
 

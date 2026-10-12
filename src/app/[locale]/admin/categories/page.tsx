@@ -397,7 +397,7 @@ export default function AdminCategoriesPage() {
           className={`flex items-center gap-3 rounded-xl px-4 py-3 transition-colors ${
             isChild
               ? 'border border-border/30 bg-[hsl(var(--surface-elevated))]/50'
-              : 'border border-r-2 border-border/50 border-r-primary bg-[hsl(var(--surface-elevated))]'
+              : 'border border-s-2 border-border/50 border-s-primary bg-[hsl(var(--surface-elevated))]'
           } ${isEditing ? 'ring-1 ring-primary/30' : ''}`}
         >
           {/* Reorder buttons */}

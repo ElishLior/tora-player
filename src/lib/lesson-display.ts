@@ -27,9 +27,10 @@ export interface HebrewDayMonth {
   month: string;
 }
 
-/** "כ״ח תשרי תשפ״ז" → day "כ״ח", month "תשרי". Null when the stored date is missing or unusual. */
+/** "כ״ח תשרי תשפ״ז" → day "כ״ח", month "תשרי" ("כ״ח אדר א׳ תשפ״ז" → month "אדר א׳"). Null when the stored date is missing or unusual. */
 export function hebrewDayMonth(hebrewDate: string | null | undefined): HebrewDayMonth | null {
   const parts = hebrewDate?.trim().split(/\s+/) ?? [];
   if (parts.length < 2) return null;
-  return { day: parts[0], month: parts[1] };
+  // Everything between the day and the year: "אדר א׳" keeps its letter.
+  return { day: parts[0], month: parts.length > 2 ? parts.slice(1, -1).join(' ') : parts[1] };
 }
