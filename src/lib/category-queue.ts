@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getLessonTracks } from '@/lib/lesson-tracks';
-import { LESSON_AUDIO_FILES, LESSON_CARD_COLUMNS } from '@/lib/supabase/lesson-selects';
+import { LESSON_AUDIO_FILES, LESSON_CARD_COLUMNS, LESSON_CATEGORY } from '@/lib/supabase/lesson-selects';
 import { withLessonSlugSelect } from '@/lib/supabase/lesson-slug-select';
 import { newQueueSessionId, type CategoryQueueSource, type QueueCursor, type SegmentPage } from '@/lib/queue-source';
 import type { AudioTrack } from '@/stores/audio-store';
@@ -120,7 +120,7 @@ export function parseCategorySegmentRequest(raw: unknown): CategorySegmentReques
   };
 }
 
-const SEGMENT_SELECT = `${LESSON_CARD_COLUMNS}, series(id, name, hebrew_name), category:categories(id, hebrew_name), ${LESSON_AUDIO_FILES}`;
+const SEGMENT_SELECT = `${LESSON_CARD_COLUMNS}, series(id, name, hebrew_name), ${LESSON_CATEGORY}, ${LESSON_AUDIO_FILES}`;
 
 export interface CategorySegment {
   /** Published lessons in list order, after the cursor, at most `limit`. */

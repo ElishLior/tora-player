@@ -1,10 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   UPDATE_CHECK_INTERVAL_MS,
   UPDATE_MAX_BACKOFF_MS,
   UPDATE_MIN_GAP_MS,
   UPDATE_RELOAD_TTL_MS,
   buildIdFromScriptUrl,
+  fetchDeployedVersion,
   isUpdateRequested,
   parseVersionResponse,
   refreshDecision,
@@ -230,5 +231,49 @@ describe('build id parsing', () => {
     expect(parseVersionResponse({ version: '1.2.0', buildId: 'dev' })).toBeNull();
     expect(parseVersionResponse('<html>')).toBeNull();
     expect(parseVersionResponse(null)).toBeNull();
+  });
+});
+
+describe('fetchDeployedVersion (running vs live build)', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const BODY = { version: '1.2.0', buildId: 'dpl_9xQw3LpAbCdEf' };
+  const okFetch = (body: unknown) =>
+    vi.fn(async () => new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } }));
+
+  it('reads the live version uncached and returns the parsed identity', async () => {
+    const fetcher = okFetch(BODY);
+
+    await expect(fetchDeployedVersion(fetcher as unknown as typeof fetch, 8_000)).resolves.toEqual(BODY);
+    expect(fetcher).toHaveBeenCalledWith('/api/version', expect.objectContaining({ cache: 'no-store' }));
+  });
+
+  it('is silent (null) on a failed response, a malformed body or a network error', async () => {
+    const failed = vi.fn(async () => new Response('nope', { status: 500 }));
+    const malformed = okFetch({ version: '1.2.0', buildId: 'dev' });
+    const offline = vi.fn(async () => {
+      throw new TypeError('Failed to fetch');
+    });
+
+    await expect(fetchDeployedVersion(failed as unknown as typeof fetch, 8_000)).resolves.toBeNull();
+    await expect(fetchDeployedVersion(malformed as unknown as typeof fetch, 8_000)).resolves.toBeNull();
+    await expect(fetchDeployedVersion(offline as unknown as typeof fetch, 8_000)).resolves.toBeNull();
+  });
+
+  it('gives up after the timeout instead of waiting forever', async () => {
+    vi.useFakeTimers();
+    const hangs = vi.fn(
+      (_url: string, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+        }),
+    );
+
+    const pending = fetchDeployedVersion(hangs as unknown as typeof fetch, 8_000);
+    await vi.advanceTimersByTimeAsync(8_000);
+
+    await expect(pending).resolves.toBeNull();
   });
 });

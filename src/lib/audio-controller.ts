@@ -556,7 +556,8 @@ function handleStoreChange(state: AudioPlayerState, previous: AudioPlayerState) 
     if (state.queueNotice?.kind === "loading") state.setQueueNotice(null);
   }
   if (previous.isPlaying && !state.isPlaying) {
-    // Pausing (by anyone) cancels a wait for the next lesson.
+    // Pausing (by anyone) cancels a pending media-recovery retry and a wait for the next lesson.
+    clearRetry();
     playToken += 1;
     cancelPendingNext();
     if (state.queueNotice?.kind === "loading") state.setQueueNotice(null);
@@ -721,6 +722,8 @@ export function play() {
 export function pause() {
   const state = getState();
   diag("ctrl:pause", { intent: state.isPlaying, status: state.playbackStatus });
+  // A stale retry must not restart the track after the listener paused (or paused and played again).
+  clearRetry();
   cancelPendingNext();
   state.pause();
   audioEngine.pause();

@@ -183,12 +183,14 @@ export async function createCategory(formData: FormData): Promise<{ data: Catego
 /**
  * Renames and edits a category. Only the fields the form sent are written, so
  * changing the Hebrew name never touches the English one, and the reverse holds too.
- * The parent is not changed here (see moveCategory).
+ * The parent is not changed here (see moveCategory). `expectedUpdatedAt` is the
+ * category's updated_at as the admin read it; a changed category is refused ('stale').
  */
 export async function updateCategory(
   id: string,
   formData: FormData,
-): Promise<{ data: Category } | { error: CategoryFieldErrors }> {
+  expectedUpdatedAt: string,
+): Promise<{ data: Category } | { error: CategoryFieldErrors | 'stale' }> {
   if (!(await isAdmin())) {
     return { error: { _form: [NOT_ADMIN] } };
   }
@@ -215,11 +217,19 @@ export async function updateCategory(
       return { error: { parent_id: [PARENT_CHANGE_ERROR] } };
     }
 
-    const { data, error } = await supabase.from('categories').update(parsed.data).eq('id', id).select().single();
+    // The write only applies to the version the admin read: 0 rows means someone else changed it since.
+    const { data, error } = await supabase
+      .from('categories')
+      .update(parsed.data)
+      .eq('id', id)
+      .eq('updated_at', expectedUpdatedAt)
+      .select()
+      .maybeSingle();
 
     if (error) {
       return { error: { _form: [`לא ניתן לשמור את הקטגוריה (${error.message})`] } };
     }
+    if (!data) return { error: 'stale' };
 
     revalidateCatalog();
     return { data: data as Category };

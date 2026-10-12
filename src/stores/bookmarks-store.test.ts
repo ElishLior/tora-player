@@ -7,10 +7,11 @@ const actions = vi.hoisted(() => ({
 }));
 vi.mock('@/actions/bookmarks', () => actions);
 
-// The node test environment has no localStorage; the persisted store needs one.
+// The node test environment has no localStorage or window. The persist middleware is only
+// applied when `window` exists (zustand's ssrSafe), so the store needs a window with localStorage.
 vi.hoisted(() => {
   const data = new Map<string, string>();
-  vi.stubGlobal('localStorage', {
+  const localStorage = {
     getItem: (key: string) => data.get(key) ?? null,
     setItem: (key: string, value: string) => {
       data.set(key, value);
@@ -18,10 +19,17 @@ vi.hoisted(() => {
     removeItem: (key: string) => {
       data.delete(key);
     },
-  });
+  };
+  vi.stubGlobal('localStorage', localStorage);
+  vi.stubGlobal('window', { localStorage, addEventListener: () => {}, removeEventListener: () => {} });
 });
 
-import { useBookmarksStore, type LocalBookmark } from './bookmarks-store';
+import {
+  rehydrateBookmarksOnStorageEvent,
+  startBookmarksCrossTabSync,
+  useBookmarksStore,
+  type LocalBookmark,
+} from './bookmarks-store';
 
 const BOOKMARK = '11111111-2222-3333-4444-555555555555';
 const OTHER = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
@@ -203,5 +211,56 @@ describe('addBookmark', () => {
     expect(result).toEqual({ error: 'sync_failed' });
     const created = useBookmarksStore.getState().bookmarks.find((b) => b.position === 30);
     expect(created?.updatedAt).toBeUndefined();
+  });
+});
+
+describe('cross-tab sync', () => {
+  // Another tab saved its list: it edited `base` and added one bookmark.
+  const elsewhere: LocalBookmark = { ...base, id: 'bbbbbbbb-cccc-dddd-eeee-ffffffffffff', note: 'new elsewhere' };
+  const savedByOtherTab = (bookmarks: LocalBookmark[]) =>
+    JSON.stringify({ state: { bookmarks, pendingDeletes: [] }, version: 0 });
+
+  function fakeWindow() {
+    const listeners = new Set<(event: StorageEvent) => void>();
+    return {
+      listeners,
+      target: {
+        addEventListener: vi.fn((_: string, listener: (event: StorageEvent) => void) => listeners.add(listener)),
+        removeEventListener: vi.fn((_: string, listener: (event: StorageEvent) => void) => listeners.delete(listener)),
+      },
+    };
+  }
+
+  it('reloads the list when another tab saves the bookmarks, without duplicates', () => {
+    const edited = { ...base, note: 'edited elsewhere' };
+    localStorage.setItem('tora-bookmarks', savedByOtherTab([edited, other, elsewhere]));
+
+    expect(rehydrateBookmarksOnStorageEvent('tora-bookmarks')).toBe(true);
+
+    const ids = useBookmarksStore.getState().bookmarks.map((b) => b.id);
+    expect(ids).toEqual([BOOKMARK, OTHER, elsewhere.id]);
+    expect(bookmarkById(BOOKMARK)?.note).toBe('edited elsewhere');
+  });
+
+  it('ignores storage events for other keys and keeps this tab as it is', () => {
+    localStorage.setItem('tora-bookmarks', savedByOtherTab([elsewhere]));
+
+    expect(rehydrateBookmarksOnStorageEvent('tora-progress')).toBe(false);
+    expect(rehydrateBookmarksOnStorageEvent(null)).toBe(false);
+
+    expect(useBookmarksStore.getState().bookmarks.map((b) => b.id)).toEqual([BOOKMARK, OTHER]);
+  });
+
+  it('listens to the window storage event only while it is started', () => {
+    const { listeners, target } = fakeWindow();
+    const stop = startBookmarksCrossTabSync(target as unknown as Window);
+    localStorage.setItem('tora-bookmarks', savedByOtherTab([elsewhere]));
+
+    listeners.forEach((listener) => listener({ key: 'tora-bookmarks' } as StorageEvent));
+    expect(useBookmarksStore.getState().bookmarks.map((b) => b.id)).toEqual([elsewhere.id]);
+
+    stop();
+    expect(listeners.size).toBe(0);
+    expect(target.removeEventListener).toHaveBeenCalledTimes(1);
   });
 });

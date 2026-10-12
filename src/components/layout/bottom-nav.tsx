@@ -11,19 +11,16 @@ export function BottomNav({ locale }: { locale: string }) {
   const pathname = usePathname();
   const t = useTranslations('nav');
   // Narrow selectors: the store updates currentTime ~4x a second during playback.
-  const hasMiniPlayer = useAudioStore((s) => s.currentTrack !== null);
   const isMiniPlayerExpanded = useAudioStore((s) => s.isMiniPlayerExpanded);
 
   // Hide when full player is open
   if (isMiniPlayerExpanded) return null;
 
+  // The tab bar is the bottom edge; the mini player sits directly above it (MiniPlayer).
+  // Desktop has the side menu instead (SideNav).
   return (
     <nav
-      className={cn(
-        // Desktop has the side menu instead (SideNav).
-        'fixed inset-x-0 z-40 border-t border-[hsl(0,0%,18%)] bg-background safe-area-bottom lg:hidden',
-        hasMiniPlayer ? 'bottom-[56px]' : 'bottom-0'
-      )}
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-[hsl(0,0%,18%)] bg-background pb-[env(safe-area-inset-bottom)] lg:hidden"
       role="navigation"
       aria-label={t('label')}
     >

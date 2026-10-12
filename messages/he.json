@@ -271,6 +271,7 @@
       "failed": "ההשמעה נעצרה. הקש על נגן כדי לנסות שוב."
     },
     "previousTrack": "הקודם",
+    "continueBlocked": "המשך ניגון",
     "nextTrack": "הבא",
     "upNextEmpty": "אין עוד שיעורים בתור",
     "showAllUpNext": "הצגת כל התור ({count})",
@@ -898,7 +899,9 @@
     "refresh": "רענון",
     "later": "אחר כך",
     "recovery": "לא נטענה הגרסה החדשה. סגרו את הלשונית ופתחו את האתר מחדש.",
-    "versionLabel": "גרסה {version} · {build}"
+    "versionLabel": "גרסה {version} · {build}",
+    "runningAndDeployed": "פועלת: {running} · באתר: {deployed}",
+    "versionDiffers": "(שונה מהאתר)"
   },
   "releaseAnnouncement": {
     "title": "הודעת גרסה",
