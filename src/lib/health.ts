@@ -1,4 +1,5 @@
 import { isR2RuntimeConfigured } from './r2-config';
+import { APP_VERSION } from './app-version';
 
 export type DependencyStatus = 'ok' | 'degraded';
 
@@ -55,7 +56,7 @@ export async function runHealthChecks(
   env: HealthEnv = process.env,
   fetcher: Fetcher = fetch,
 ): Promise<HealthResult> {
-  const version = env.npm_package_version || '0.1.0';
+  const version = APP_VERSION;
   const timestamp = new Date().toISOString();
   const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, '');
   const supabaseKey = env.NEXT_PUBLIC_SUPABASE_ANON_KEY;

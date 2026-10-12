@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { APP_VERSION } from './app-version';
 import { runHealthChecks } from './health';
 
 const configuredEnv = {
@@ -25,6 +26,12 @@ describe('runHealthChecks', () => {
     expect(result.body.status).toBe('degraded');
     expect(result.body.checks.supabase).toBe('unconfigured');
     expect(result.body.checks.schema).toBe('skipped');
+  });
+
+  it('reports the build version from the single identity module, not a stale fallback', async () => {
+    const result = await runHealthChecks({}, async () => okResponse());
+    expect(result.body.version).toBe(APP_VERSION);
+    expect(result.body.version).not.toBe('0.1.0');
   });
 
   it('returns ok with schema, lesson counts, and R2 readiness when dependencies respond', async () => {
