@@ -2,7 +2,7 @@
 
 Versions follow `MAJOR.MINOR.PATCH`. The version in `package.json` is the release being worked on; a version is released when it is deployed to production from `main` (tag `vX.Y.Z` on that commit). Add each change under the in-progress version as it lands in `dev`.
 
-## 1.1.5 — in progress
+## 1.2.0 — in progress
 
 ## 1.1.4 — October 12, 2026
 
