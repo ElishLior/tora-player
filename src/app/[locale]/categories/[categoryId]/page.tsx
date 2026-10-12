@@ -38,15 +38,27 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-/** Subcategories as links, each with its own subcategories nested below (up to three levels). */
-function SubcategoryLinks({ nodes, locale }: { nodes: CategoryWithChildren[]; locale: string }) {
+/**
+ * Subcategories as links, each with its own subcategories nested below (up to three levels).
+ * The top level is a tile grid from lg (two columns, three from xl), so a wide page is not a
+ * stack of full-width bars; phones keep the list.
+ */
+function SubcategoryLinks({
+  nodes,
+  locale,
+  topLevel = false,
+}: {
+  nodes: CategoryWithChildren[];
+  locale: string;
+  topLevel?: boolean;
+}) {
   return (
-    <div className="space-y-1">
+    <div className={topLevel ? 'space-y-1 lg:grid lg:grid-cols-2 lg:gap-3 xl:grid-cols-3' : 'space-y-1'}>
       {nodes.map((node) => (
         <div key={node.id} className="space-y-0.5">
           <Link
             href={`/categories/${node.id}`}
-            className="flex items-center gap-3 rounded-lg bg-[hsl(var(--surface-elevated))] p-3 transition-colors hover:bg-[hsl(var(--surface-highlight))] focus-visible:ring-2 focus-visible:ring-primary/60 motion-reduce:transition-none"
+            className="flex items-center gap-3 rounded-lg bg-[hsl(var(--surface-elevated))] p-3 transition-colors hover:bg-[hsl(var(--surface-highlight))] focus-visible:ring-2 focus-visible:ring-primary/60 motion-reduce:transition-none lg:rounded-xl lg:p-4"
           >
             <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md bg-primary/10">
               <FolderOpen className="h-4 w-4 text-primary" />
@@ -123,22 +135,19 @@ export default async function CategoryDetailPage({ params }: Props) {
         <span className="font-medium text-foreground">{name}</span>
       </nav>
 
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold">{name}</h1>
-        {category.description && <p className="mt-1 text-sm text-muted-foreground">{category.description}</p>}
-        <div className="mt-3">
-          <PlayCategoryButton
-            categoryId={category.id}
-            scopeIds={scopeIds}
-            snapshotAt={snapshotAt}
-            rows={lessons}
-          />
+      {/* Header: title and description, with the continuous-play action at the inline end on desktop. */}
+      <div className="lg:flex lg:items-start lg:justify-between lg:gap-6">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold">{name}</h1>
+          {category.description && <p className="mt-1 text-sm text-muted-foreground">{category.description}</p>}
+        </div>
+        <div className="mt-3 lg:mt-0 lg:flex-shrink-0">
+          <PlayCategoryButton categoryId={category.id} scopeIds={scopeIds} snapshotAt={snapshotAt} rows={lessons} />
         </div>
       </div>
 
       {/* Subcategories, and theirs (if this category has any) */}
-      {subcategories.length > 0 && <SubcategoryLinks nodes={subcategories} locale={locale} />}
+      {subcategories.length > 0 && <SubcategoryLinks nodes={subcategories} locale={locale} topLevel />}
 
       {/* Lessons */}
       {lessons.length > 0 ? (

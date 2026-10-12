@@ -79,7 +79,7 @@ function writeStored(value: string) {
  * feature in a grid, each with the app's own icon. Starts collapsed on the
  * server and on later visits, open on the first visit, then remembers the choice.
  */
-export function HomeIntro() {
+export function HomeIntro({ className }: { className?: string }) {
   const t = useTranslations('homeIntro');
   const hydrated = useHydrated();
   const [open, setOpen] = useState(false);
@@ -99,7 +99,7 @@ export function HomeIntro() {
   };
 
   const lessonPageTip = (
-    <div className="grid grid-cols-[auto_1fr] items-start gap-3 rounded-xl border border-primary/30 bg-gradient-to-r from-primary/14 to-primary/5 p-3 text-[13px] leading-relaxed text-foreground/80">
+    <div className="from-primary/14 grid grid-cols-[auto_1fr] items-start gap-3 rounded-xl border border-primary/30 bg-gradient-to-r to-primary/5 p-3 text-[13px] leading-relaxed text-foreground/80">
       <span className="grid h-8 w-8 place-items-center rounded-lg bg-primary/20 text-[hsl(141_70%_62%)]">
         <MousePointerClick aria-hidden="true" className="h-4 w-4" />
       </span>
@@ -110,7 +110,10 @@ export function HomeIntro() {
   return (
     <section
       aria-labelledby="home-intro-title"
-      className="rounded-2xl border border-border/60 bg-[linear-gradient(180deg,hsl(0_0%_12%),hsl(0_0%_10%))] px-3 pb-3 pt-1"
+      className={cn(
+        'rounded-2xl border border-border/60 bg-[linear-gradient(180deg,hsl(0_0%_12%),hsl(0_0%_10%))] px-3 pb-3 pt-1',
+        className,
+      )}
     >
       <button
         type="button"
@@ -119,7 +122,7 @@ export function HomeIntro() {
         aria-controls="home-intro-body"
         className="flex min-h-12 w-full items-center gap-3 rounded-xl text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
       >
-        <span className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg bg-primary/12 text-primary">
+        <span className="bg-primary/12 grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg text-primary">
           <Sparkles aria-hidden="true" className="h-4 w-4" />
         </span>
         <span id="home-intro-title" className="flex-1 text-[15px] font-bold text-foreground">
@@ -131,27 +134,36 @@ export function HomeIntro() {
         <span className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-full bg-[hsl(var(--surface-elevated))]">
           <ChevronDown
             aria-hidden="true"
-            className={cn('h-4 w-4 transition-transform duration-200 motion-reduce:transition-none', open && 'rotate-180')}
+            className={cn(
+              'h-4 w-4 transition-transform duration-200 motion-reduce:transition-none',
+              open && 'rotate-180',
+            )}
           />
         </span>
       </button>
 
       <div id="home-intro-body" hidden={!open} className={cn('grid gap-3 pt-2', !open && 'hidden')}>
         <p className="text-sm leading-relaxed text-foreground/75">{t('lead')}</p>
-        <ul className="grid gap-2 sm:grid-cols-2">
+        {/* Two tinted cards per row on every screen (concept B). */}
+        <ul className="grid grid-cols-2 gap-2">
           {ITEMS.map((item) => (
             <li
               key={item.key}
               className="grid grid-cols-[auto_1fr] items-start gap-3 rounded-xl bg-[hsl(var(--surface-elevated))] p-3 text-[13px] leading-relaxed text-foreground/75"
             >
-              <FeatureIcons hue={item.hue} icons={item.icons} controls={item.key === 'controls'} share={item.key === 'share'} />
+              <FeatureIcons
+                hue={item.hue}
+                icons={item.icons}
+                controls={item.key === 'controls'}
+                share={item.key === 'share'}
+              />
               <div className="grid gap-2">
                 <p>{t.rich(`items.${item.key}`, RICH)}</p>
                 {item.key === 'notifications' && <NotificationsAction />}
               </div>
             </li>
           ))}
-          <li className="sm:col-span-2">{lessonPageTip}</li>
+          <li className="col-span-2">{lessonPageTip}</li>
         </ul>
       </div>
 
@@ -181,7 +193,9 @@ function FeatureIcons({
     >
       {controls ? (
         <>
-          <span className="rounded border-[1.5px] border-current px-0.5 text-[11px] font-extrabold leading-none tabular-nums">1x</span>
+          <span className="rounded border-[1.5px] border-current px-0.5 text-[11px] font-extrabold tabular-nums leading-none">
+            1x
+          </span>
           <Moon className="h-4 w-4" />
           <Car className="h-4 w-4" />
         </>

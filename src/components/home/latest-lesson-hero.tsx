@@ -11,8 +11,9 @@ import { useIsDownloaded } from '@/hooks/use-offline';
 import { getResumePoint } from '@/lib/lesson-progress';
 import { getLessonPartSeconds, getLessonTracks } from '@/lib/lesson-tracks';
 import { playLesson } from '@/lib/play-lesson';
+import { hebrewDayMonth, readingHue } from '@/lib/lesson-display';
 import { parshaLabel } from '@/lib/parsha-label';
-import { formatDuration } from '@/lib/utils';
+import { cn, formatDuration } from '@/lib/utils';
 import { saveAudioFilesOffline } from '@/lib/offline-storage';
 import { handleDeviceDownloadClick } from '@/lib/device-download';
 import {
@@ -23,7 +24,7 @@ import {
 } from '@/lib/player-track-actions';
 import { useProgressStore } from '@/stores/progress-store';
 import { isNewSince, useVisitStore } from '@/stores/visit-store';
-import { LessonDateLink, LessonTagList } from '@/components/lessons/lesson-browse-links';
+import { LessonDateLink, LessonSeriesLink, LessonTagList } from '@/components/lessons/lesson-browse-links';
 import { LessonPlayButton, useLessonPlayback } from '@/components/lessons/lesson-play-button';
 import { PartDurations } from '@/components/lessons/part-durations';
 import { ShareButton } from '@/components/shared/share-button';
@@ -33,6 +34,8 @@ interface LatestLessonHeroProps {
   /** The small line above the title, e.g. "השיעור של היום". */
   eyebrow: string;
   lesson: LessonWithRelations;
+  /** Layout hook: the home page's desktop order. */
+  className?: string;
 }
 
 const BACKDROP: React.CSSProperties = {
@@ -45,11 +48,14 @@ const iconButton =
 
 /**
  * "השיעור של היום": the newest lesson as the page's hero. The whole card opens
- * the lesson page (stretched title link); the play button, the part chips, the
- * tags and the actions are siblings of that link, never nested inside it.
+ * the lesson page (stretched title link); the series and date links, the play
+ * button, the part chips, the tags and the actions are siblings of that link,
+ * never nested inside it. The reading cover tile is decorative (aria-hidden).
+ * Device-only state renders after hydration.
  */
-export function LatestLessonHero({ eyebrow, lesson }: LatestLessonHeroProps) {
+export function LatestLessonHero({ eyebrow, lesson, className }: LatestLessonHeroProps) {
   const t = useTranslations('player');
+  const tShell = useTranslations('desktopShell');
   const hydrated = useHydrated();
   const tracks = useMemo(() => getLessonTracks(lesson), [lesson]);
   const partSeconds = useMemo(() => getLessonPartSeconds(lesson), [lesson]);
@@ -69,6 +75,9 @@ export function LatestLessonHero({ eyebrow, lesson }: LatestLessonHeroProps) {
   const isNew = hydrated && !saved && isNewSince(lesson.created_at, previousVisitAt);
   const offlineSaved = isOffline || savedNow;
   const reading = lesson.parsha ? parshaLabel(lesson.parsha) : null;
+  const hue = readingHue(lesson.parsha || lesson.id);
+  // The cover shows the reading's name, or the day when the lesson has no reading.
+  const coverText = reading ?? hebrewDayMonth(lesson.hebrew_date)?.day ?? lesson.date.slice(8, 10);
   const playLabel =
     isCurrent || !hasResume
       ? t('play')
@@ -76,6 +85,7 @@ export function LatestLessonHero({ eyebrow, lesson }: LatestLessonHeroProps) {
         ? t('resumePart', { number: resume.index + 1, time: formatDuration(resume.position) })
         : t('resumeAt', { time: formatDuration(resume.position) });
   const single = tracks.length === 1 ? tracks[0] : null;
+  const title = lesson.hebrew_title || lesson.title;
 
   const handleSaveOffline = async () => {
     if (offlineSaved || saveState === 'saving') return;
@@ -97,7 +107,7 @@ export function LatestLessonHero({ eyebrow, lesson }: LatestLessonHeroProps) {
   };
 
   return (
-    <section aria-labelledby={`hero-${lesson.id}`} className="relative isolate rounded-3xl p-5">
+    <section aria-labelledby={`hero-${lesson.id}`} className={cn('relative isolate rounded-3xl p-5 lg:p-8', className)}>
       {/* Backdrop and the decorative reading: clipped here so the share menu is not. */}
       <div aria-hidden="true" className="absolute inset-0 -z-10 overflow-hidden rounded-3xl" style={BACKDROP}>
         {reading && (
@@ -107,110 +117,146 @@ export function LatestLessonHero({ eyebrow, lesson }: LatestLessonHeroProps) {
         )}
       </div>
 
-      <div className="grid gap-4">
-        <div className="flex items-center gap-2">
-          <p className="flex items-center gap-2 text-[13px] font-bold tracking-wide text-[hsl(48_90%_82%)]">
-            <span aria-hidden="true" className="h-2 w-2 rounded-full bg-[hsl(45_95%_62%)] motion-safe:animate-pulse" />
-            {eyebrow}
-          </p>
-          {isNew && (
-            <span className="rounded-full bg-primary px-2 py-0.5 text-[13px] font-extrabold text-primary-foreground">
-              {t('newBadge')}
-            </span>
-          )}
-        </div>
-
-        <h2 id={`hero-${lesson.id}`} className="text-[26px] font-extrabold leading-tight tracking-tight text-foreground">
-          <Link
-            href={lessonPath(lesson)}
-            dir="auto"
-            className="before:absolute before:inset-0 before:content-[''] hover:underline focus-visible:outline-none"
-          >
-            {lesson.hebrew_title || lesson.title}
-          </Link>
-        </h2>
-
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          {reading && (
-            <span className="rounded-full bg-foreground/12 px-2.5 py-0.5 font-bold text-foreground" dir="rtl">
-              {reading}
-            </span>
-          )}
-          <LessonDateLink date={lesson.date} hebrewDate={lesson.hebrew_date} className="text-sm text-foreground/75" />
-        </div>
-
-        {/* Each chip starts its own part, even when the listener's saved place is elsewhere. The part already loaded keeps its live position (resuming never seeks). */}
-        <PartDurations
-          variant="chips"
-          seconds={partSeconds}
-          onPlayPart={(index) => playLesson(tracks, { startPart: index })}
-        />
-
-        <LessonTagList tags={lesson.tags} />
-
-        <div className="mt-1 flex items-center gap-2">
-          <LessonPlayButton
-            lessonId={lesson.id}
-            tracks={tracks}
-            playLabel={playLabel}
-            pauseLabel={t('pause')}
-            className="h-16 w-16 bg-primary text-primary-foreground shadow-[0_10px_30px_-8px_hsl(141_73%_42%/0.6)] hover:bg-primary/90"
-            iconClassName="h-7 w-7"
-          />
-
-          <div className="ms-auto flex items-center">
-            <ShareButton
-              lessonId={lesson.id}
-              lessonSlug={lesson.slug}
-              title={lesson.hebrew_title || lesson.title}
-              variant="icon"
-              className={iconButton}
-            />
-            <button
-              type="button"
-              onClick={() => void handleSaveOffline()}
-              disabled={offlineSaved || saveState === 'saving'}
-              aria-label={offlineSaved ? t('savedOffline') : t('saveOffline')}
-              className={iconButton}
-            >
-              {saveState === 'saving' ? (
-                <Loader2 aria-hidden="true" className="h-5 w-5 animate-spin" />
-              ) : offlineSaved ? (
-                <CheckCircle aria-hidden="true" className="h-5 w-5 text-primary" />
-              ) : (
-                <Download aria-hidden="true" className="h-5 w-5" />
-              )}
-              {saveState === 'saving' && <span className="sr-only">{saveProgress}%</span>}
-            </button>
-            {/* One file per part: the single-part download sits here; multi-part lessons keep per-part downloads on the lesson page. */}
-            {single && (
-              <a
-                href={getTrackDownloadUrl(single)}
-                download={getTrackDownloadFilename(single)}
-                onClick={(event) =>
-                  handleDeviceDownloadClick(event, {
-                    lessonId: lesson.id,
-                    offlineKey: single.offlineKey,
-                    audioUrl: single.audioUrl,
-                    filename: getTrackDownloadFilename(single),
-                    savedOffline: offlineSaved,
-                  })
-                }
-                aria-label={t('downloadToDevice')}
-                className={iconButton}
-              >
-                <FileDown aria-hidden="true" className="h-5 w-5" />
-              </a>
+      <div className="flex items-stretch gap-4 lg:gap-8">
+        <div className="grid min-w-0 flex-1 content-start gap-4">
+          <div className="flex items-center gap-2">
+            <p className="flex items-center gap-2 text-[13px] font-bold tracking-wide text-[hsl(48_90%_82%)]">
+              <span
+                aria-hidden="true"
+                className="h-2 w-2 rounded-full bg-[hsl(45_95%_62%)] motion-safe:animate-pulse"
+              />
+              {eyebrow}
+            </p>
+            {isNew && (
+              <span className="rounded-full bg-primary px-2 py-0.5 text-[13px] font-extrabold text-primary-foreground">
+                {t('newBadge')}
+              </span>
             )}
           </div>
+
+          <h2
+            id={`hero-${lesson.id}`}
+            className="text-[26px] font-extrabold leading-tight tracking-tight text-foreground lg:text-[32px]"
+          >
+            <Link
+              href={lessonPath(lesson)}
+              dir="auto"
+              className="before:absolute before:inset-0 before:content-[''] hover:underline focus-visible:outline-none"
+            >
+              {title}
+            </Link>
+          </h2>
+
+          {/* Date · part count · reading, then the series link. Each is a sibling of the stretched title link. */}
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <LessonDateLink date={lesson.date} hebrewDate={lesson.hebrew_date} className="text-sm text-foreground/75" />
+            <span aria-hidden="true" className="text-foreground/40">
+              ·
+            </span>
+            <span className="text-sm text-foreground/75">{tShell('partsCount', { count: tracks.length })}</span>
+            {reading && (
+              <span className="bg-foreground/12 rounded-full px-2.5 py-0.5 font-bold text-foreground" dir="rtl">
+                {reading}
+              </span>
+            )}
+            {lesson.series && (
+              <LessonSeriesLink
+                seriesId={lesson.series.id}
+                name={lesson.series.hebrew_name || lesson.series.name}
+                className="text-sm font-semibold text-primary"
+              />
+            )}
+          </div>
+
+          {/* Each chip starts its own part, even when the listener's saved place is elsewhere. The part already loaded keeps its live position (resuming never seeks). */}
+          <PartDurations
+            variant="chips"
+            seconds={partSeconds}
+            onPlayPart={(index) => playLesson(tracks, { startPart: index })}
+          />
+
+          <LessonTagList tags={lesson.tags} />
+
+          <div className="mt-1 flex items-center gap-2">
+            <LessonPlayButton
+              lessonId={lesson.id}
+              tracks={tracks}
+              playLabel={playLabel}
+              pauseLabel={t('pause')}
+              className="h-16 w-16 bg-primary text-primary-foreground shadow-[0_10px_30px_-8px_hsl(141_73%_42%/0.6)] hover:bg-primary/90"
+              iconClassName="h-7 w-7"
+            />
+
+            <div className="ms-auto flex items-center">
+              <ShareButton
+                lessonId={lesson.id}
+                lessonSlug={lesson.slug}
+                title={title}
+                variant="icon"
+                className={iconButton}
+              />
+              <button
+                type="button"
+                onClick={() => void handleSaveOffline()}
+                disabled={offlineSaved || saveState === 'saving'}
+                aria-label={offlineSaved ? t('savedOffline') : t('saveOffline')}
+                className={iconButton}
+              >
+                {saveState === 'saving' ? (
+                  <Loader2 aria-hidden="true" className="h-5 w-5 animate-spin" />
+                ) : offlineSaved ? (
+                  <CheckCircle aria-hidden="true" className="h-5 w-5 text-primary" />
+                ) : (
+                  <Download aria-hidden="true" className="h-5 w-5" />
+                )}
+                {saveState === 'saving' && <span className="sr-only">{saveProgress}%</span>}
+              </button>
+              {/* One file per part: the single-part download sits here; multi-part lessons keep per-part downloads on the lesson page. */}
+              {single && (
+                <a
+                  href={getTrackDownloadUrl(single)}
+                  download={getTrackDownloadFilename(single)}
+                  onClick={(event) =>
+                    handleDeviceDownloadClick(event, {
+                      lessonId: lesson.id,
+                      offlineKey: single.offlineKey,
+                      audioUrl: single.audioUrl,
+                      filename: getTrackDownloadFilename(single),
+                      savedOffline: offlineSaved,
+                    })
+                  }
+                  aria-label={t('downloadToDevice')}
+                  className={iconButton}
+                >
+                  <FileDown aria-hidden="true" className="h-5 w-5" />
+                </a>
+              )}
+            </div>
+          </div>
+
+          {hasResume && !isCurrent && (
+            <p className="flex items-center gap-1.5 text-[13px] font-semibold text-primary">
+              <Check aria-hidden="true" className="h-3.5 w-3.5" />
+              {playLabel}
+            </p>
+          )}
         </div>
 
-        {hasResume && !isCurrent && (
-          <p className="flex items-center gap-1.5 text-[13px] font-semibold text-primary">
-            <Check aria-hidden="true" className="h-3.5 w-3.5" />
-            {playLabel}
-          </p>
-        )}
+        {/* The reading cover (concept B): decorative, the title link covers it. Left of the text in Hebrew. */}
+        <span
+          aria-hidden="true"
+          className="grid h-24 w-24 flex-shrink-0 place-items-center overflow-hidden rounded-2xl p-2 shadow-[0_18px_40px_-18px_rgba(0,0,0,0.7)] lg:h-56 lg:w-56 xl:h-60 xl:w-60"
+          style={{
+            background: `linear-gradient(150deg, hsl(${hue} 45% 34%), hsl(${hue} 30% 14%))`,
+          }}
+        >
+          <b
+            className="line-clamp-3 text-center text-[34px] font-extrabold leading-tight lg:text-[56px]"
+            style={{ color: `hsl(${hue} 75% 84%)` }}
+          >
+            {coverText}
+          </b>
+        </span>
       </div>
     </section>
   );

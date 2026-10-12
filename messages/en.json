@@ -518,7 +518,8 @@
     "library": "My library",
     "sidebarLabel": "Side menu",
     "searchPlaceholder": "Search lessons…",
-    "browse": "Browse"
+    "browse": "Browse",
+    "categories": "Categories"
   },
   "auth": {
     "adminArea": "Admin area",
@@ -971,5 +972,13 @@
     "resume": "Continue listening",
     "nothingPlayedTitle": "No lesson played yet",
     "nothingPlayedHint": "A lesson you start listening to will appear here."
+  },
+  "desktopShell": {
+    "partsCount": "{count, plural, =1 {1 part} =2 {2 parts} other {# parts}}",
+    "notifyTitle": "New lesson posted?",
+    "notifyBody": "Get an alert the moment a new lesson goes up.",
+    "errorTitle": "We could not load the lessons",
+    "errorHint": "Check your connection and try again.",
+    "retry": "Try again"
   }
 }
