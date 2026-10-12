@@ -3,7 +3,7 @@
 import { lessonPath } from '@/config/site';
 
 import { useMemo, useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { AlertTriangle, Pause, Play, Scissors, Search } from 'lucide-react';
 import { Link } from '@/i18n/routing';
 import { EmptyState } from '@/components/shared/empty-state';
@@ -12,6 +12,7 @@ import { PartDurations } from '@/components/lessons/part-durations';
 import { getLessonPartSeconds, getLessonTracks } from '@/lib/lesson-tracks';
 import { playLessons } from '@/lib/play-lesson';
 import { tagPath } from '@/lib/tag-links';
+import { categoryLabel } from '@/lib/category-tree';
 import { useAudioStore } from '@/stores/audio-store';
 import type { Category, LessonWithRelations } from '@/types/database';
 
@@ -60,14 +61,17 @@ export default function ShortsClient({ lessons, topics, loadFailed, initialTag }
   const currentTrack = useAudioStore((s) => s.currentTrack);
   const isPlaying = useAudioStore((s) => s.isPlaying);
   const togglePlay = useAudioStore((s) => s.togglePlay);
+  const locale = useLocale();
 
   // Topics that actually have lessons, in category order, "general" last.
   const topicTabs = useMemo(() => {
     const used = new Set(lessons.map((l) => topicOf(l, topics)));
-    const tabs = topics.filter((tp) => used.has(tp.id)).map((tp) => ({ id: tp.id, label: tp.hebrew_name }));
+    const tabs = topics
+      .filter((tp) => used.has(tp.id))
+      .map((tp) => ({ id: tp.id, label: categoryLabel(tp, locale) }));
     if (used.has(GENERAL)) tabs.push({ id: GENERAL, label: t('general') });
     return tabs;
-  }, [lessons, topics, t]);
+  }, [lessons, topics, t, locale]);
 
   // An unknown ?tag= stays visible so it can be cleared.
   const tagChips = tag && !tagTabs.includes(tag) ? [tag, ...tagTabs] : tagTabs;

@@ -6,12 +6,14 @@ import { useTranslations } from 'next-intl';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { audioEngine } from '@/lib/audio-engine';
 import { handleCastClick, isCastableSource } from '@/lib/cast-utils';
+import { useQueueNoticeText } from '@/hooks/use-queue-notice-text';
 import { useBookmarksStore } from '@/stores/bookmarks-store';
 import { BookmarkDialog } from '@/components/bookmarks/bookmark-dialog';
 import { getTrackLessonId } from '@/lib/player-track-actions';
 import { PlayPauseIcon } from './player-controls';
 import { CastStatusMessage } from './cast-status';
 import { PlayerShareButton } from './player-share-button';
+import { DesktopPlayerBar } from './desktop-player-bar';
 
 export function MiniPlayer() {
   const t = useTranslations('player');
@@ -20,6 +22,7 @@ export function MiniPlayer() {
   const lessonId = currentTrack ? getTrackLessonId(currentTrack) : '';
   const isBookmarked = useBookmarksStore((s) => s.bookmarks.some((b) => b.lessonId === lessonId));
   const [bookmarkPosition, setBookmarkPosition] = useState<number | null>(null);
+  const queueNoticeText = useQueueNoticeText();
 
   if (!currentTrack) return null;
 
@@ -29,7 +32,8 @@ export function MiniPlayer() {
 
   return (
     <>
-      <div className="fixed bottom-0 inset-x-0 z-50 safe-area-bottom">
+      {/* Phones and tablets. From lg the desktop bar (DesktopPlayerBar) replaces it. */}
+      <div className="fixed bottom-0 inset-x-0 z-50 safe-area-bottom lg:hidden">
         {/* Thin progress bar -- Spotify style; fills from the inline start */}
         <div className="h-[2px] bg-[hsl(0,0%,24%)]">
           <div className="h-full bg-primary transition-[width] duration-200" style={{ width: `${progress}%` }} />
@@ -58,6 +62,10 @@ export function MiniPlayer() {
                   <span className="block text-xs truncate text-amber-300">
                     {t(`issue.${playbackIssue}`)}
                   </span>
+                ) : queueNoticeText ? (
+                  <span className="block text-[13px] truncate text-muted-foreground" dir="auto">
+                    {queueNoticeText}
+                  </span>
                 ) : (
                   <span className="block text-xs text-muted-foreground truncate" dir="auto">
                     {currentTrack.seriesName}
@@ -67,7 +75,7 @@ export function MiniPlayer() {
             </button>
             {/* Announces playback problems; text inside a button is not a live region. */}
             <p role="status" className="sr-only">
-              {playbackIssue ? t(`issue.${playbackIssue}`) : ''}
+              {playbackIssue ? t(`issue.${playbackIssue}`) : (queueNoticeText ?? '')}
             </p>
 
             <PlayerShareButton compact />
@@ -103,6 +111,8 @@ export function MiniPlayer() {
           </div>
         </div>
       </div>
+
+      <DesktopPlayerBar />
 
       <CastStatusMessage />
 

@@ -2,7 +2,21 @@
 
 Versions follow `MAJOR.MINOR.PATCH`. The version in `package.json` is the release being worked on; a version is released when it is deployed to production from `main` (tag `vX.Y.Z` on that commit). Add each change under the in-progress version as it lands in `dev`.
 
-## 1.1.5 — in progress
+## 1.2.0 — in progress
+
+- Continuous category playback: "ניגון רציף של הקטגוריה" on a category page plays the category and all its subcategories in one session. Order: date, then upload time. The queue is frozen when it starts, so new uploads don't reshuffle it. Multipart lessons finish before the next lesson, more lessons load ahead in segments of 25, and unavailable lessons are skipped with a notice (at most 3 in a row). It ends with a "category finished" notice, with no repeat or shuffle. A restored session never autoplays. A source error skips a lesson only after one retry. While the next lesson loads, the player shows loading and Play keeps waiting (only Pause cancels). Skipped, stopped and finished notices show on the mini player and the desktop bar. The saved queue keeps 50 tracks behind the current one.
+- Image download: the lesson image viewer has a "הורדת התמונה" button that saves the full-size original, named after the lesson and the image number. On iPhone home-screen apps it opens the image, and Share → Save Image saves it.
+- Bookmarks can be edited (note and tag) on /bookmarks, /me and the lesson page, keeping the same bookmark. A bookmark changed on another device is not overwritten (needs migration 024).
+- Categories have up to three levels. The admin tree shows all of them, with move up/down and "Move to…" (keyboard-accessible). Moves check the whole branch and refuse an edit made in the meantime (needs migration 023). English category names are optional: without one, English pages show the Hebrew name. Category pages, counts and the lesson filter include every sub-level.
+- Desktop player:
+  - A proper bottom bar from 1024px: transport, timeline with times, speed, volume (from 1280px), bookmark, share, cast, up next.
+  - The home side panel (from 1360px) is a full player. With nothing loaded it shows the last-played lesson with a "continue" button, and it never autoplays.
+  - The duplicate "המשך האזנה" strip is hidden where the panel shows.
+- One lesson row everywhere: categories, /lessons, tags, search, series and playlists all use the home page's row (date tile, part chips, tags, progress, play button). List play buttons play in place.
+- Version 1.2.0:
+  - The version is shown on /me and on the admin dashboard, and `/api/health` reports the real version.
+  - `/api/version` reports the deployed build. When a newer build is live, a banner offers "רענון". Refresh waits until playback is paused, and "אחר כך" snoozes that build.
+  - Admins can draft, preview and explicitly send a release announcement through Web Push (/admin/announcements, needs migration 025). Nothing is ever sent automatically.
 
 ## 1.1.4 — October 12, 2026
 

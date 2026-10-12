@@ -97,7 +97,7 @@ async function startLesson(page: Page) {
 }
 
 async function openFullPlayer(page: Page) {
-  await page.locator('[data-player-expand]').click();
+  await page.locator('[data-player-expand]:visible').click();
   await expect(page.getByRole('dialog').getByRole('button', { name: he.player.shareLesson })).toBeVisible();
 }
 
@@ -216,7 +216,7 @@ test('mini share stays beside the expand button and follows a switched lesson', 
   await startLesson(page);
   await page.getByRole('main').getByRole('button', { name: he.player.play, exact: true }).nth(1).click();
   const track = await loadedTrack(page);
-  const expand = page.locator('[data-player-expand]');
+  const expand = page.locator('[data-player-expand]:visible');
   await expect(expand.locator('button')).toHaveCount(0);
   const share = expand.locator('..').getByRole('button', { name: he.player.shareLesson });
   await expect(share).toBeVisible();

@@ -2,6 +2,12 @@ import { create } from "zustand";
 import { createJSONStorage, persist, type PersistStorage } from "zustand/middleware";
 import { shallow } from "zustand/shallow";
 import type { AudioEngineStatus } from "@/lib/audio-engine";
+import {
+  appendUniqueTracks,
+  type QueueNotice,
+  type QueueSource,
+  type SegmentPage,
+} from "@/lib/queue-source";
 
 export interface AudioTrack {
   id: string;
@@ -74,10 +80,21 @@ export interface AudioPlayerState {
   playbackSpeed: number;
   isMiniPlayerExpanded: boolean;
   sleepTimer: SleepTimer | null;
+  /** Where the queue came from (a category session keeps loading lessons). Null for other queues. */
+  queueSource: QueueSource | null;
+  /** What a category queue is doing, shown inline. Not persisted. */
+  queueNotice: QueueNotice | null;
 
   /** Plays a single track. Keeps the queue only when the track is part of it. */
   setTrack: (track: AudioTrack) => void;
-  setQueue: (tracks: AudioTrack[], startIndex?: number) => void;
+  /** Replaces the queue and sets its source in the same update (null for a plain queue). */
+  setQueue: (tracks: AudioTrack[], startIndex?: number, source?: QueueSource | null) => void;
+  /**
+   * Adds a loaded segment to the end of the queue, if `sessionId` is still the
+   * current session. Never moves queueIndex. False when the segment was dropped.
+   */
+  appendQueueSegment: (sessionId: string, page: SegmentPage) => boolean;
+  setQueueNotice: (notice: QueueNotice | null) => void;
   nextTrack: () => void;
   previousTrack: () => void;
   /**
@@ -105,26 +122,79 @@ export interface AudioPlayerState {
 
 type PersistedAudioState = Pick<
   AudioPlayerState,
-  "currentTrack" | "queue" | "queueIndex" | "resumePosition" | "volume" | "playbackSpeed"
+  "currentTrack" | "queue" | "queueIndex" | "queueSource" | "resumePosition" | "volume" | "playbackSpeed"
 >;
 
 /** What the play/pause control shows: pause, a spinner (still pauses), or play. */
 export type TransportState = "playing" | "loading" | "paused";
 
 /**
+ * A category queue's ended lesson is waiting for the next segment while the
+ * listener still wants to hear the queue. Only pause() cancels this wait.
+ */
+export function isAwaitingNextLesson(
+  state: Pick<AudioPlayerState, "isPlaying" | "playbackStatus" | "queueNotice">,
+): boolean {
+  return state.isPlaying && state.playbackStatus === "ended" && state.queueNotice?.kind === "loading";
+}
+
+/**
  * The element is the source of truth. A play request that is still loading or
  * retrying counts as "loading" so a tap cancels it instead of re-requesting.
+ * The wait for the next category lesson counts as "loading" too (it keeps going).
  */
 export function getTransportState(
-  state: Pick<AudioPlayerState, "isPlaying" | "playbackStatus" | "playbackIssue">,
+  state: Pick<AudioPlayerState, "isPlaying" | "playbackStatus" | "playbackIssue" | "queueNotice">,
 ): TransportState {
   if (state.playbackStatus === "playing") return "playing";
   if (state.playbackStatus === "buffering") return "loading";
+  if (isAwaitingNextLesson(state)) return "loading";
   if (!state.isPlaying || state.playbackStatus === "ended") return "paused";
   return state.playbackStatus === "error" && state.playbackIssue !== "retrying"
     ? "paused"
     : "loading";
 }
+
+/** Queue items kept behind the current one in storage; everything ahead is kept. */
+export const PERSISTED_QUEUE_BEHIND = 50;
+
+/**
+ * The queue as storage keeps it: the current item, up to PERSISTED_QUEUE_BEHIND
+ * items before it and everything after it, with queueIndex moved to match.
+ * Items lose `description` (display-only; the full player reads only the current
+ * track's, which is kept). The live queue is never trimmed.
+ */
+export function persistableQueue(
+  queue: AudioTrack[],
+  queueIndex: number,
+): { queue: AudioTrack[]; queueIndex: number } {
+  const start = Math.max(0, queueIndex - PERSISTED_QUEUE_BEHIND);
+  return {
+    queue: queue.slice(start).map((track) => {
+      if (track.description === undefined) return track;
+      const stored = { ...track };
+      delete stored.description;
+      return stored;
+    }),
+    queueIndex: queueIndex - start,
+  };
+}
+
+/**
+ * Returns the same persistableQueue result while the live queue and index are
+ * unchanged, so the storage write check (shallow compare) skips the ~4 Hz
+ * currentTime updates instead of rewriting the whole queue each time.
+ */
+function createQueuePersister() {
+  let last: { queue: AudioTrack[]; queueIndex: number; result: ReturnType<typeof persistableQueue> } | null = null;
+  return (queue: AudioTrack[], queueIndex: number) => {
+    if (last?.queue !== queue || last.queueIndex !== queueIndex) {
+      last = { queue, queueIndex, result: persistableQueue(queue, queueIndex) };
+    }
+    return last.result;
+  };
+}
+const persistQueue = createQueuePersister();
 
 function startTrack(track: AudioTrack) {
   return {
@@ -173,6 +243,8 @@ export const useAudioStore = create<AudioPlayerState>()(
       playbackSpeed: 1,
       isMiniPlayerExpanded: false,
       sleepTimer: null,
+      queueSource: null,
+      queueNotice: null,
 
       setTrack: (track) => {
         const key = getTrackKey(track);
@@ -183,17 +255,42 @@ export const useAudioStore = create<AudioPlayerState>()(
           return;
         }
         const index = queue.findIndex((item) => getTrackKey(item) === key);
+        // A track inside the current queue keeps that queue and its source; any other track starts a plain one.
         set({
           ...startTrack(track),
-          ...(index >= 0 ? { queueIndex: index } : { queue: [track], queueIndex: 0 }),
+          ...(index >= 0
+            ? { queueIndex: index }
+            : { queue: [track], queueIndex: 0, queueSource: null, queueNotice: null }),
         });
       },
 
-      setQueue: (tracks, startIndex = 0) => {
+      setQueue: (tracks, startIndex = 0, source = null) => {
         const track = tracks[startIndex];
         if (!track) return;
-        set({ ...startTrack(track), queue: tracks, queueIndex: startIndex });
+        set({
+          ...startTrack(track),
+          queue: tracks,
+          queueIndex: startIndex,
+          queueSource: source,
+          queueNotice: null,
+        });
       },
+
+      appendQueueSegment: (sessionId, page) => {
+        const { queueSource, queue } = get();
+        if (!queueSource || queueSource.sessionId !== sessionId) return false;
+        set({
+          queue: appendUniqueTracks(queue, page.tracks),
+          queueSource: {
+            ...queueSource,
+            cursor: page.cursor ?? queueSource.cursor,
+            exhausted: page.exhausted,
+          },
+        });
+        return true;
+      },
+
+      setQueueNotice: (notice) => set({ queueNotice: notice }),
 
       nextTrack: () => {
         const { queue, queueIndex } = get();
@@ -253,6 +350,8 @@ export const useAudioStore = create<AudioPlayerState>()(
       play: () => set({ isPlaying: true, playbackIssue: null }),
       pause: () => set({ isPlaying: false, playbackIssue: null }),
       togglePlay: () => {
+        // A category waiting for its next lesson keeps waiting; only pause() cancels it.
+        if (isAwaitingNextLesson(get())) return;
         if (getTransportState(get()) === "paused") set({ isPlaying: true, playbackIssue: null });
         else set({ isPlaying: false });
       },
@@ -273,14 +372,18 @@ export const useAudioStore = create<AudioPlayerState>()(
       version: 1,
       storage: createAudioStorage(),
       // isPlaying is intentionally not persisted: a reload must never auto-play.
-      partialize: (state): PersistedAudioState => ({
-        currentTrack: state.currentTrack,
-        queue: state.queue,
-        queueIndex: state.queueIndex,
-        resumePosition: state.resumePosition,
-        volume: state.volume,
-        playbackSpeed: state.playbackSpeed,
-      }),
+      partialize: (state): PersistedAudioState => {
+        const queue = persistQueue(state.queue, state.queueIndex);
+        return {
+          currentTrack: state.currentTrack,
+          queue: queue.queue,
+          queueIndex: queue.queueIndex,
+          queueSource: state.queueSource,
+          resumePosition: state.resumePosition,
+          volume: state.volume,
+          playbackSpeed: state.playbackSpeed,
+        };
+      },
       // v0 persisted the live currentTime instead of a checkpoint.
       migrate: (persisted, version) => {
         const state = (persisted ?? {}) as Partial<PersistedAudioState> & { currentTime?: number };

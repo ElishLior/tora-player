@@ -15,6 +15,7 @@ import { dateFromSearchParam, lessonsHref, tagFromSearchParam, tagPath, type Tag
 import { generateLessonMetadata } from '@/lib/hebrew-date';
 import { pageAlternates } from '@/lib/seo';
 import type { LessonWithRelations, Category } from '@/types/database';
+import { buildCategoryTree, categoryLabel, descendantCategories } from '@/lib/category-tree';
 
 type Props = {
   params: Promise<{ locale: string }>;
@@ -101,9 +102,11 @@ export default async function LessonsPage({ params, searchParams }: Props) {
     };
   }
 
-  // Build leaf categories for filter tabs (sub-categories under "שיעורים")
+  // Filter tabs: every category under "שיעורים" at any depth, in tree order (the parent itself excluded).
   const lessonsParent = allCategories.find((c) => c.name === 'Lessons' && !c.parent_id);
-  const leafCategories = lessonsParent ? allCategories.filter((c) => c.parent_id === lessonsParent.id) : [];
+  const leafCategories = lessonsParent
+    ? descendantCategories(buildCategoryTree(allCategories), lessonsParent.id).slice(1)
+    : [];
 
   // Most used tags, with the active tag always visible.
   const tagChips = tagCounts.slice(0, TOP_TAG_CHIPS).map((row) => row.tag);
@@ -194,7 +197,7 @@ export default async function LessonsPage({ params, searchParams }: Props) {
               href={lessonsHref({ ...activeQuery, cat: cat.id, type: undefined })}
               className={chipClass(isActive)}
             >
-              {cat.hebrew_name}
+              {categoryLabel(cat, locale)}
             </Link>
           );
         })}

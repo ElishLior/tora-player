@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { getLessonsByIds } from '@/actions/lessons';
 import { AccountSettings } from '@/components/auth/account-settings';
+import { AppVersionLabel } from '@/components/shared/app-version-label';
 import { BookmarkGroups } from '@/components/bookmarks/bookmark-groups';
 import { LessonSeriesLink } from '@/components/lessons/lesson-browse-links';
 import { NoteImageStrip } from '@/components/notes/note-image-strip';
@@ -591,6 +592,8 @@ export default function MeClient({ locale, account }: { locale: string; account:
           </Section>
         </>
       )}
+
+      <AppVersionLabel className="pt-2 text-center text-xs text-muted-foreground" />
 
       {/* The installed app has no address bar, so the opt-in playback log needs a way in. */}
       <Link

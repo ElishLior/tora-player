@@ -57,7 +57,7 @@ const lesson: LessonWithRelations = {
 function createReader(overrides: Partial<LessonListReader> = {}): LessonListReader {
   return {
     getAllCategories: vi.fn(async () => [category]),
-    getChildCategoryIds: vi.fn(async () => []),
+    getDescendantCategoryIds: vi.fn(async (id: string) => [id]),
     getTagCounts: vi.fn(async () => [
       { tag: 'אמונה ובטחון', lesson_count: 4 },
       { tag: 'שבת', lesson_count: 2 },

@@ -7,13 +7,22 @@ import {
   pause,
   play,
   playTrack,
+  previousTrackOrSkip,
   skipBackward,
   skipForward,
   startAudioController,
+  togglePlay,
 } from "./audio-controller";
+import { getTransportState } from "@/stores/audio-store";
 import { useMediaSession } from "@/hooks/use-media-session";
 import { getResumePoint } from "./lesson-progress";
 import { playLesson } from "./play-lesson";
+import { createCategoryQueueSource } from "./category-queue";
+import { getCategoryQueueSegment } from "@/actions/category-queue";
+import type { LessonWithRelations } from "@/types/database";
+
+// The catalog action is server-only; category tests drive it through this mock.
+vi.mock("@/actions/category-queue", () => ({ getCategoryQueueSegment: vi.fn() }));
 
 // Browser globals the controller and its stores touch at import time.
 const { elements, getOfflineAudioUrl, getDownloadedLessons, mediaCleanups } = vi.hoisted(() => {
@@ -950,5 +959,503 @@ describe("audio controller duration evidence", () => {
     endCurrentFile();
 
     expect(useProgressStore.getState().progressMap.lesson).toMatchObject({ completed: true });
+  });
+});
+
+// ── Category queues (modeled: fake element, deferred catalog reads) ──
+
+const SNAPSHOT = "2026-10-13T00:00:00.000000+00:00";
+
+function categorySource(overrides: Partial<Parameters<typeof createCategoryQueueSource>[0]> = {}) {
+  return createCategoryQueueSource({
+    categoryId: "cat",
+    scopeIds: ["cat"],
+    snapshotAt: SNAPSHOT,
+    cursor: null,
+    exhausted: true,
+    sessionId: "session-1",
+    ...overrides,
+  });
+}
+
+/** A catalog lesson as the segment action returns it (only the fields lesson-tracks reads). */
+function segmentLesson(id: string, parts = 1): LessonWithRelations {
+  return {
+    id,
+    slug: null,
+    title: id,
+    hebrew_title: id,
+    date: "2026-01-01",
+    description: null,
+    summary: null,
+    duration: 3600,
+    audio_url: null,
+    audio_url_fallback: null,
+    created_at: "2026-01-01T10:00:00.000000+00:00",
+    series: null,
+    audio_files: Array.from({ length: parts }, (_, index) => ({
+      id: `${id}-part-${index + 1}`,
+      lesson_id: id,
+      file_key: `${id}-${index + 1}.mp3`,
+      audio_url: `/api/audio/stream/${id}-${index + 1}.mp3`,
+      original_name: null,
+      audio_type: null,
+      duration: 1200,
+      file_size: null,
+      sort_order: index,
+    })),
+  } as unknown as LessonWithRelations;
+}
+
+function segmentResult(lessons: LessonWithRelations[], exhausted: boolean) {
+  const last = lessons[lessons.length - 1];
+  return {
+    ok: true as const,
+    segment: {
+      lessons,
+      cursor: last ? { date: last.date, createdAt: last.created_at, id: last.id } : null,
+      exhausted,
+    },
+  };
+}
+
+/** A catalog read the test resolves by hand. */
+function deferredSegment() {
+  let resolve!: (value: ReturnType<typeof segmentResult>) => void;
+  const promise = new Promise<ReturnType<typeof segmentResult>>((done) => {
+    resolve = done;
+  });
+  vi.mocked(getCategoryQueueSegment).mockReturnValueOnce(promise as never);
+  return resolve;
+}
+
+/** Lets queued promise callbacks (catalog reads, dynamic import) run. Real timers only. */
+async function flush() {
+  await new Promise((done) => globalThis.setTimeout(done, 0));
+}
+
+function startCategory(tracks: AudioTrack[], options: { index?: number; exhausted?: boolean } = {}) {
+  const index = options.index ?? 0;
+  playTrack(tracks[index], {
+    queue: tracks,
+    queueIndex: index,
+    source: categorySource({ exhausted: options.exhausted ?? true }),
+  });
+}
+
+/** Simulates the element reporting a stream failure (fresh status, then the error). */
+function failElement(code: number) {
+  element().emit("loadstart");
+  element().error = { code };
+  element().emit("error");
+}
+
+/** A stream the server refuses: the first failure is retried (a 5xx reads the same), and the retry fails too. */
+function failUnavailable(code: number) {
+  failElement(code);
+  element().error = null; // the retry reloads the element, which clears its error
+  failElement(code);
+}
+
+describe("category queue playback", () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.mocked(getCategoryQueueSegment).mockResolvedValue(segmentResult([], true));
+    stop = startAudioController();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  afterEach(() => {
+    mediaCleanups.splice(0).forEach((cleanup) => cleanup());
+    stop();
+    pause();
+    useAudioStore.setState({
+      currentTrack: null,
+      queue: [],
+      queueIndex: -1,
+      sleepTimer: null,
+      queueSource: null,
+      queueNotice: null,
+    });
+    useProgressStore.setState({ progressMap: {} });
+    audioEngine.unload();
+    element()?.emit("emptied");
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  const state = () => useAudioStore.getState();
+
+  it("advances exactly once when the element reports the end twice", () => {
+    const tracks = [...makeParts("a", 1), ...makeParts("b", 1), ...makeParts("c", 1)];
+    startCategory(tracks);
+    becomePlaying();
+
+    endCurrentFile();
+    element().emit("ended");
+
+    expect(state().queueIndex).toBe(1);
+    expect(state().currentTrack?.id).toBe("b");
+  });
+
+  it("keeps a manual next when a stale end of the previous lesson arrives later", () => {
+    const tracks = [...makeParts("a", 1), ...makeParts("b", 1), ...makeParts("c", 1)];
+    startCategory(tracks);
+    becomePlaying();
+
+    endCurrentFile(); // completion moves to b
+    state().nextTrack(); // the listener taps next: c
+    element().emit("ended"); // stale event from the lesson before
+
+    expect(state().currentTrack?.id).toBe("c");
+    expect(state().queueIndex).toBe(2);
+  });
+
+  it("does not load a segment while the loaded queue is far from its end", () => {
+    startCategory([...makeParts("a", 1), ...makeParts("b", 1), ...makeParts("c", 1), ...makeParts("d", 1), ...makeParts("e", 1)], {
+      exhausted: false,
+    });
+
+    expect(getCategoryQueueSegment).not.toHaveBeenCalled();
+  });
+
+  it("requests the next segment once while one is in flight", async () => {
+    const resolve = deferredSegment();
+    startCategory(makeParts("a", 1), { exhausted: false });
+    play();
+    play();
+    await vi.waitFor(() => expect(getCategoryQueueSegment).toHaveBeenCalled());
+
+    expect(getCategoryQueueSegment).toHaveBeenCalledTimes(1);
+    resolve(segmentResult([segmentLesson("b")], true));
+    await vi.waitFor(() => expect(state().queue).toHaveLength(2));
+    expect(state().queueIndex).toBe(0);
+    expect(state().queueSource?.exhausted).toBe(true);
+  });
+
+  it("moves to the next lesson when its segment arrives before the end", async () => {
+    const resolve = deferredSegment(); // the read the queue starts with
+    startCategory(makeParts("a", 1), { exhausted: false });
+    becomePlaying();
+    endCurrentFile(); // the end joins the read already in flight
+    await vi.waitFor(() => expect(getCategoryQueueSegment).toHaveBeenCalled());
+
+    resolve(segmentResult([segmentLesson("b")], true));
+
+    await vi.waitFor(() => expect(state().currentTrack?.id).toBe("b"));
+    expect(state().isPlaying).toBe(true);
+    expect(element().play).toHaveBeenCalled();
+  });
+
+  it("pause cancels a pending advance when the segment arrives afterwards", async () => {
+    const resolve = deferredSegment();
+    startCategory(makeParts("a", 1), { exhausted: false });
+    becomePlaying();
+    endCurrentFile();
+    await vi.waitFor(() => expect(getCategoryQueueSegment).toHaveBeenCalled());
+
+    pause();
+    resolve(segmentResult([segmentLesson("b")], true));
+    await flush();
+    await flush();
+
+    expect(state().currentTrack?.id).toBe("a");
+    expect(state().isPlaying).toBe(false);
+  });
+
+  it("finishes the category when the last lesson ends and nothing is left", () => {
+    startCategory(makeParts("a", 1), { exhausted: true });
+    becomePlaying();
+
+    endCurrentFile();
+
+    expect(state().isPlaying).toBe(false);
+    expect(state().queueNotice).toEqual({ kind: "finished" });
+  });
+
+  it("stops with a recoverable notice when the next segment cannot be read", async () => {
+    vi.mocked(getCategoryQueueSegment).mockResolvedValue({ ok: false });
+    startCategory(makeParts("a", 1), { exhausted: false });
+    becomePlaying();
+
+    endCurrentFile();
+
+    await vi.waitFor(() => expect(state().queueNotice).toEqual({ kind: "stopped" }));
+    expect(state().isPlaying).toBe(false);
+    expect(state().currentTrack?.id).toBe("a");
+  });
+
+  it("pressing play after a cancelled wait moves on to the lesson that arrived", async () => {
+    const resolve = deferredSegment();
+    startCategory(makeParts("a", 1), { exhausted: false });
+    becomePlaying();
+    endCurrentFile();
+    await vi.waitFor(() => expect(getCategoryQueueSegment).toHaveBeenCalled());
+    pause();
+    resolve(segmentResult([segmentLesson("b")], true));
+    await flush();
+
+    play();
+
+    expect(state().currentTrack?.id).toBe("b");
+  });
+
+  it("retries a source error once before skipping, since a 5xx also reads as 4", () => {
+    useRetryClock();
+    startCategory([...makeParts("a", 1), ...makeParts("b", 1)]);
+    becomePlaying();
+
+    failElement(4);
+
+    expect(state().currentTrack?.id).toBe("a");
+    expect(state().playbackIssue).toBe("retrying");
+    expect(state().queueNotice).toBeNull();
+
+    vi.advanceTimersByTime(1000);
+    becomePlaying(); // the retry worked: the lesson plays on
+
+    expect(state().currentTrack?.id).toBe("a");
+    expect(state().playbackIssue).toBeNull();
+    expect(state().queueNotice).toBeNull();
+    expect(state().isPlaying).toBe(true);
+  });
+
+  it("skips a lesson whose retry also fails with a source error", () => {
+    useRetryClock();
+    startCategory([...makeParts("a", 1), ...makeParts("b", 1)]);
+    becomePlaying();
+
+    failElement(4);
+    vi.advanceTimersByTime(1000);
+    failElement(4);
+
+    expect(state().currentTrack?.id).toBe("b");
+    expect(state().queueNotice).toEqual({ kind: "skipped", title: "a" });
+  });
+
+  it("skips an unavailable lesson and says which one", () => {
+    startCategory([...makeParts("a", 1), ...makeParts("b", 1)]);
+    becomePlaying();
+
+    failUnavailable(4);
+
+    expect(state().currentTrack?.id).toBe("b");
+    expect(state().queueNotice).toEqual({ kind: "skipped", title: "a" });
+    expect(state().isPlaying).toBe(true);
+  });
+
+  it("announces a skipped lesson for 8 seconds, then the notice clears", () => {
+    useRetryClock();
+    startCategory([...makeParts("a", 1), ...makeParts("b", 1)]);
+    becomePlaying();
+
+    failUnavailable(4);
+    expect(state().queueNotice).toEqual({ kind: "skipped", title: "a" });
+
+    vi.advanceTimersByTime(7_999);
+    expect(state().queueNotice).toEqual({ kind: "skipped", title: "a" });
+    vi.advanceTimersByTime(1);
+    expect(state().queueNotice).toBeNull();
+  });
+
+  it("stops after more unavailable lessons in a row than allowed", () => {
+    startCategory([...makeParts("a", 1), ...makeParts("b", 1), ...makeParts("c", 1), ...makeParts("d", 1), ...makeParts("e", 1)]);
+    becomePlaying();
+
+    for (let i = 0; i < 4; i += 1) failUnavailable(4);
+
+    expect(state().currentTrack?.id).toBe("d");
+    expect(state().isPlaying).toBe(false);
+    expect(state().queueNotice).toEqual({ kind: "stopped" });
+  });
+
+  it("does not skip or start playback for an error while paused", () => {
+    startCategory([...makeParts("a", 1), ...makeParts("b", 1)]);
+    becomePlaying();
+    pause();
+
+    failElement(4);
+
+    expect(state().currentTrack?.id).toBe("a");
+    expect(state().isPlaying).toBe(false);
+  });
+
+  it("retries a temporary error with backoff, then fails without skipping", () => {
+    useRetryClock();
+    startCategory([...makeParts("a", 1), ...makeParts("b", 1)]);
+    becomePlaying();
+
+    failElement(2);
+    vi.advanceTimersByTime(1000);
+    failElement(2);
+    vi.advanceTimersByTime(2000);
+    failElement(2);
+    vi.advanceTimersByTime(4000);
+    failElement(2);
+
+    expect(state().currentTrack?.id).toBe("a");
+    expect(state().playbackIssue).toBe("failed");
+    expect(state().isPlaying).toBe(false);
+    expect(state().queueNotice).toBeNull();
+  });
+
+  it("pause cancels a scheduled retry", () => {
+    useRetryClock();
+    startCategory([...makeParts("a", 1), ...makeParts("b", 1)]);
+    becomePlaying();
+    failElement(2);
+    const loadsBeforePause = element().load.mock.calls.length;
+
+    pause();
+    vi.advanceTimersByTime(10_000);
+
+    expect(element().load.mock.calls.length).toBe(loadsBeforePause);
+    expect(state().currentTrack?.id).toBe("a");
+  });
+
+  it("keeps the lesson and offers a tap when the browser blocks the next lesson", async () => {
+    startCategory([...makeParts("a", 1), ...makeParts("b", 1)]);
+    becomePlaying();
+    element().play.mockImplementationOnce(() => {
+      element().paused = true;
+      return Promise.reject(Object.assign(new Error("blocked"), { name: "NotAllowedError" }));
+    });
+
+    endCurrentFile();
+
+    await vi.waitFor(() => expect(state().playbackIssue).toBe("blocked"));
+    expect(state().currentTrack?.id).toBe("b");
+    expect(state().isPlaying).toBe(false);
+
+    play(); // the "tap to continue" action
+
+    expect(state().isPlaying).toBe(true);
+    expect(state().playbackIssue).toBeNull();
+    expect(element().play).toHaveBeenCalled();
+  });
+
+  it("restores a category session without autoplay and loads on the first play", async () => {
+    stop();
+    useAudioStore.setState({
+      currentTrack: makeParts("a", 1)[0],
+      queue: makeParts("a", 1),
+      queueIndex: 0,
+      queueSource: categorySource({ exhausted: false }),
+      isPlaying: false,
+    });
+    const playsBefore = element()?.play.mock.calls.length ?? 0;
+    stop = startAudioController();
+
+    expect(element()?.play.mock.calls.length ?? 0).toBe(playsBefore);
+    expect(getCategoryQueueSegment).not.toHaveBeenCalled();
+
+    vi.mocked(getCategoryQueueSegment).mockResolvedValueOnce(segmentResult([segmentLesson("b")], true));
+    play();
+
+    await vi.waitFor(() => expect(getCategoryQueueSegment).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(state().queue).toHaveLength(2));
+    expect(state().queueSource?.sessionId).toBe("session-1");
+  });
+
+  it("plays the remaining parts of a lesson in order before the next lesson", () => {
+    startCategory([...makeParts("a", 2), ...makeParts("b", 1)], { exhausted: true });
+    becomePlaying();
+
+    endCurrentFile();
+    expect(state().currentTrack?.audioFileId).toBe("a-part-2");
+    becomePlaying();
+    endCurrentFile();
+
+    expect(state().currentTrack?.id).toBe("b");
+    expect(state().queueIndex).toBe(2);
+  });
+
+  it("toggling play while the next lesson loads keeps the wait and moves on when it arrives", async () => {
+    const resolve = deferredSegment();
+    startCategory(makeParts("a", 1), { exhausted: false });
+    becomePlaying();
+    endCurrentFile();
+    await vi.waitFor(() => expect(state().queueNotice).toEqual({ kind: "loading" }));
+    expect(getTransportState(state())).toBe("loading");
+
+    togglePlay();
+    expect(state().queueNotice).toEqual({ kind: "loading" });
+    expect(state().isPlaying).toBe(true);
+
+    resolve(segmentResult([segmentLesson("b")], true));
+    await vi.waitFor(() => expect(state().currentTrack?.id).toBe("b"));
+    expect(state().isPlaying).toBe(true);
+  });
+
+  it("play during the wait (lock screen) is a no-op: the wait continues", async () => {
+    const resolve = deferredSegment();
+    startCategory(makeParts("a", 1), { exhausted: false });
+    becomePlaying();
+    endCurrentFile();
+    await vi.waitFor(() => expect(state().queueNotice).toEqual({ kind: "loading" }));
+
+    play();
+
+    expect(state().queueNotice).toEqual({ kind: "loading" });
+    resolve(segmentResult([segmentLesson("b")], true));
+    await vi.waitFor(() => expect(state().currentTrack?.id).toBe("b"));
+  });
+
+  it("an explicit pause cancels the wait and the next lesson is not started", async () => {
+    const resolve = deferredSegment();
+    startCategory(makeParts("a", 1), { exhausted: false });
+    becomePlaying();
+    endCurrentFile();
+    await vi.waitFor(() => expect(state().queueNotice).toEqual({ kind: "loading" }));
+
+    pause();
+    resolve(segmentResult([segmentLesson("b")], true));
+    await flush();
+
+    expect(state().queueNotice).toBeNull();
+    expect(state().currentTrack?.id).toBe("a");
+    expect(state().isPlaying).toBe(false);
+  });
+
+  it("moving to another lesson during the wait clears it, so a later wait result does not advance", async () => {
+    const resolve = deferredSegment();
+    startCategory([...makeParts("x", 1), ...makeParts("a", 1)], { index: 1, exhausted: false });
+    becomePlaying();
+    endCurrentFile();
+    await vi.waitFor(() => expect(state().queueNotice).toEqual({ kind: "loading" }));
+
+    previousTrackOrSkip(); // lock-screen previous: x, which is not the lesson that ended
+
+    expect(state().currentTrack?.id).toBe("x");
+    expect(state().queueNotice).toBeNull();
+    resolve(segmentResult([segmentLesson("b")], true));
+    await flush();
+    await flush();
+
+    expect(state().currentTrack?.id).toBe("x");
+    expect(state().queueNotice).toBeNull();
+  });
+
+  it("keeps the session for a lesson inside its queue, and ends it for one elsewhere", () => {
+    const tracks = [...makeParts("a", 1), ...makeParts("b", 1)];
+    startCategory(tracks, { exhausted: false });
+
+    state().setTrack(tracks[1]);
+    expect(state().queueSource?.sessionId).toBe("session-1");
+
+    state().setTrack(makeTrack("elsewhere"));
+    expect(state().queueSource).toBeNull();
+    expect(state().queue.map((t) => t.id)).toEqual(["elsewhere"]);
+  });
+
+  it("drops a segment that belongs to a session that was replaced", () => {
+    startCategory(makeParts("a", 1), { exhausted: false });
+    const page = { tracks: makeParts("b", 1), cursor: null, exhausted: true };
+
+    const appended = state().appendQueueSegment("some-other-session", page);
+
+    expect(appended).toBe(false);
+    expect(state().queue.map((t) => t.id)).toEqual(["a"]);
   });
 });

@@ -1,13 +1,14 @@
 import { withLessonSlugSelect } from './lesson-slug-select';
 import { SupabaseClient } from '@supabase/supabase-js';
 import type { LessonWithRelations, Playlist, PlaylistWithLessons, Series, Category, CategoryWithChildren } from '@/types/database';
-import { LESSON_AUDIO_FILES, LESSON_CARD_COLUMNS } from './lesson-selects';
+import { LESSON_AUDIO_FILES, LESSON_CARD_COLUMNS, LESSON_CATEGORY } from './lesson-selects';
+import { buildCategoryTree, descendantIds } from '@/lib/category-tree';
 
 // ==================== LESSONS ====================
 
 /** Latest published daily lessons; short lessons have their own section (lib/supabase/shorts). */
 export async function getRecentLessons(supabase: SupabaseClient, limit = 20) {
-  const { data, error } = await withLessonSlugSelect(`${LESSON_CARD_COLUMNS}, series(id, name, hebrew_name), category:categories(id, hebrew_name), ${LESSON_AUDIO_FILES}`, (columns) => supabase
+  const { data, error } = await withLessonSlugSelect(`${LESSON_CARD_COLUMNS}, series(id, name, hebrew_name), ${LESSON_CATEGORY}, ${LESSON_AUDIO_FILES}`, (columns) => supabase
     .from('lessons')
     .select(columns)
     .eq('is_published', true)
@@ -23,7 +24,7 @@ export async function getRecentLessons(supabase: SupabaseClient, limit = 20) {
 export async function getLessonById(supabase: SupabaseClient, id: string) {
   const { data, error } = await supabase
     .from('lessons')
-    .select('*, series(*), category:categories(id, hebrew_name), snippets(*), audio_files:lesson_audio(*), images:lesson_images(*)')
+    .select('*, series(*), category:categories(id, hebrew_name, name), snippets(*), audio_files:lesson_audio(*), images:lesson_images(*)')
     .eq('id', id)
     .single();
 
@@ -68,15 +69,9 @@ export async function getAllCategories(supabase: SupabaseClient) {
   return data as Category[];
 }
 
+/** Every category as a tree of up to three levels (src/lib/category-tree.ts). */
 export async function getCategoriesTree(supabase: SupabaseClient): Promise<CategoryWithChildren[]> {
-  const all = await getAllCategories(supabase);
-
-  // Build tree: top-level categories with children nested
-  const topLevel = all.filter(c => !c.parent_id);
-  return topLevel.map(parent => ({
-    ...parent,
-    children: all.filter(c => c.parent_id === parent.id).sort((a, b) => a.sort_order - b.sort_order),
-  }));
+  return buildCategoryTree(await getAllCategories(supabase));
 }
 
 export async function getCategoryById(supabase: SupabaseClient, id: string) {
@@ -90,21 +85,22 @@ export async function getCategoryById(supabase: SupabaseClient, id: string) {
   return data as Category;
 }
 
+/**
+ * Published lessons filed under the category or any of its subcategories (up to
+ * three levels). A lesson has one category_id, so no lesson appears twice.
+ */
 export async function getLessonsByCategory(supabase: SupabaseClient, categoryId: string, limit = 50) {
-  // Get this category's children (if any) to include sub-category lessons too
-  const { data: children } = await supabase
-    .from('categories')
-    .select('id')
-    .eq('parent_id', categoryId);
+  const categoryIds = descendantIds(await getCategoriesTree(supabase), categoryId);
 
-  const categoryIds = [categoryId, ...(children || []).map(c => c.id)];
-
-  const { data, error } = await withLessonSlugSelect(`${LESSON_CARD_COLUMNS}, series(id, name, hebrew_name), category:categories(id, hebrew_name), ${LESSON_AUDIO_FILES}`, (columns) => supabase
+  const { data, error } = await withLessonSlugSelect(`${LESSON_CARD_COLUMNS}, series(id, name, hebrew_name), ${LESSON_CATEGORY}, ${LESSON_AUDIO_FILES}`, (columns) => supabase
     .from('lessons')
     .select(columns)
     .eq('is_published', true)
     .in('category_id', categoryIds)
+    // Same order as the category's continuous-play queue (src/lib/category-queue.ts).
     .order('date', { ascending: false })
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
     .limit(limit)
     .overrideTypes<LessonWithRelations[], { merge: false }>());
 

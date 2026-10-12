@@ -65,7 +65,7 @@ export default async function PlaylistDetailPage({ params }: Props) {
             <div key={i} className="flex items-center gap-3">
               <span className="text-sm text-muted-foreground w-6 text-center">{i + 1}</span>
               <div className="flex-1">
-                <LessonCard lesson={item.lesson} showProgress />
+                <LessonCard lesson={item.lesson} />
               </div>
             </div>
           ))}

@@ -464,6 +464,17 @@
     "jumpTo": "קפוץ אל",
     "syncFailed": "נשמר במכשיר, אך הסנכרון לחשבון נכשל. ננסה שוב בפתיחה הבאה."
   },
+  "bookmarkEdit": {
+    "title": "עריכת סימניה",
+    "editBookmark": "עריכת סימניה {time}",
+    "saving": "שומר...",
+    "reload": "טעינה מחדש",
+    "saved": "הסימניה עודכנה",
+    "noteCount": "{count} / {max}",
+    "saveFailed": "השינוי לא נשמר. בדקו את החיבור ונסו שוב. הטקסט שלכם עדיין במסך.",
+    "changedElsewhere": "הסימניה שונתה במכשיר אחר. טענו מחדש כדי לראות את הגרסה האחרונה ולערוך אותה שוב.",
+    "notUploaded": "נשמר במכשיר. השינוי יגיע לחשבון בסנכרון הבא."
+  },
   "offline": {
     "title": "הורדות",
     "download": "הורד להאזנה לא מקוונת",
@@ -832,7 +843,23 @@
     "lessonCategory": "קטגוריה",
     "noCategory": "ללא קטגוריה",
     "lessonCategorySaveFailed": "לא ניתן לשמור את הקטגוריה. נסו שוב.",
-    "manageLink": "ניהול קטגוריות"
+    "manageLink": "ניהול קטגוריות",
+    "moveTo": "העברה אל…",
+    "moveToTopLevel": "קטגוריה ראשית",
+    "moved": "הקטגוריה הועברה",
+    "orderSaved": "הסדר נשמר",
+    "noEnglishYet": "אין שם באנגלית עדיין",
+    "within": "בתוך {parent}",
+    "saving": "שומרים…",
+    "errStale": "הקטגוריה שונתה בינתיים בידי מישהו אחר. טענו את העץ מחדש ונסו שוב.",
+    "errMigration": "הפעולה דורשת את מיגרציה 023 של בסיס הנתונים",
+    "errMissingCategory": "הקטגוריה לא נמצאה",
+    "errMissingParent": "קטגוריית היעד לא נמצאה",
+    "errSelf": "קטגוריה לא יכולה להיות תחת עצמה",
+    "errCycle": "אי אפשר להעביר קטגוריה אל אחת מתתי-הקטגוריות שלה",
+    "errTooDeep": "אפשר שלוש רמות לכל היותר",
+    "errNotAdmin": "אין הרשאה לביצוע הפעולה",
+    "errFailed": "לא ניתן לשמור את השינוי. נסו שוב."
   },
   "diagnostics": {
     "title": "יומן נגינה",
@@ -855,5 +882,94 @@
     "partWithLength": "{name}: {length}",
     "seconds": "{seconds} שנ׳",
     "minutes": "{minutes} דק׳"
+  },
+  "imageDownload": {
+    "label": "הורדת התמונה",
+    "ariaLabel": "הורדת התמונה {number}",
+    "preparing": "מכין את התמונה…",
+    "started": "ההורדה החלה",
+    "iosHint": "לשמירה: הקישו על שיתוף, ואז על „שמירת תמונה”.",
+    "error": "לא הצלחנו להכין את ההורדה. נסו שוב.",
+    "lightboxLabel": "תמונות השיעור"
+  },
+  "appUpdate": {
+    "available": "גרסה חדשה זמינה — רענון",
+    "pausedFirst": "הרענון יתבצע כשתעצרו את ההשמעה",
+    "refresh": "רענון",
+    "later": "אחר כך",
+    "recovery": "לא נטענה הגרסה החדשה. סגרו את הלשונית ופתחו את האתר מחדש.",
+    "versionLabel": "גרסה {version} · {build}"
+  },
+  "releaseAnnouncement": {
+    "title": "הודעת גרסה",
+    "subtitle": "הודעת עדכון ידנית בהתראות הדפדפן",
+    "cardDescription": "כתיבה, תצוגה מקדימה ושליחה ידנית של הודעת גרסה",
+    "back": "חזרה ללוח הבקרה",
+    "schemaMissing": "שליחת הודעות גרסה דורשת הרצת מיגרציה 025.",
+    "pushNotConfigured": "התראות Push אינן מוגדרות, לכן אי אפשר לשלוח.",
+    "version": "גרסה",
+    "titleHe": "כותרת (עברית)",
+    "bodyHe": "תוכן (עברית)",
+    "titleEn": "כותרת (אנגלית)",
+    "bodyEn": "תוכן (אנגלית)",
+    "resetTemplate": "החזרת התבנית",
+    "newDraft": "טיוטה חדשה",
+    "save": "שמירת טיוטה",
+    "saved": "הטיוטה נשמרה",
+    "edit": "עריכה",
+    "preview": "תצוגה מקדימה",
+    "previewVersion": "גרסה {version}",
+    "previewAudience": "מכשירים שיקבלו את ההודעה: {count}",
+    "previewLive": "הגרסה החיה באתר: {live}",
+    "liveUnknown": "לא הצלחנו לבדוק איזו גרסה פעילה באתר.",
+    "liveMismatch": "האתר הפעיל מציג גרסה {live}. אפשר לשלוח רק אחרי שגרסה {version} עלתה לאוויר.",
+    "confirmQuestion": "לשלוח עכשיו את גרסה {version} ל-{count} מכשירים?",
+    "confirmBody": "ההודעה נשלחת פעם אחת בלבד ואי אפשר לבטל אותה.",
+    "send": "שליחה",
+    "confirm": "אישור ושליחה",
+    "cancel": "ביטול",
+    "sending": "שולח…",
+    "sent": "נשלחה ל-{sent} מכשירים (נכשלו: {failed})",
+    "history": "הודעות קודמות",
+    "empty": "אין הודעות עדיין",
+    "status": {
+      "draft": "טיוטה",
+      "sending": "נשלחת",
+      "sent": "נשלחה",
+      "failed": "נכשלה"
+    },
+    "errors": {
+      "unauthorized": "אין הרשאה",
+      "invalid": "בדקו את השדות המסומנים",
+      "schema_missing": "מיגרציה 025 טרם הורצה",
+      "not-found": "ההודעה לא נמצאה",
+      "not-draft": "ההודעה כבר נשלחה או בשליחה",
+      "not-confirmed": "הגרסה השתנתה, פתחו שוב את ההודעה",
+      "not-configured": "התראות Push אינן מוגדרות",
+      "live-unknown": "לא הצלחנו לבדוק את הגרסה החיה",
+      "live-mismatch": "הגרסה החיה אינה הגרסה המוכרזת",
+      "already-claimed": "ההודעה כבר נשלחת",
+      "send-failed": "השליחה נכשלה. צרו טיוטה חדשה כדי לנסות שוב.",
+      "load-failed": "לא הצלחנו לטעון את הנתונים"
+    }
+  },
+  "categoryPlayback": {
+    "play": "ניגון רציף של הקטגוריה",
+    "playing": "מנגן ברצף בקטגוריה",
+    "resume": "המשך ניגון רציף",
+    "loading": "טוען את השיעור הבא…",
+    "tapToContinue": "הקישו להמשך",
+    "finished": "הקטגוריה הסתיימה",
+    "playAgain": "נגן שוב מההתחלה",
+    "stopped": "אין שיעורים לניגון — נסו שוב",
+    "retry": "נסו שוב",
+    "skipped": "דילגנו על שיעור שאינו זמין: {title}"
+  },
+  "desktopPlayer": {
+    "panelLabel": "נגן שיעורים",
+    "lastPlayed": "האזנה אחרונה",
+    "resume": "המשך האזנה",
+    "nothingPlayedTitle": "עוד לא הושמע שיעור",
+    "nothingPlayedHint": "שיעור שתתחילו להאזין לו יופיע כאן."
   }
 }

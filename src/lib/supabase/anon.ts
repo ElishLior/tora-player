@@ -15,6 +15,8 @@ import {
 } from './queries';
 import { getShortLessons } from './shorts';
 import { partTypeOptions } from '@/lib/part-types';
+import { descendantIds } from '@/lib/category-tree';
+import { CATEGORY_LIST_LIMIT } from '@/lib/category-queue';
 
 /** Every cached catalog read carries this tag; catalog writes call revalidateCatalog(). */
 const CATALOG_TAG = 'catalog';
@@ -89,7 +91,7 @@ export const getCachedCategoryLessonCounts = unstable_cache(
 );
 
 export const getCachedCategoryLessons = unstable_cache(
-  (categoryId: string) => getLessonsByCategory(createAnonSupabaseClient(), categoryId),
+  (categoryId: string) => getLessonsByCategory(createAnonSupabaseClient(), categoryId, CATEGORY_LIST_LIMIT),
   ['catalog', 'category-lessons'],
   CATALOG_CACHE,
 );
@@ -143,5 +145,6 @@ export function createCatalogLessonListReader(): LessonListReader {
     ...createSupabaseLessonListReader(createAnonSupabaseClient()),
     getAllCategories: getCachedAllCategories,
     getTagCounts: getCachedTagCounts,
+    getDescendantCategoryIds: async (categoryId) => descendantIds(await getCachedCategoriesTree(), categoryId),
   };
 }

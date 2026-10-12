@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { LISTEN_MIN_SECONDS, LISTEN_SOURCES } from '@/lib/listen-tracking';
 import { NOTIFY_MODES } from '@/lib/notifications/batch-rules';
 import { MAX_NOTE_LENGTH } from '@/lib/note-rules';
+import { BOOKMARK_NOTE_MAX } from '@/lib/bookmark-rules';
 import { normalizeTags } from '@/lib/tags';
 
 // Relaxed UUID pattern — accepts any 8-4-4-4-12 hex string
@@ -103,7 +104,7 @@ export const bookmarkSchema = z.object({
   id: uuidLike,
   lesson_id: uuidLike,
   position: z.number().min(0),
-  note: z.string().max(2000).optional().nullable(),
+  note: z.string().max(BOOKMARK_NOTE_MAX).optional().nullable(),
   tag: z.string().max(40).optional().nullable(),
   audio_file_id: uuidLike.optional().nullable(),
 });
@@ -125,7 +126,7 @@ export const playbackProgressSchema = z.object({
 
 // ==================== CATEGORIES ====================
 
-// `name` is stored NOT NULL: the actions fill it from hebrew_name when the admin leaves it blank.
+// `name` is stored NOT NULL; a blank English name is stored as '' (categoryLabel falls back to the Hebrew name).
 export const createCategorySchema = z.object({
   hebrew_name: z.string().trim().min(1, 'שם בעברית הוא שדה חובה'),
   name: z.string().trim().optional(),
@@ -135,13 +136,12 @@ export const createCategorySchema = z.object({
   sort_order: z.number().int().min(0).optional(),
 });
 
+// The parent is changed only by moveCategory (atomic, validates the whole branch), so it is not here.
 export const updateCategorySchema = z.object({
   hebrew_name: z.string().trim().min(1, 'שם בעברית הוא שדה חובה').optional(),
-  name: z.string().trim().optional().nullable(),
+  name: z.string().trim().optional(),
   description: z.string().optional().nullable(),
   icon: z.string().optional().nullable(),
-  parent_id: uuidLike.optional().nullable(),
-  sort_order: z.number().int().min(0).optional(),
 });
 
 // ==================== SNIPPET SUBMISSIONS ====================

@@ -12,7 +12,8 @@ import { ArrowRight, Calendar, Clock, Edit, MapPin, User, BookOpen, Hash } from 
 import { isAdmin } from '@/lib/auth/admin';
 import { LessonPlayerClient, LessonTags } from './lesson-player-client';
 import { JsonLd } from '@/components/seo/json-ld';
-import { OG_LOCALE, SITE_NAME, categoryPath, isSiteLocale, lessonPath, pageUrl, seriesPath } from '@/config/site';
+import { DEFAULT_LOCALE, OG_LOCALE, SITE_NAME, categoryPath, isSiteLocale, lessonPath, pageUrl, seriesPath } from '@/config/site';
+import { categoryLabel } from '@/lib/category-tree';
 import { breadcrumbJsonLd, lessonDescription, lessonJsonLd, pageAlternates } from '@/lib/seo';
 import { lessonsHref } from '@/lib/tag-links';
 import { getCachedCategoriesTree } from '@/lib/supabase/anon';
@@ -93,7 +94,7 @@ export default async function LessonDetailPage({ params, searchParams }: Props) 
           breadcrumbJsonLd([
             { name: SITE_NAME.he, pathname: '/' },
             ...(lesson.category
-              ? [{ name: lesson.category.hebrew_name, pathname: categoryPath(lesson.category.id) }]
+              ? [{ name: categoryLabel(lesson.category, DEFAULT_LOCALE), pathname: categoryPath(lesson.category.id) }]
               : []),
             { name: lesson.hebrew_title || lesson.title, pathname: lessonPath(lesson) },
           ]),

@@ -61,6 +61,62 @@ describe('mergeBookmarks', () => {
   });
 });
 
+describe('mergeBookmarks with edits (updated_at)', () => {
+  const OLD = '2026-09-01T10:00:00.000000+00:00';
+  const NEWER = '2026-09-02T10:00:00.000000+00:00';
+
+  it('keeps a device edit that is newer than the account row (a sync read the rows before the edit landed)', () => {
+    const [merged] = mergeBookmarks(
+      [local('b', { note: 'edited here', tag: 'quote', updatedAt: NEWER })],
+      [server('b', { note: 'old', tag: 'important', updated_at: OLD })],
+      [],
+    );
+    expect(merged.note).toBe('edited here');
+    expect(merged.tag).toBe('quote');
+    expect(merged.updatedAt).toBe(NEWER);
+  });
+
+  it('takes the account row when it is newer than the device copy (edited on another device)', () => {
+    const [merged] = mergeBookmarks(
+      [local('b', { note: 'old here', tag: 'review', updatedAt: OLD })],
+      [server('b', { note: 'edited elsewhere', tag: 'question', updated_at: NEWER })],
+      [],
+    );
+    expect(merged.note).toBe('edited elsewhere');
+    expect(merged.tag).toBe('question');
+    expect(merged.updatedAt).toBe(NEWER);
+  });
+
+  it('keeps the account copy when the device copy was never confirmed (no updatedAt)', () => {
+    const [merged] = mergeBookmarks(
+      [local('b', { note: 'device' })],
+      [server('b', { note: 'account', updated_at: OLD })],
+      [],
+    );
+    expect(merged.note).toBe('account');
+    expect(merged.updatedAt).toBe(OLD);
+  });
+
+  it('keeps the account copy when the account row has no updated_at (before migration 024)', () => {
+    const [merged] = mergeBookmarks(
+      [local('b', { note: 'device', updatedAt: NEWER })],
+      [server('b', { note: 'account', updated_at: undefined })],
+      [],
+    );
+    expect(merged.note).toBe('account');
+    expect(merged.updatedAt).toBeUndefined();
+  });
+
+  it('never changes the lesson, part or position of an existing bookmark', () => {
+    const [merged] = mergeBookmarks(
+      [local('b', { position: 10.4, audioFileId: 'part-1', updatedAt: NEWER })],
+      [server('b', { position: 10, lesson_id: 'lesson-1', audio_file_id: 'part-1', updated_at: OLD })],
+      [],
+    );
+    expect(merged).toMatchObject({ id: 'b', lessonId: 'lesson-1', position: 10.4, audioFileId: 'part-1' });
+  });
+});
+
 describe('progress sync', () => {
   const at = (minute: number) => new Date(Date.UTC(2026, 8, 1, 10, minute)).toISOString();
 
@@ -105,15 +161,37 @@ describe('progress sync', () => {
   it('keeps an observed file duration only when newer account progress is for that same file', () => {
     const merged = applyServerProgress(
       {
-        same: { lessonId: 'same', audioFileId: 'part-1', position: 300, duration: 600, completed: false, lastPlayed: at(1) },
-        changed: { lessonId: 'changed', audioFileId: 'part-1', position: 300, duration: 600, completed: false, lastPlayed: at(1) },
+        same: {
+          lessonId: 'same',
+          audioFileId: 'part-1',
+          position: 300,
+          duration: 600,
+          completed: false,
+          lastPlayed: at(1),
+        },
+        changed: {
+          lessonId: 'changed',
+          audioFileId: 'part-1',
+          position: 300,
+          duration: 600,
+          completed: false,
+          lastPlayed: at(1),
+        },
       },
       [
         { lesson_id: 'same', audio_file_id: 'part-1', position: 600, completed: false, last_played_at: at(20) },
         { lesson_id: 'changed', audio_file_id: 'part-2', position: 200, completed: false, last_played_at: at(20) },
       ],
     );
-    expect(getResumePoint([{ audioFileId: 'part-1', duration: 0 }, { audioFileId: 'part-2', duration: 900 }], merged.same)).toEqual({
+    expect(
+      getResumePoint(
+        [
+          { audioFileId: 'part-1', duration: 0 },
+          { audioFileId: 'part-2', duration: 900 },
+        ],
+        merged.same,
+      ),
+    ).toEqual({
       index: 1,
       position: 0,
     });
@@ -216,7 +294,12 @@ describe('notes sync', () => {
       note('edited-here', { updatedAt: at(4), syncedAt: pg(0) }),
       note('never-synced'),
     ];
-    const merged = mergeNotes([...sent, note('created-during-sync', { syncedAt: pg(6), updatedAt: at(6) })], [], [], sent);
+    const merged = mergeNotes(
+      [...sent, note('created-during-sync', { syncedAt: pg(6), updatedAt: at(6) })],
+      [],
+      [],
+      sent,
+    );
     expect(merged.map((n) => n.id)).toEqual(['edited-here', 'never-synced', 'created-during-sync']);
   });
 

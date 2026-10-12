@@ -147,12 +147,15 @@ test('Tab reaches a date link and Enter navigates without nested links', async (
 test('date navigation keeps the same audio element, mini-player lesson, queue and play intent', async ({ page }) => {
   await installMediaHarness(page);
   await page.goto('/he/lessons');
-  await page.getByRole('main').getByRole('button', { name: he.player.play, exact: true }).first().click();
-  // Play on a card also opens that lesson's page; wait for it before the next tap.
+  const firstRow = page.getByRole('main').locator('article').first();
+  await firstRow.getByRole('button', { name: he.player.play, exact: true }).click();
+  // Play on a row plays in place (1.2); then open that lesson's page from its title.
+  await expect(page.locator('header').getByRole('button', { name: he.player.pause, exact: true })).toBeVisible();
+  await firstRow.locator('h3 a').first().click();
   await expect.poll(() => new URL(page.url()).pathname, { timeout: 45_000 }).toMatch(/^\/he\/lessons\/[^/]+$/);
   await expect(page.locator('main [data-lesson-date]').first()).toBeVisible();
   await expect(page.locator('header').getByRole('button', { name: he.player.pause, exact: true })).toBeVisible();
-  const mini = page.locator('[data-player-expand]');
+  const mini = page.locator('[data-player-expand]:visible');
   const miniName = await mini.getAttribute('aria-label');
   const audio = await page.evaluateHandle(() => window.__lastAudio);
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('tora-player-audio')!).state);

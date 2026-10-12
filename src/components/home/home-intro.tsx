@@ -144,7 +144,7 @@ export function HomeIntro() {
               key={item.key}
               className="grid grid-cols-[auto_1fr] items-start gap-3 rounded-xl bg-[hsl(var(--surface-elevated))] p-3 text-[13px] leading-relaxed text-foreground/75"
             >
-              <FeatureIcons hue={item.hue} icons={item.icons} controls={item.key === 'controls'} />
+              <FeatureIcons hue={item.hue} icons={item.icons} controls={item.key === 'controls'} share={item.key === 'share'} />
               <div className="grid gap-2">
                 <p>{t.rich(`items.${item.key}`, RICH)}</p>
                 {item.key === 'notifications' && <NotificationsAction />}
@@ -165,10 +165,13 @@ function FeatureIcons({
   hue,
   icons,
   controls,
+  share,
 }: {
   hue: number;
   icons: readonly React.ComponentType<{ className?: string; 'aria-hidden'?: boolean }>[];
   controls?: boolean;
+  /** The device's own share glyph (Apple or Android), like the real share buttons. */
+  share?: boolean;
 }) {
   return (
     <span
@@ -182,6 +185,8 @@ function FeatureIcons({
           <Moon className="h-4 w-4" />
           <Car className="h-4 w-4" />
         </>
+      ) : share ? (
+        <PlatformShareIcon className="h-4 w-4" />
       ) : (
         icons.map((Icon, index) => <Icon key={index} className="h-4 w-4" aria-hidden />)
       )}

@@ -65,6 +65,9 @@ import { CategoryPicker } from '@/components/categories/category-picker';
 import { LessonTagLink } from '@/components/lessons/lesson-browse-links';
 import { normalizeTags } from '@/lib/tags';
 import { getImageStreamUrl } from '@/lib/image-keys';
+import { sortLessonImages } from '@/lib/image-download';
+import { ImageDownloadButton } from '@/components/lessons/image-download-button';
+import { useModalDialog } from '@/hooks/use-modal-dialog';
 
 function formatDur(seconds: number): string {
   if (!seconds || seconds <= 0) return '';
@@ -1368,7 +1371,7 @@ function ImageGallerySection({
   lessonTitle: string;
 }) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
-  const sorted = [...images].sort((a, b) => a.sort_order - b.sort_order);
+  const sorted = sortLessonImages(images);
 
   const openLightbox = (index: number) => setLightboxIndex(index);
   const closeLightbox = () => setLightboxIndex(null);
@@ -1411,61 +1414,111 @@ function ImageGallerySection({
       </div>
 
       {lightboxIndex !== null && (
-        <div className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center" onClick={closeLightbox}>
-          <button
-            onClick={closeLightbox}
-            className="absolute top-4 end-4 z-10 rounded-full p-2 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 transition-colors"
-            aria-label="Close"
-          >
-            <X className="h-6 w-6" />
-          </button>
-
-          <div className="absolute top-5 start-4 text-sm text-white/60 tabular-nums">
-            {lightboxIndex + 1} / {sorted.length}
-          </div>
-
-          {sorted.length > 1 && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                goPrev();
-              }}
-              className="absolute start-2 top-1/2 -translate-y-1/2 z-10 rounded-full p-2 text-white/60 hover:text-white bg-white/10 hover:bg-white/20 transition-colors"
-              aria-label="Previous"
-            >
-              <ChevronRight className="h-6 w-6" />
-            </button>
-          )}
-
-          <img
-            src={getImageStreamUrl(sorted[lightboxIndex].file_key)}
-            alt={sorted[lightboxIndex].caption || `${lessonTitle} – ${lightboxIndex + 1}`}
-            className="max-w-[90vw] max-h-[85vh] object-contain rounded-lg"
-            onClick={(e) => e.stopPropagation()}
-          />
-
-          {sorted.length > 1 && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                goNext();
-              }}
-              className="absolute end-2 top-1/2 -translate-y-1/2 z-10 rounded-full p-2 text-white/60 hover:text-white bg-white/10 hover:bg-white/20 transition-colors"
-              aria-label="Next"
-            >
-              <ChevronLeft className="h-6 w-6" />
-            </button>
-          )}
-
-          {sorted[lightboxIndex].caption && (
-            <div className="absolute bottom-6 inset-x-0 text-center">
-              <p className="text-sm text-white/80 bg-black/50 inline-block px-4 py-2 rounded-full" dir="rtl">
-                {sorted[lightboxIndex].caption}
-              </p>
-            </div>
-          )}
-        </div>
+        <ImageLightbox
+          images={sorted}
+          index={lightboxIndex}
+          lessonTitle={lessonTitle}
+          onPrev={goPrev}
+          onNext={goNext}
+          onClose={closeLightbox}
+        />
       )}
+    </div>
+  );
+}
+
+/**
+ * Full-size image viewer, a modal dialog: focus moves in on open, Tab stays
+ * inside, Escape closes and focus returns to the tile. The download button is
+ * in the focus order after the image. Every click that is not on the image,
+ * its controls or the download button closes the viewer.
+ */
+function ImageLightbox({
+  images,
+  index,
+  lessonTitle,
+  onPrev,
+  onNext,
+  onClose,
+}: {
+  images: LessonImage[];
+  index: number;
+  lessonTitle: string;
+  onPrev: () => void;
+  onNext: () => void;
+  onClose: () => void;
+}) {
+  const t = useTranslations('imageDownload');
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalDialog(dialogRef, onClose);
+  const image = images[index];
+
+  return (
+    <div
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label={t('lightboxLabel')}
+      tabIndex={-1}
+      className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center focus:outline-none"
+      onClick={onClose}
+    >
+      <button
+        onClick={onClose}
+        className="absolute top-4 end-4 z-10 rounded-full p-2 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 transition-colors"
+        aria-label="Close"
+      >
+        <X className="h-6 w-6" />
+      </button>
+
+      <div className="absolute top-5 start-4 text-sm text-white/60 tabular-nums">
+        {index + 1} / {images.length}
+      </div>
+
+      {images.length > 1 && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onPrev();
+          }}
+          className="absolute start-2 top-1/2 -translate-y-1/2 z-10 rounded-full p-2 text-white/60 hover:text-white bg-white/10 hover:bg-white/20 transition-colors"
+          aria-label="Previous"
+        >
+          <ChevronRight className="h-6 w-6" />
+        </button>
+      )}
+
+      <img
+        src={getImageStreamUrl(image.file_key)}
+        alt={image.caption || `${lessonTitle} – ${index + 1}`}
+        className="max-w-[90vw] max-h-[85vh] object-contain rounded-lg"
+        onClick={(e) => e.stopPropagation()}
+      />
+
+      {images.length > 1 && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onNext();
+          }}
+          className="absolute end-2 top-1/2 -translate-y-1/2 z-10 rounded-full p-2 text-white/60 hover:text-white bg-white/10 hover:bg-white/20 transition-colors"
+          aria-label="Next"
+        >
+          <ChevronLeft className="h-6 w-6" />
+        </button>
+      )}
+
+      <div
+        className="absolute bottom-6 inset-x-0 flex flex-col items-center gap-3 px-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {image.caption && (
+          <p className="text-sm text-white/80 bg-black/50 inline-block px-4 py-2 rounded-full" dir="rtl">
+            {image.caption}
+          </p>
+        )}
+        <ImageDownloadButton imageId={image.id} number={index + 1} />
+      </div>
     </div>
   );
 }
