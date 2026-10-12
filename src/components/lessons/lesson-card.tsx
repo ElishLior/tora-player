@@ -4,7 +4,8 @@ import { lessonPath } from '@/config/site';
 
 import { useMemo } from 'react';
 import { Check, ListChecks, ListPlus } from 'lucide-react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
+import { categoryLabel } from '@/lib/category-tree';
 import { Link } from '@/i18n/routing';
 import { parshaLabel } from '@/lib/parsha-label';
 import { hebrewDayMonth, readingHue } from '@/lib/lesson-display';
@@ -40,6 +41,7 @@ const TILE = 'h-[58px] w-[52px] flex-shrink-0';
  */
 export function LessonCard({ lesson, selectable, selected, onToggleSelect }: LessonCardProps) {
   const t = useTranslations('player');
+  const locale = useLocale();
   const hydrated = useHydrated();
   const saved = useProgressStore((s) => s.progressMap[lesson.id]);
   const tracks = useMemo(() => getLessonTracks(lesson), [lesson]);
@@ -151,7 +153,7 @@ export function LessonCard({ lesson, selectable, selected, onToggleSelect }: Les
                 className="max-w-[120px] truncate rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary/80"
                 dir="rtl"
               >
-                {lesson.category.hebrew_name}
+                {categoryLabel(lesson.category, locale)}
               </span>
             )}
           </p>
