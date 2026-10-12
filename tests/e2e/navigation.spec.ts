@@ -152,7 +152,7 @@ test('date navigation keeps the same audio element, mini-player lesson, queue an
   await expect.poll(() => new URL(page.url()).pathname, { timeout: 45_000 }).toMatch(/^\/he\/lessons\/[^/]+$/);
   await expect(page.locator('main [data-lesson-date]').first()).toBeVisible();
   await expect(page.locator('header').getByRole('button', { name: he.player.pause, exact: true })).toBeVisible();
-  const mini = page.locator('[data-player-expand]');
+  const mini = page.locator('[data-player-expand]:visible');
   const miniName = await mini.getAttribute('aria-label');
   const audio = await page.evaluateHandle(() => window.__lastAudio);
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('tora-player-audio')!).state);

@@ -964,5 +964,12 @@
     "stopped": "אין שיעורים לניגון — נסו שוב",
     "retry": "נסו שוב",
     "skipped": "דילגנו על שיעור שאינו זמין: {title}"
+  },
+  "desktopPlayer": {
+    "panelLabel": "נגן שיעורים",
+    "lastPlayed": "האזנה אחרונה",
+    "resume": "המשך האזנה",
+    "nothingPlayedTitle": "עוד לא הושמע שיעור",
+    "nothingPlayedHint": "שיעור שתתחילו להאזין לו יופיע כאן."
   }
 }

@@ -61,10 +61,13 @@ export function useModalDialog(
       requestAnimationFrame(() => {
         const active = document.activeElement;
         if (active && active !== document.body && active.isConnected) return;
+        // The first *visible* match: the phone and desktop players can both be in the DOM.
         const target = opener?.isConnected
           ? opener
           : fallbackFocus
-            ? document.querySelector<HTMLElement>(fallbackFocus)
+            ? Array.from(document.querySelectorAll<HTMLElement>(fallbackFocus)).find(
+                (el) => el.getClientRects().length > 0,
+              ) ?? null
             : null;
         target?.focus();
       });

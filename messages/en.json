@@ -964,5 +964,12 @@
     "stopped": "No playable lessons left — try again",
     "retry": "Try again",
     "skipped": "Skipped an unavailable lesson: {title}"
+  },
+  "desktopPlayer": {
+    "panelLabel": "Lesson player",
+    "lastPlayed": "Last played",
+    "resume": "Continue listening",
+    "nothingPlayedTitle": "No lesson played yet",
+    "nothingPlayedHint": "A lesson you start listening to will appear here."
   }
 }

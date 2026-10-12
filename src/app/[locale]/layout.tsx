@@ -62,8 +62,8 @@ export default async function LocaleLayout({ children, params }: Props) {
               <div className="flex flex-1">
                 <SideNav locale={locale} />
 
-                {/* Padded for the bottom nav + mini player on phones, the mini player alone on desktop. */}
-                <main className="min-w-0 flex-1 px-4 py-4 pb-36 lg:px-8 lg:py-6 lg:pb-24">
+                {/* Padded for the bottom nav + mini player on phones; on desktop the bar is 6rem (h-24) plus its inset. */}
+                <main className="min-w-0 flex-1 px-4 py-4 pb-36 lg:px-8 lg:py-6 lg:pb-[calc(6rem+env(safe-area-inset-bottom))]">
                   <div className="mx-auto w-full max-w-3xl lg:max-w-5xl">{children}</div>
                 </main>
               </div>

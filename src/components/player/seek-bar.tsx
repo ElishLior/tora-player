@@ -8,12 +8,17 @@ interface SeekBarProps {
   currentTime: number;
   duration: number;
   onSeek: (time: number) => void;
+  /**
+   * 'remaining' (default): elapsed at the start, minus the time left at the end.
+   * 'total': elapsed at the start, the full length at the end, both LTR at 13px (desktop players).
+   */
+  timeMode?: 'remaining' | 'total';
 }
 
 const KEYBOARD_STEP_SECONDS = 5;
 
 /** Progress runs from the inline start: right-to-left in Hebrew, left-to-right in English. */
-export function SeekBar({ currentTime, duration, onSeek }: SeekBarProps) {
+export function SeekBar({ currentTime, duration, onSeek, timeMode = 'remaining' }: SeekBarProps) {
   const t = useTranslations('player');
   const barRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -97,10 +102,17 @@ export function SeekBar({ currentTime, duration, onSeek }: SeekBarProps) {
         )}
       </div>
 
-      <div className="flex justify-between text-[11px] text-muted-foreground tabular-nums">
-        <bdi>{formatDuration(Math.round(displayTime))}</bdi>
-        <bdi dir="ltr">{duration > 0 ? `-${formatDuration(Math.round(remaining))}` : '--:--'}</bdi>
-      </div>
+      {timeMode === 'total' ? (
+        <div className="flex justify-between text-[13px] leading-4 text-muted-foreground tabular-nums">
+          <bdi dir="ltr">{formatDuration(Math.round(displayTime))}</bdi>
+          <bdi dir="ltr">{duration > 0 ? formatDuration(Math.round(duration)) : '--:--'}</bdi>
+        </div>
+      ) : (
+        <div className="flex justify-between text-[11px] text-muted-foreground tabular-nums">
+          <bdi>{formatDuration(Math.round(displayTime))}</bdi>
+          <bdi dir="ltr">{duration > 0 ? `-${formatDuration(Math.round(remaining))}` : '--:--'}</bdi>
+        </div>
+      )}
     </div>
   );
 }
