@@ -801,6 +801,9 @@
     "close": "Close",
     "enabled": "Notifications are on"
   },
+  "lessonPage": {
+    "category": "Category"
+  },
   "categoryAdmin": {
     "title": "Manage categories",
     "topLevelCount": "{count, plural, =0 {No top-level categories} one {One top-level category} other {# top-level categories}}",

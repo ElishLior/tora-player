@@ -801,6 +801,9 @@
     "close": "סגירה",
     "enabled": "ההתראות הופעלו"
   },
+  "lessonPage": {
+    "category": "קטגוריה"
+  },
   "categoryAdmin": {
     "title": "ניהול קטגוריות",
     "topLevelCount": "{count, plural, =0 {אין קטגוריות ראשיות} one {קטגוריה ראשית אחת} other {# קטגוריות ראשיות}}",
