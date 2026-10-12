@@ -1473,6 +1473,7 @@ function ImageLightbox({
   onClose: () => void;
 }) {
   const t = useTranslations('imageDownload');
+  const tPage = useTranslations('lessonPage');
   const dialogRef = useRef<HTMLDivElement>(null);
   useModalDialog(dialogRef, onClose);
   const image = images[index];
@@ -1490,7 +1491,7 @@ function ImageLightbox({
       <button
         onClick={onClose}
         className="absolute top-4 end-4 z-10 rounded-full p-2 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 transition-colors"
-        aria-label="Close"
+        aria-label={tPage('lightboxClose')}
       >
         <X className="h-6 w-6" />
       </button>
@@ -1506,7 +1507,7 @@ function ImageLightbox({
             onPrev();
           }}
           className="absolute start-2 top-1/2 -translate-y-1/2 z-10 rounded-full p-2 text-white/60 hover:text-white bg-white/10 hover:bg-white/20 transition-colors"
-          aria-label="Previous"
+          aria-label={tPage('lightboxPrevious')}
         >
           <ChevronRight className="h-6 w-6" />
         </button>
@@ -1526,7 +1527,7 @@ function ImageLightbox({
             onNext();
           }}
           className="absolute end-2 top-1/2 -translate-y-1/2 z-10 rounded-full p-2 text-white/60 hover:text-white bg-white/10 hover:bg-white/20 transition-colors"
-          aria-label="Next"
+          aria-label={tPage('lightboxNext')}
         >
           <ChevronLeft className="h-6 w-6" />
         </button>
@@ -1541,7 +1542,8 @@ function ImageLightbox({
             {image.caption}
           </p>
         )}
-        <ImageDownloadButton imageId={image.id} number={index + 1} />
+        {/* Keyed by image: its preparing/error state must not carry over to the next image. */}
+        <ImageDownloadButton key={image.id} imageId={image.id} number={index + 1} />
       </div>
     </div>
   );

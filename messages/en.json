@@ -802,7 +802,11 @@
     "enabled": "Notifications are on"
   },
   "lessonPage": {
-    "category": "Category"
+    "category": "Category",
+    "edit": "Edit",
+    "lightboxClose": "Close",
+    "lightboxPrevious": "Previous image",
+    "lightboxNext": "Next image"
   },
   "categoryAdmin": {
     "title": "Manage categories",

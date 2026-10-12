@@ -222,7 +222,7 @@ export default async function LessonDetailPage({ params, searchParams }: Props) 
             <Link
               href={`${lessonPath(lesson)}/edit`}
               className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-[hsl(var(--surface-highlight))] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-              aria-label="Edit"
+              aria-label={pageT('edit')}
             >
               <Edit className="h-5 w-5" />
             </Link>
@@ -298,6 +298,15 @@ export default async function LessonDetailPage({ params, searchParams }: Props) 
               <MapPin className="h-3.5 w-3.5" />
               {lesson.location}
             </span>
+          )}
+          {/* Category: a pill with the other details on phones; on xl it sits in the side column */}
+          {lesson.category && (
+            <Link
+              href={categoryPath(lesson.category.id)}
+              className="inline-flex min-h-11 max-w-full items-center rounded-full bg-[hsl(var(--surface-elevated))] px-3 py-1 text-xs text-muted-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 xl:hidden"
+            >
+              <bdi className="break-words">{categoryLabel(lesson.category, locale)}</bdi>
+            </Link>
           )}
           {lesson.seder_number && (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-[hsl(var(--surface-elevated))] px-3 py-1 text-xs text-muted-foreground xl:text-sm">
