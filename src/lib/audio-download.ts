@@ -1,3 +1,5 @@
+import { attachmentDisposition, sanitizeAttachmentName } from '@/lib/attachment-disposition';
+
 const AUDIO_CONTENT_TYPES = {
   mp3: 'audio/mpeg',
   m4a: 'audio/mp4',
@@ -42,14 +44,7 @@ export function sanitizeDownloadFilename(
 ): string {
   const fallbackExtension = getAudioExtension(`.${extension.replace(/^\./, '')}`) ?? DEFAULT_AUDIO_EXTENSION;
 
-  const sanitized = (filename || '')
-    .replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '-')
-    .replace(/\s+/g, ' ')
-    .replace(/^[.\-\s]+/, '')
-    .replace(/[.\-\s]+$/, '')
-    .slice(0, 160);
-
-  const base = sanitized || 'audio';
+  const base = sanitizeAttachmentName(filename) || 'audio';
   return getAudioExtension(base) ? base : `${base}.${fallbackExtension}`;
 }
 
@@ -88,30 +83,7 @@ export function getAudioDirectUrl(audioUrl: string): string | null {
   return `${DOWNLOAD_PREFIX}${encodedKey}?disposition=inline`;
 }
 
-function asciiFallbackFilename(filename: string): string {
-  const extension = getAudioExtension(filename) ?? DEFAULT_AUDIO_EXTENSION;
-  const asciiBase = filename
-    .slice(0, -(extension.length + 1))
-    .normalize('NFKD')
-    .replace(/[^\x20-\x7e]/g, '')
-    .replace(/[\\/:*?"<>|;]+/g, '-')
-    .replace(/\s+/g, ' ')
-    .replace(/^[.\-\s]+/, '')
-    .replace(/[.\-\s]+$/, '');
-
-  return `${asciiBase || 'audio'}.${extension}`;
-}
-
-/**
- * RFC 6266 attachment header: an ASCII `filename` for old clients plus an
- * RFC 5987 `filename*` carrying the full UTF-8 (Hebrew) name.
- */
+/** RFC 6266 attachment header for an audio download (see attachment-disposition.ts). */
 export function buildContentDisposition(filename: string): string {
-  const safeFilename = sanitizeDownloadFilename(filename);
-  const fallback = asciiFallbackFilename(safeFilename);
-  const encoded = encodeURIComponent(safeFilename).replace(
-    /['()*]/g,
-    (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
-  );
-  return `attachment; filename="${fallback}"; filename*=UTF-8''${encoded}`;
+  return attachmentDisposition(sanitizeDownloadFilename(filename));
 }

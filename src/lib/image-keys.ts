@@ -16,14 +16,20 @@ const IMAGE_CONTENT_TYPES: Record<string, string> = {
 };
 
 /**
- * Content type for a key the public image route may sign, or null. Only
- * lesson gallery objects (`images/…`, originals and thumbnails) with a raster
- * extension qualify: never audio, chunks, private note images or traversal.
+ * Lower-case extension of a key the public image route may sign, or null.
+ * Only lesson gallery objects (`images/…`, originals and thumbnails) with a
+ * raster extension qualify: never audio, chunks, private note images or traversal.
  */
-export function servableImageContentType(key: string): string | null {
+export function servableImageExtension(key: string): string | null {
   if (!key.startsWith('images/') || key.includes('..') || key.includes('\\')) return null;
   const extension = key.slice(key.lastIndexOf('.') + 1).toLowerCase();
-  return Object.hasOwn(IMAGE_CONTENT_TYPES, extension) ? IMAGE_CONTENT_TYPES[extension] : null;
+  return Object.hasOwn(IMAGE_CONTENT_TYPES, extension) ? extension : null;
+}
+
+/** Content type for a key the public image route may sign, or null. */
+export function servableImageContentType(key: string): string | null {
+  const extension = servableImageExtension(key);
+  return extension ? IMAGE_CONTENT_TYPES[extension] : null;
 }
 
 /** Same-origin URL that serves a lesson image key. */
