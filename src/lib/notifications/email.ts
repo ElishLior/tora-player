@@ -3,8 +3,9 @@ import nodemailer from 'nodemailer';
 import { createTranslator } from 'next-intl';
 import heMessages from '../../../messages/he.json';
 import { createAdminSupabaseClient } from '@/lib/supabase/admin';
-import type { AnnouncedLesson } from '@/lib/notifications/batch-rules';
-import { absoluteUrl, lessonUrl, pageUrl } from '@/config/site';
+import type { AnnouncementContent } from '@/lib/notifications/announcement';
+import { emailRecipientsAfterPush, type EmailRecipient } from '@/lib/notifications/recipients';
+import { absoluteUrl, pageUrl } from '@/config/site';
 
 export function isEmailConfigured(env: Partial<Record<string, string | undefined>> = process.env): boolean {
   return Boolean(
@@ -37,22 +38,30 @@ interface EmailContent {
   cta: { label: string; url: string };
 }
 
+export interface EmailSendResult {
+  sent: number;
+  /** Recipients left out because a push to one of their devices was delivered. */
+  skippedForPush: number;
+}
+
 /**
  * Emails every confirmed user with profiles.notify_new_lessons = true over
  * SMTP (Gmail app password or any provider): Hebrew RTL, logo, one button.
  * One message per recipient so addresses are never exposed to each other.
+ * `skipEmails` (users who already got this announcement by push) are left
+ * out, compared case-insensitively.
  * Skipped unless SMTP_*, NOTIFY_FROM_EMAIL and NEXT_PUBLIC_APP_URL (the link
  * origin, see src/config/site.ts) are set.
  * Never throws.
  */
-async function sendToSubscribers(build: () => EmailContent): Promise<{ sent: number }> {
-  if (!isEmailConfigured()) return { sent: 0 };
+async function sendToSubscribers(build: () => EmailContent, skipEmails: readonly string[]): Promise<EmailSendResult> {
+  if (!isEmailConfigured()) return { sent: 0, skippedForPush: 0 };
 
   try {
     const { data: recipients, error } = await createAdminSupabaseClient().rpc('new_lesson_email_recipients');
     if (error) throw new Error(error.message);
-    const list = (recipients ?? []) as { email: string; display_name: string | null }[];
-    if (list.length === 0) return { sent: 0 };
+    const { send: list, skipped } = emailRecipientsAfterPush((recipients ?? []) as EmailRecipient[], skipEmails);
+    if (list.length === 0) return { sent: 0, skippedForPush: skipped };
 
     const port = Number(process.env.SMTP_PORT || 465);
     const transport = nodemailer.createTransport({
@@ -98,47 +107,58 @@ ${content.bodyHtml}
 
     const failed = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
     if (failed.length > 0) console.error('[email] new-lesson emails failed:', failed.length, failed[0].reason);
-    return { sent: results.length - failed.length };
+    return { sent: results.length - failed.length, skippedForPush: skipped };
   } catch (err) {
     console.error('[email] new-lesson emails failed:', err);
-    return { sent: 0 };
+    return { sent: 0, skippedForPush: 0 };
   }
 }
 
-/** One new lesson: its title and a button to it. */
-export function sendNewLessonEmails(lesson: { id: string; slug?: string | null; title: string }): Promise<{ sent: number }> {
-  const t = createTranslator({ locale: 'he', messages: heMessages, namespace: 'notifications.email' });
-  return sendToSubscribers(() => ({
-    subject: t('subject', { title: lesson.title }),
-    heading: t('heading'),
-    bodyHtml: `<p style="margin:0 0 20px;font-size:17px"><bdi>${escapeHtml(lesson.title)}</bdi></p>`,
-    bodyText: lesson.title,
-    cta: { label: t('cta'), url: lessonUrl(lesson) },
-  }));
-}
-
-/** Several lessons published together: one email listing them all (oldest first). */
-export function sendNewLessonsDigestEmails(digest: {
-  count: number;
-  range: string;
-  lessons: Array<AnnouncedLesson & { dateLabel: string }>;
-}): Promise<{ sent: number }> {
-  const t = createTranslator({ locale: 'he', messages: heMessages, namespace: 'notifications.batch' });
+/**
+ * The email of one announcement (src/lib/notifications/announcement.ts): one
+ * item shows its title with the part line under it; several are a list, each
+ * lesson linked, with its date and part line.
+ */
+export function sendAnnouncementEmails(
+  email: AnnouncementContent['email'],
+  skipEmails: readonly string[],
+): Promise<EmailSendResult> {
   return sendToSubscribers(() => {
-    const items = digest.lessons.map((lesson) => ({ ...lesson, url: lessonUrl(lesson) }));
-    const list = items
+    const intro = email.intro
+      .map((line) => `<p style="margin:0 0 8px;font-size:14px;color:#52525b"><bdi>${escapeHtml(line)}</bdi></p>`)
+      .join('');
+    const detailHtml = (detail: string | null, size: number) =>
+      detail ? `<span style="font-size:${size}px;color:#52525b"><bdi>${escapeHtml(detail)}</bdi></span>` : '';
+
+    if (email.items.length === 1) {
+      const [item] = email.items;
+      return {
+        subject: email.subject,
+        heading: email.heading,
+        bodyHtml: `${intro}<p style="margin:0 0 20px;font-size:17px"><bdi>${escapeHtml(item.title)}</bdi>${
+          item.detail ? `<br>${detailHtml(item.detail, 14)}` : ''
+        }</p>`,
+        bodyText: [...email.intro, item.title, item.detail].filter(Boolean).join('\n'),
+        cta: email.cta,
+      };
+    }
+
+    const list = email.items
       .map(
         (item) =>
-          `<li style="margin:0 0 12px"><a href="${item.url}" style="color:#18181b;font-size:16px;font-weight:bold"><bdi>${escapeHtml(item.title)}</bdi></a><br><span style="font-size:12px;color:#71717a"><bdi>${escapeHtml(item.dateLabel)}</bdi></span></li>`,
+          `<li style="margin:0 0 12px"><a href="${item.url}" style="color:#18181b;font-size:16px;font-weight:bold"><bdi>${escapeHtml(item.title)}</bdi></a><br><span style="font-size:12px;color:#71717a"><bdi>${escapeHtml(item.dateLabel)}</bdi></span>${
+            item.detail ? `<br>${detailHtml(item.detail, 13)}` : ''
+          }</li>`,
       )
       .join('');
     return {
-      subject: t('title', { count: digest.count }),
-      heading: t('title', { count: digest.count }),
-      bodyHtml: `<p style="margin:0 0 16px;font-size:14px;color:#52525b"><bdi>${escapeHtml(digest.range)}</bdi></p>
-<ul style="margin:0 0 20px;padding:0 20px 0 0">${list}</ul>`,
-      bodyText: `${digest.range}\n\n${items.map((item) => `- ${item.title}: ${item.url}`).join('\n')}`,
-      cta: { label: t('emailCta'), url: pageUrl('/lessons') },
+      subject: email.subject,
+      heading: email.heading,
+      bodyHtml: `${intro}<ul style="margin:8px 0 20px;padding:0 20px 0 0">${list}</ul>`,
+      bodyText: `${email.intro.join('\n')}\n\n${email.items
+        .map((item) => `- ${item.title}${item.detail ? ` (${item.detail})` : ''}: ${item.url}`)
+        .join('\n')}`,
+      cta: email.cta,
     };
-  });
+  }, skipEmails);
 }

@@ -5,6 +5,7 @@ import { createCatalogLessonListReader } from '@/lib/supabase/anon';
 import { matchTags, tagPath, type TagCount } from '@/lib/tag-links';
 import { Link } from '@/i18n/routing';
 import { LessonCard } from '@/components/lessons/lesson-card';
+import { LessonCardList } from '@/components/lessons/lesson-card-list';
 import { EmptyState } from '@/components/shared/empty-state';
 import { AlertTriangle, Search } from 'lucide-react';
 import type { LessonWithRelations } from '@/types/database';
@@ -80,11 +81,11 @@ export default async function SearchPage({ params, searchParams }: Props) {
         failed ? (
           <EmptyState icon={AlertTriangle} title={lessonsT('loadErrorTitle')} description={lessonsT('loadErrorDescription')} />
         ) : results.length > 0 ? (
-          <div className="space-y-3">
+          <LessonCardList>
             {results.map((lesson) => (
               <LessonCard key={lesson.id} lesson={lesson} />
             ))}
-          </div>
+          </LessonCardList>
         ) : (
           <EmptyState
             icon={Search}

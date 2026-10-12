@@ -7,6 +7,7 @@ import { isSupabaseConfigured } from '@/lib/supabase/server';
 import { getCachedSeriesById, getCachedSeriesLessons } from '@/lib/supabase/anon';
 import { notFound } from 'next/navigation';
 import { LessonCard } from '@/components/lessons/lesson-card';
+import { LessonCardList } from '@/components/lessons/lesson-card-list';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PlayLessonsButtons } from '@/components/lessons/play-lessons-buttons';
 import { Link } from '@/i18n/routing';
@@ -53,6 +54,8 @@ export default async function SeriesDetailPage({ params }: Props) {
 
   const tCommon = await getTranslations({ locale: DEFAULT_LOCALE, namespace: 'common' });
 
+  const seriesLessons = lessons.map((lesson) => ({ ...lesson, series }) as LessonWithRelations);
+
   return (
     <div className="space-y-6">
       <JsonLd
@@ -77,20 +80,15 @@ export default async function SeriesDetailPage({ params }: Props) {
         </div>
       </div>
 
-      {lessons.length > 0 && (
-        <PlayLessonsButtons
-          // The rows carry no series; the player shows its name.
-          lessons={lessons.map((lesson) => ({ ...lesson, series }) as LessonWithRelations)}
-          continueSeries
-        />
-      )}
+      {/* The rows carry no series; attach it so the player shows and links the series name. */}
+      {lessons.length > 0 && <PlayLessonsButtons lessons={seriesLessons} continueSeries />}
 
       {lessons.length > 0 ? (
-        <div className="space-y-3">
-          {lessons.map((lesson) => (
-            <LessonCard key={lesson.id} lesson={lesson as LessonWithRelations} showProgress />
+        <LessonCardList>
+          {seriesLessons.map((lesson) => (
+            <LessonCard key={lesson.id} lesson={lesson} showProgress />
           ))}
-        </div>
+        </LessonCardList>
       ) : (
         <EmptyState icon={BookOpen} title={locale === 'he' ? 'אין שיעורים בסדרה' : 'No lessons in this series'} />
       )}

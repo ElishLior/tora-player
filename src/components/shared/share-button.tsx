@@ -1,10 +1,11 @@
 'use client';
 
-import { Share2, Copy, Clock, Link2, X, Check } from 'lucide-react';
+import { Copy, Clock, Link2, X, Check } from 'lucide-react';
 import { getLessonShareUrl, shareLesson, copyToClipboard } from '@/lib/share';
 import { useState, useRef, useEffect } from 'react';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { useTranslations } from 'next-intl';
+import { PlatformShareIcon } from '@/components/shared/platform-share-icon';
 
 interface ShareButtonProps {
   lessonId: string;
@@ -12,6 +13,8 @@ interface ShareButtonProps {
   title: string;
   seriesName?: string;
   className?: string;
+  /** 'icon': a bare icon button (top bar). 'action': icon over a label, for a player's secondary row. */
+  variant?: 'icon' | 'action';
 }
 
 function formatTime(seconds: number): string {
@@ -29,7 +32,14 @@ function parseTime(str: string): number | null {
   return m * 60 + s;
 }
 
-export function ShareButton({ lessonId, lessonSlug, title, seriesName, className = '' }: ShareButtonProps) {
+export function ShareButton({
+  lessonId,
+  lessonSlug,
+  title,
+  seriesName,
+  className = '',
+  variant = 'icon',
+}: ShareButtonProps) {
   const [open, setOpen] = useState(false);
   const tCommon = useTranslations('common');
   const [includeTimestamp, setIncludeTimestamp] = useState(false);
@@ -131,13 +141,24 @@ export function ShareButton({ lessonId, lessonSlug, title, seriesName, className
 
   return (
     <div className="relative">
-      <button
-        onClick={handleOpen}
-        className={`rounded-full p-2 text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--surface-highlight))] transition-colors ${className}`}
-        aria-label={tCommon('share')}
-      >
-        <Share2 className="h-5 w-5" />
-      </button>
+      {variant === 'action' ? (
+        <button
+          type="button"
+          onClick={handleOpen}
+          className={`flex flex-col items-center gap-1.5 rounded-lg text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 ${className}`}
+        >
+          <PlatformShareIcon className="h-5 w-5" />
+          <span className="text-[10px]">{tCommon('share')}</span>
+        </button>
+      ) : (
+        <button
+          onClick={handleOpen}
+          className={`rounded-full p-2 text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--surface-highlight))] transition-colors ${className}`}
+          aria-label={tCommon('share')}
+        >
+          <PlatformShareIcon className="h-5 w-5" />
+        </button>
+      )}
 
       {/* Share dialog overlay */}
       {open && (
@@ -259,7 +280,7 @@ export function ShareButton({ lessonId, lessonSlug, title, seriesName, className
                     </>
                   ) : (
                     <>
-                      <Share2 className="h-5 w-5 flex-shrink-0" />
+                      <PlatformShareIcon className="h-5 w-5 flex-shrink-0" />
                       <span className="text-sm font-medium">שתף לאפליקציה אחרת...</span>
                     </>
                   )}

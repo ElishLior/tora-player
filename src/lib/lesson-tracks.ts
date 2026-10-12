@@ -97,6 +97,7 @@ function createLessonTrack(
     audioUrlFallback: normalizeAudioUrl(lesson.audio_url_fallback) || undefined,
     duration: asset.duration || (partCount === 1 ? lesson.duration : 0),
     seriesName: lesson.series?.hebrew_name || lesson.series?.name || undefined,
+    seriesId: lesson.series?.id || undefined,
     date: lesson.date,
     description: lesson.description || lesson.summary || undefined,
     originalName: asset.originalName || asset.title,
@@ -107,6 +108,11 @@ function createLessonTrack(
 export function getLessonTracks(lesson: LessonWithRelations): AudioTrack[] {
   const assets = getLessonAudioAssets(lesson);
   return assets.map((asset, index) => createLessonTrack(lesson, asset, index, assets.length));
+}
+
+/** Each part's stored length in seconds, in play order (0 = unknown). Feeds `<PartDurations>`. */
+export function getLessonPartSeconds(lesson: LessonWithRelations): number[] {
+  return getLessonAudioAssets(lesson).map((asset) => asset.duration);
 }
 
 /** The tracks of a lesson saved on this device (played from IndexedDB). */

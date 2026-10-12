@@ -6,6 +6,7 @@ import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { isSupabaseConfigured } from '@/lib/supabase/server';
 import { getCachedAllCategories, getCachedCategoryById, getCachedCategoryLessons } from '@/lib/supabase/anon';
 import { LessonCard } from '@/components/lessons/lesson-card';
+import { LessonCardList } from '@/components/lessons/lesson-card-list';
 import { EmptyState } from '@/components/shared/empty-state';
 import { Link } from '@/i18n/routing';
 import { BookOpen, ChevronLeft, FolderOpen } from 'lucide-react';
@@ -112,11 +113,11 @@ export default async function CategoryDetailPage({ params }: Props) {
 
       {/* Lessons */}
       {lessons.length > 0 ? (
-        <div className="space-y-0.5">
+        <LessonCardList>
           {lessons.map((lesson) => (
             <LessonCard key={lesson.id} lesson={lesson} showProgress />
           ))}
-        </div>
+        </LessonCardList>
       ) : childCategories.length === 0 ? (
         <EmptyState
           icon={BookOpen}

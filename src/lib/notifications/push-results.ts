@@ -25,3 +25,46 @@ export function summarizePushOutcomes(outcomes: PushOutcome[]): PushSummary {
   }
   return summary;
 }
+
+export type PushService = 'apple' | 'fcm' | 'wns' | 'mozilla' | 'other';
+
+/**
+ * Which push service an endpoint belongs to, by host only (never the token
+ * path): Safari/iPhone PWAs (web.push.apple.com), Chrome/Android/Edge-on-
+ * Android (fcm.googleapis.com), Windows/Edge (*.notify.windows.com) or Firefox
+ * (*.push.services.mozilla.com). WNS hosts vary per region, so they are
+ * reported as `*.notify.windows.com`.
+ */
+export function pushServiceOf(endpoint: string): { service: PushService; host: string } {
+  let host: string;
+  try {
+    host = new URL(endpoint).hostname.toLowerCase();
+  } catch {
+    return { service: 'other', host: 'invalid' };
+  }
+  if (host === 'web.push.apple.com' || host.endsWith('.push.apple.com')) return { service: 'apple', host };
+  if (host === 'fcm.googleapis.com' || host === 'android.googleapis.com') return { service: 'fcm', host };
+  if (host.endsWith('.notify.windows.com')) return { service: 'wns', host: '*.notify.windows.com' };
+  if (host.endsWith('.push.services.mozilla.com') || host === 'push.services.mozilla.com') {
+    return { service: 'mozilla', host };
+  }
+  return { service: 'other', host };
+}
+
+/**
+ * 400/403 rejections usually mean a VAPID key, subject or payload problem that
+ * hits one platform. They are kept (not pruned) and counted per push service,
+ * e.g. { "403 apple web.push.apple.com": 1 }, so the log shows which platform.
+ */
+export function configRejectionsByService(
+  failures: ReadonlyArray<{ endpoint: string; statusCode?: number }>,
+): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const failure of failures) {
+    if (failure.statusCode !== 400 && failure.statusCode !== 403) continue;
+    const { service, host } = pushServiceOf(failure.endpoint);
+    const key = `${failure.statusCode} ${service} ${host}`;
+    counts[key] = (counts[key] ?? 0) + 1;
+  }
+  return counts;
+}

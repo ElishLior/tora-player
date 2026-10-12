@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defaultNotifyMode, summarizeBatch, type AnnouncedLesson } from './batch-rules';
+import { DEFAULT_NOTIFY_MODE, summarizeBatch, type AnnouncedLesson } from './batch-rules';
 
 const lesson = (id: string, date: string, isShort = false): AnnouncedLesson => ({
   id,
@@ -9,11 +9,9 @@ const lesson = (id: string, date: string, isShort = false): AnnouncedLesson => (
   isShort,
 });
 
-describe('defaultNotifyMode', () => {
-  it('announces a single lesson on its own and a batch with one summary', () => {
-    expect(defaultNotifyMode(1)).toBe('each');
-    expect(defaultNotifyMode(2)).toBe('summary');
-    expect(defaultNotifyMode(6)).toBe('summary');
+describe('DEFAULT_NOTIFY_MODE', () => {
+  it('sends one summary per upload batch, whatever its size', () => {
+    expect(DEFAULT_NOTIFY_MODE).toBe('summary');
   });
 });
 

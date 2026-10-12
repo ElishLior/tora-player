@@ -125,9 +125,10 @@ export const playbackProgressSchema = z.object({
 
 // ==================== CATEGORIES ====================
 
+// `name` is stored NOT NULL: the actions fill it from hebrew_name when the admin leaves it blank.
 export const createCategorySchema = z.object({
-  hebrew_name: z.string().min(1, 'Hebrew name is required'),
-  name: z.string().optional(),
+  hebrew_name: z.string().trim().min(1, 'שם בעברית הוא שדה חובה'),
+  name: z.string().trim().optional(),
   description: z.string().optional().nullable(),
   icon: z.string().optional().nullable(),
   parent_id: uuidLike.optional().nullable(),
@@ -135,8 +136,8 @@ export const createCategorySchema = z.object({
 });
 
 export const updateCategorySchema = z.object({
-  hebrew_name: z.string().min(1).optional(),
-  name: z.string().optional().nullable(),
+  hebrew_name: z.string().trim().min(1, 'שם בעברית הוא שדה חובה').optional(),
+  name: z.string().trim().optional().nullable(),
   description: z.string().optional().nullable(),
   icon: z.string().optional().nullable(),
   parent_id: uuidLike.optional().nullable(),

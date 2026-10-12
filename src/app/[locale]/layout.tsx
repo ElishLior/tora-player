@@ -7,7 +7,9 @@ import { ThemeProvider } from 'next-themes';
 import { AudioPlayer } from '@/components/player/audio-player';
 import { Header } from '@/components/layout/header';
 import { BottomNav } from '@/components/layout/bottom-nav';
+import { SideNav } from '@/components/layout/side-nav';
 import { InstallPrompt } from '@/components/pwa/install-prompt';
+import { NotificationPrompt } from '@/components/notifications/notification-prompt';
 import { ServiceWorkerRegistrar } from '@/components/pwa/sw-registrar';
 import { DEFAULT_LOCALE, SITE_DESCRIPTION, SITE_NAME, isSiteLocale } from '@/config/site';
 import { heebo } from '@/app/fonts';
@@ -53,13 +55,17 @@ export default async function LocaleLayout({ children, params }: Props) {
         <ThemeProvider attribute="class" defaultTheme="dark" forcedTheme="dark" enableSystem={false}>
           <NextIntlClientProvider messages={messages}>
             <div className="flex min-h-screen flex-col">
-              {/* Header */}
               <Header locale={locale} />
 
-              {/* Main content - padded for bottom nav + mini player */}
-              <main className="flex-1 container mx-auto px-4 py-4 pb-36">
-                {children}
-              </main>
+              {/* Desktop: side menu at the inline start (right in Hebrew, left in English) + centered content. */}
+              <div className="flex flex-1">
+                <SideNav locale={locale} />
+
+                {/* Padded for the bottom nav + mini player on phones, the mini player alone on desktop. */}
+                <main className="min-w-0 flex-1 px-4 py-4 pb-36 lg:px-8 lg:py-6 lg:pb-24">
+                  <div className="mx-auto w-full max-w-3xl lg:max-w-5xl">{children}</div>
+                </main>
+              </div>
             </div>
 
             {/* Bottom navigation */}
@@ -70,6 +76,9 @@ export default async function LocaleLayout({ children, params }: Props) {
 
             {/* PWA install prompt */}
             <InstallPrompt />
+
+            {/* New-lesson notification question (once per device) */}
+            <NotificationPrompt />
 
             {/* Service worker registration */}
             <ServiceWorkerRegistrar />

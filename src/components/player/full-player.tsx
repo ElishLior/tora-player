@@ -29,7 +29,8 @@ import { SleepTimerControl } from './sleep-timer';
 import { UpNextSheet } from './up-next';
 import { CastStatusMessage } from './cast-status';
 import { PlayerShareButton } from './player-share-button';
-import { LessonDateLink } from '@/components/lessons/lesson-browse-links';
+import { LessonDateLink, LessonSeriesLink } from '@/components/lessons/lesson-browse-links';
+import { Link } from '@/i18n/routing';
 import { audioEngine } from '@/lib/audio-engine';
 import { handleCastClick, isCastableSource } from '@/lib/cast-utils';
 import { useModalDialog } from '@/hooks/use-modal-dialog';
@@ -179,11 +180,19 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
           </button>
           <div className="text-center">
             <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">{t('nowPlaying')}</p>
-            {currentTrack.seriesName && (
-              <p className="text-xs font-bold text-foreground" dir="auto">
-                {currentTrack.seriesName}
-              </p>
-            )}
+            {currentTrack.seriesName &&
+              (currentTrack.seriesId ? (
+                <LessonSeriesLink
+                  seriesId={currentTrack.seriesId}
+                  name={currentTrack.seriesName}
+                  onClick={onClose}
+                  className="text-xs font-bold text-foreground"
+                />
+              ) : (
+                <p className="text-xs font-bold text-foreground" dir="auto">
+                  {currentTrack.seriesName}
+                </p>
+              ))}
           </div>
           <button
             onClick={() => {
@@ -217,14 +226,29 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
           {/* Track info */}
           <div className="w-full max-w-md space-y-1 flex-shrink-0">
             <h2 id="full-player-title" className="text-xl font-bold text-foreground truncate" dir="auto">
-              {currentTrack.hebrewTitle || currentTrack.title}
+              {/* Opens the lesson page; closing the player first so the page is visible. */}
+              <Link
+                href={lessonPath({ id: lessonId, slug: currentTrack.lessonSlug })}
+                onClick={onClose}
+                className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+              >
+                {currentTrack.hebrewTitle || currentTrack.title}
+              </Link>
             </h2>
             <p className="text-sm text-muted-foreground">
-              {currentTrack.seriesName && (
-                <span className="text-primary" dir="auto">
-                  {currentTrack.seriesName}
-                </span>
-              )}
+              {currentTrack.seriesName &&
+                (currentTrack.seriesId ? (
+                  <LessonSeriesLink
+                    seriesId={currentTrack.seriesId}
+                    name={currentTrack.seriesName}
+                    onClick={onClose}
+                    className="text-primary"
+                  />
+                ) : (
+                  <span className="text-primary" dir="auto">
+                    {currentTrack.seriesName}
+                  </span>
+                ))}
               {currentTrack.date && currentTrack.seriesName && ' · '}
               {currentTrack.date && <LessonDateLink date={currentTrack.date} onClick={onClose} />}
             </p>

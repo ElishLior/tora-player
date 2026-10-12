@@ -167,7 +167,29 @@
     "welcomeDesc": "Listen to daily Torah lessons anytime, anywhere",
     "latestLesson": "Latest lesson",
     "categories": "Categories",
-    "showAll": "Show all"
+    "showAll": "Show all",
+    "todayLesson": "Today's lesson",
+    "thisWeek": "This week",
+    "lastWeek": "Last week",
+    "allLessons": "All lessons"
+  },
+  "homeIntro": {
+    "title": "Everything you can do here",
+    "lead": "Tora Player is built to be easy to learn from anywhere. To open a lesson and see all of it, tap the lesson's title. Here is what you have:",
+    "more": "{count} more",
+    "hide": "Hide",
+    "enableNotifications": "Turn on notifications",
+    "items": {
+      "offline": "<b>Listen without internet:</b> save a lesson to your device and it stays available on the go.",
+      "download": "<b>Download to your device:</b> keep the audio file on your device, or share it.",
+      "resume": "<b>Pick up where you stopped:</b> the player remembers where you left off, and once you sign in to the site, across your devices too.",
+      "bookmarks": "<b>Bookmarks and notes:</b> mark an important moment in a lesson and add a note of your own.",
+      "controls": "<b>Control your listening:</b> playback speed, a sleep timer and driving mode with large buttons.",
+      "notifications": "<b>New-lesson alerts:</b> allow notifications when the browser asks, and get a message as soon as a new lesson goes up. Signing up on the site is easiest, and the update also comes by email.",
+      "search": "<b>Search by topic and date:</b> tap a #tag or a date to see similar lessons.",
+      "share": "<b>Share a lesson:</b> tap the share button <share>share icon</share> to send a link to the lesson on WhatsApp, by email or in any other app. The button is in the player: on the lesson page below the play buttons, in the mini player at the bottom of the screen and in the full player."
+    },
+    "lessonPage": "<b>Lesson page:</b> tapping the lesson's title, or anywhere on its card, opens the lesson page with all its details: the recording's parts and the length of each part, the pictures, tags, bookmarks and notes."
   },
   "lessons": {
     "title": "Lessons",
@@ -251,6 +273,7 @@
     "previousTrack": "Previous",
     "nextTrack": "Next",
     "upNextEmpty": "Nothing else in the queue",
+    "showAllUpNext": "Show full queue ({count})",
     "removeFromQueue": "Remove from queue",
     "moveUp": "Move up",
     "moveDown": "Move down",
@@ -410,6 +433,11 @@
     "publishFailed": "Publishing failed: {error}",
     "filesFailed": "{count, plural, one {1 file failed} other {# files failed}} — the lesson was not published",
     "leaveWarning": "Upload in progress — leave anyway?",
+    "notifyPending": {
+      "hint": "The notification waits for a successful retry",
+      "sendNow": "Send notification now",
+      "leaveWarning": "The lesson notification hasn't been sent yet — leave anyway?"
+    },
     "imageUnreadable": "The browser can't read this image — convert it to JPEG and try again",
     "imagesFailed": "The lesson was saved, but some images failed to upload:",
     "audioFailed": "Some audio files failed to upload:",
@@ -473,7 +501,13 @@
     "bookmarks": "Bookmarks",
     "playlists": "Playlists",
     "downloads": "Downloads",
-    "label": "Main navigation"
+    "label": "Main navigation",
+    "search": "Search",
+    "tags": "Topics",
+    "library": "My library",
+    "sidebarLabel": "Side menu",
+    "searchPlaceholder": "Search lessons…",
+    "browse": "Browse"
   },
   "auth": {
     "adminArea": "Admin area",
@@ -555,12 +589,14 @@
     },
     "push": {
       "newLessonTitle": "New lesson published",
+      "partsAddedTitle": "{count, plural, one {A new part was added} other {# new parts were added}}",
       "testTitle": "Test notification",
       "testBody": "Notifications work on this device."
     },
     "email": {
       "appName": "Tora Player",
       "subject": "New lesson: {title}",
+      "partsSubject": "{count, plural, one {New part} other {New parts}}: {title}",
       "heading": "A new lesson was published",
       "cta": "Listen to the lesson",
       "footer": "You received this email because you asked for new lesson updates.",
@@ -569,7 +605,10 @@
     "batch": {
       "title": "{count, plural, one {A new lesson was published} other {# new lessons were published}}",
       "range": "{from} – {to}",
-      "emailCta": "All lessons"
+      "partsLessons": "{count, plural, one {New parts in 1 lesson} other {New parts in # lessons}}",
+      "addedParts": "Added: {parts}",
+      "emailCta": "All lessons",
+      "more": "and {count} more"
     },
     "admin": {
       "title": "Notifications",
@@ -741,6 +780,60 @@
     "clearTag": "Clear tag filter {tag}",
     "filteredEmpty": "No lessons match these filters"
   },
+  "notificationPrompt": {
+    "title": "Get an alert when a new lesson is published?",
+    "body": "We'll send a notification to this device as soon as a new lesson goes up.",
+    "enable": "Turn on notifications",
+    "notNow": "Not now",
+    "neverAgain": "Don't show me this again",
+    "gotIt": "Got it",
+    "close": "Close",
+    "enabled": "Notifications are on"
+  },
+  "categoryAdmin": {
+    "title": "Manage categories",
+    "topLevelCount": "{count, plural, =0 {No top-level categories} one {One top-level category} other {# top-level categories}}",
+    "addCategory": "New category",
+    "addSubcategory": "New subcategory",
+    "newCategory": "New category",
+    "newSubcategory": "New subcategory under {parent}",
+    "hebrewName": "Hebrew name",
+    "hebrewNameRequired": "Hebrew name is required",
+    "englishName": "English name",
+    "englishNameHint": "Empty = the Hebrew name",
+    "description": "Description",
+    "icon": "Icon (emoji or name)",
+    "parent": "Parent category",
+    "topLevelOption": "None (top-level)",
+    "parentLocked": "This category has subcategories, so it stays top-level.",
+    "save": "Save",
+    "cancel": "Cancel",
+    "edit": "Edit",
+    "delete": "Delete",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "dismiss": "Dismiss",
+    "protectedBadge": "Protected",
+    "protectedHint": "Used by lesson uploads, so it cannot be deleted.",
+    "protectedChildHint": "Contains a category used by lesson uploads, so it cannot be deleted.",
+    "deleteConfirm": "Delete \"{name}\"?",
+    "deleteChildren": "{count, plural, one {One subcategory will be deleted too.} other {# subcategories will be deleted too.}}",
+    "deleteLessons": "{count, plural, =0 {No lessons are in it.} one {One lesson will lose its category.} other {# lessons will lose their category.}}",
+    "deleteCounting": "Counting the lessons in it...",
+    "deleteCountFailed": "Could not count the lessons in this category.",
+    "deleteIrreversible": "This cannot be undone.",
+    "confirmDelete": "Delete",
+    "created": "Category created",
+    "updated": "Category updated",
+    "deleted": "Category deleted",
+    "loadFailed": "Could not load categories",
+    "reorderFailed": "Could not change the order. The previous order was restored.",
+    "empty": "No categories yet. Create the first one.",
+    "lessonCategory": "Category",
+    "noCategory": "No category",
+    "lessonCategorySaveFailed": "Could not save the category. Try again.",
+    "manageLink": "Manage categories"
+  },
   "diagnostics": {
     "title": "Playback log",
     "intro": "A device check tool. While it is on, the player records which events arrived from headphones, the lock screen and the system. The log stays on this device and is never sent anywhere.",
@@ -755,5 +848,12 @@
     "clear": "Clear",
     "entries": "{count} entries",
     "empty": "No entries yet. Turn the log on, play a lesson, then run the check."
+  },
+  "partDurations": {
+    "label": "Part lengths",
+    "part": "Part {number}",
+    "partWithLength": "{name}: {length}",
+    "seconds": "{seconds} sec",
+    "minutes": "{minutes} min"
   }
 }
