@@ -855,5 +855,14 @@
     "partWithLength": "{name}: {length}",
     "seconds": "{seconds} שנ׳",
     "minutes": "{minutes} דק׳"
+  },
+  "imageDownload": {
+    "label": "הורדת התמונה",
+    "ariaLabel": "הורדת התמונה {number}",
+    "preparing": "מכין את התמונה…",
+    "started": "ההורדה החלה",
+    "iosHint": "לשמירה: הקישו על שיתוף, ואז על „שמירת תמונה”.",
+    "error": "לא הצלחנו להכין את ההורדה. נסו שוב.",
+    "lightboxLabel": "תמונות השיעור"
   }
 }

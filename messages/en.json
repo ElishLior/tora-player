@@ -855,5 +855,14 @@
     "partWithLength": "{name}: {length}",
     "seconds": "{seconds} sec",
     "minutes": "{minutes} min"
+  },
+  "imageDownload": {
+    "label": "Download image",
+    "ariaLabel": "Download image {number}",
+    "preparing": "Preparing the image…",
+    "started": "Download started",
+    "iosHint": "To save: tap Share, then Save Image.",
+    "error": "Couldn't prepare the download. Try again.",
+    "lightboxLabel": "Lesson images"
   }
 }
