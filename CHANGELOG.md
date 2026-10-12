@@ -2,7 +2,12 @@
 
 Versions follow `MAJOR.MINOR.PATCH`. The version in `package.json` is the release being worked on; a version is released when it is deployed to production from `main` (tag `vX.Y.Z` on that commit). Add each change under the in-progress version as it lands in `dev`.
 
-## 1.1.4 — in progress
+## 1.1.5 — in progress
+
+## 1.1.4 — October 12, 2026
+
+Production release of `main` at `5350349` (PRs #52, #53), deployment `dpl_7kYaUUVwfVsyPwU3dvfiYia1jaRy`. Migration 022 applied in production the same day (437 existing parts marked as announced).
+
 
 - Lesson previews (cards, latest-lesson hero, shorts list) show each part with its own length, `חלק 1: 82 דק׳ · חלק 2: 70 דק׳` ("Part 1: 82 min · Part 2: 70 min"), on one line. A line that does not fit scrolls sideways: swipe or tap on touch screens, hover or keyboard focus with a mouse; reduced motion jumps instead of animating.
 - Desktop layout (1024px and up): a persistent side menu at the inline start (right in Hebrew, left in English), centered width-limited content, a search field in the header, two-column lesson lists from 1280px. Phones and tablets keep the bottom bar.
