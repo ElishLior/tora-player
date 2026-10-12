@@ -11,6 +11,7 @@ import { SideNav } from '@/components/layout/side-nav';
 import { InstallPrompt } from '@/components/pwa/install-prompt';
 import { NotificationPrompt } from '@/components/notifications/notification-prompt';
 import { ServiceWorkerRegistrar } from '@/components/pwa/sw-registrar';
+import { AppUpdateBanner } from '@/components/pwa/app-update-banner';
 import { DEFAULT_LOCALE, SITE_DESCRIPTION, SITE_NAME, isSiteLocale } from '@/config/site';
 import { heebo } from '@/app/fonts';
 
@@ -79,6 +80,9 @@ export default async function LocaleLayout({ children, params }: Props) {
 
             {/* New-lesson notification question (once per device) */}
             <NotificationPrompt />
+
+            {/* A newer deployed build is available (passive; refresh is the user's choice) */}
+            <AppUpdateBanner />
 
             {/* Service worker registration */}
             <ServiceWorkerRegistrar />
