@@ -14,3 +14,14 @@ export const BUILD_ID: string = process.env.NEXT_PUBLIC_BUILD_ID || 'dev';
 export function shortBuildId(buildId: string = BUILD_ID): string {
   return buildId.replace(/^dpl_/, '').slice(0, 7);
 }
+
+/** A build identity: the version (package.json) and the deploy id. */
+export interface BuildIdentity {
+  version: string;
+  buildId: string;
+}
+
+/** Whether two builds differ, by version or by deploy id. */
+export function buildsDiffer(running: BuildIdentity, deployed: BuildIdentity): boolean {
+  return running.version !== deployed.version || running.buildId !== deployed.buildId;
+}

@@ -75,6 +75,8 @@ interface CreateState {
 
 interface EditState {
   id: string;
+  /** The category's updated_at when the edit opened; a save against a newer version is refused. */
+  updatedAt: string;
   form: FormState;
   errors: CategoryFieldErrors;
 }
@@ -295,6 +297,7 @@ export default function AdminCategoriesPage() {
     setCreate(null);
     setEdit({
       id: cat.id,
+      updatedAt: cat.updated_at,
       form: {
         hebrew_name: cat.hebrew_name,
         name: englishFor(cat),
@@ -312,9 +315,17 @@ export default function AdminCategoriesPage() {
       return;
     }
     void runWrite(async () => {
-      const result = await updateCategory(edit.id, toFormData(edit.form));
+      const result = await updateCategory(edit.id, toFormData(edit.form), edit.updatedAt);
       if ('error' in result) {
-        setEdit((current) => (current ? { ...current, errors: result.error } : current));
+        const failure = result.error;
+        if (failure === 'stale') {
+          // Someone else changed it: close the form, reload the tree, and say so.
+          setEdit(null);
+          await load();
+          setError(t('errStale'));
+        } else {
+          setEdit((current) => (current ? { ...current, errors: failure } : current));
+        }
       } else {
         setEdit(null);
         setNotice(t('updated'));

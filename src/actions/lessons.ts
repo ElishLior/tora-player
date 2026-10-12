@@ -11,6 +11,7 @@ import { normalizeTags } from '@/lib/tags';
 import { normalizePartType } from '@/lib/part-types';
 import { notifyNewLesson } from '@/lib/notifications/notify';
 import { updateLessonSchema } from '@/lib/validators';
+import { LESSON_CATEGORY } from '@/lib/supabase/lesson-selects';
 import type { Lesson, LessonWithRelations, LessonAudio, LessonImage } from '@/types/database';
 
 export async function updateLesson(id: string, formData: FormData) {
@@ -165,7 +166,7 @@ export async function getLesson(id: string) {
 
   const { data, error } = await supabase
     .from('lessons')
-    .select('*, series(*), category:categories(id, hebrew_name), snippets(*), audio_files:lesson_audio(*), images:lesson_images(*)')
+    .select(`*, series(*), ${LESSON_CATEGORY}, snippets(*), audio_files:lesson_audio(*), images:lesson_images(*)`)
     .eq('id', id)
     .single();
 
@@ -332,7 +333,7 @@ export async function getLessonsByIds(ids: string[]) {
   const supabase = await requireServerSupabaseClient();
   const { data, error } = await supabase
     .from('lessons')
-    .select('*, series(*), category:categories(id, hebrew_name), audio_files:lesson_audio(*)')
+    .select(`*, series(*), ${LESSON_CATEGORY}, audio_files:lesson_audio(*)`)
     .in('id', ids)
     .eq('is_published', true);
   if (error || !data) return [];

@@ -271,6 +271,7 @@
       "failed": "Playback stopped. Tap play to try again."
     },
     "previousTrack": "Previous",
+    "continueBlocked": "Tap to continue",
     "nextTrack": "Next",
     "upNextEmpty": "Nothing else in the queue",
     "showAllUpNext": "Show full queue ({count})",
@@ -905,7 +906,9 @@
     "refresh": "Refresh",
     "later": "Later",
     "recovery": "The new version did not load. Close the tab and open the site again.",
-    "versionLabel": "Version {version} · {build}"
+    "versionLabel": "Version {version} · {build}",
+    "runningAndDeployed": "Running: {running} · Live: {deployed}",
+    "versionDiffers": "(differs from the live site)"
   },
   "releaseAnnouncement": {
     "title": "Release announcement",

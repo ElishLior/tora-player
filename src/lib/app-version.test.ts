@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { shortBuildId } from './app-version';
+import { buildsDiffer, shortBuildId } from './app-version';
 
 describe('app version identity', () => {
   afterEach(() => {
@@ -35,5 +35,21 @@ describe('app version identity', () => {
   it('the release version is the package.json version (single source)', () => {
     const pkg = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8')) as { version: string };
     expect(pkg.version).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+});
+
+describe('running vs live build', () => {
+  const RUNNING = { version: '1.2.0', buildId: 'dpl_abc1234' };
+
+  it('is the same build only when version and deploy id both match', () => {
+    expect(buildsDiffer(RUNNING, { ...RUNNING })).toBe(false);
+  });
+
+  it('differs when the live site has a new deploy of the same version', () => {
+    expect(buildsDiffer(RUNNING, { version: '1.2.0', buildId: 'dpl_def5678' })).toBe(true);
+  });
+
+  it('differs when the live site has another version', () => {
+    expect(buildsDiffer(RUNNING, { version: '1.2.1', buildId: 'dpl_abc1234' })).toBe(true);
   });
 });

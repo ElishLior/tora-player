@@ -167,3 +167,21 @@ export function withoutUpdateRequest(href: string): string {
   url.searchParams.delete(UPDATE_REQUEST_PARAM);
   return url.toString();
 }
+
+/** One bounded, uncached GET /api/version. Null on any failure or timeout (never throws). */
+export async function fetchDeployedVersion(
+  fetcher: typeof fetch,
+  timeoutMs: number,
+): Promise<{ version: string; buildId: string } | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetcher('/api/version', { cache: 'no-store', signal: controller.signal });
+    if (!response.ok) return null;
+    return parseVersionResponse(await response.json());
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}

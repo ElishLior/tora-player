@@ -296,6 +296,25 @@ describe("audio controller", () => {
     expect(useAudioStore.getState().isPlaying).toBe(false);
   });
 
+  it("a pause cancels the scheduled retry, so a play after it does not get a stale reload", () => {
+    useRetryClock();
+    playTrack(makeTrack("a"));
+    becomePlaying();
+    element().currentTime = 100;
+    element().error = { code: 2 };
+    element().emit("error");
+    expect(useAudioStore.getState().playbackIssue).toBe("retrying");
+
+    pause();
+    play(); // the listener resumes before the retry is due; the element has not reported playing yet
+    const loads = element().load.mock.calls.length;
+
+    vi.advanceTimersByTime(10_000);
+
+    expect(element().load).toHaveBeenCalledTimes(loads);
+    expect(useAudioStore.getState().currentTrack?.id).toBe("a");
+  });
+
   it("does not retry the previous track after a track switch", () => {
     useRetryClock();
     playTrack(makeTrack("a"));
