@@ -2,19 +2,22 @@
 
 import { lessonPath } from '@/config/site';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { Link } from '@/i18n/routing';
 import { useProgressStore } from '@/stores/progress-store';
 import { useHydrated } from '@/hooks/use-hydrated';
-import { getLessonsByIds } from '@/actions/lessons';
+import { useLessonsByIds } from '@/hooks/use-lessons-by-ids';
 import { LessonPlayButton } from '@/components/lessons/lesson-play-button';
 import { getLessonTracks } from '@/lib/lesson-tracks';
 import { getListenedFraction, getResumePoint } from '@/lib/lesson-progress';
-import type { LessonWithRelations } from '@/types/database';
+import { sortByRecency } from '@/lib/last-played';
+import { cn } from '@/lib/utils';
 
 interface Props {
   title: string;
+  /** Layout hook: the home page hides the strip where the desktop panel shows the same lesson. */
+  className?: string;
 }
 
 // Fetch a few extra: some candidates turn out to have nothing left to continue.
@@ -26,50 +29,27 @@ const CANDIDATES = 10;
  * Follows the device progress store, so it updates after listening or an
  * account sync.
  */
-export function ContinueListeningSection({ title }: Props) {
+export function ContinueListeningSection({ title, className }: Props) {
   const t = useTranslations('player');
   const hydrated = useHydrated();
   const progressMap = useProgressStore((s) => s.progressMap);
-  const [lessons, setLessons] = useState<LessonWithRelations[]>([]);
 
   // Only a change in which lessons are candidates refetches, not every checkpoint.
-  const idsKey = useMemo(
+  const candidateIds = useMemo(
     () =>
-      Object.values(progressMap)
-        .filter((entry) => entry?.lessonId && !entry.completed)
-        .sort((a, b) => Date.parse(b.lastPlayed) - Date.parse(a.lastPlayed))
+      sortByRecency(Object.values(progressMap).filter((entry) => !!entry?.lessonId && !entry.completed))
         .slice(0, CANDIDATES)
-        .map((entry) => entry.lessonId)
-        .join(','),
+        .map((entry) => entry.lessonId),
     [progressMap],
   );
-
-  useEffect(() => {
-    if (!hydrated || !idsKey) {
-      setLessons([]);
-      return;
-    }
-    let cancelled = false;
-    const ids = idsKey.split(',');
-    getLessonsByIds(ids)
-      .then((rows) => {
-        if (cancelled) return;
-        const byId = new Map(rows.map((lesson) => [lesson.id, lesson]));
-        setLessons(ids.map((id) => byId.get(id)).filter((lesson): lesson is LessonWithRelations => !!lesson));
-      })
-      .catch(() => {
-        if (!cancelled) setLessons([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [hydrated, idsKey]);
-
-  const lesson = lessons.find((candidate) => {
-    const tracks = getLessonTracks(candidate);
-    const point = getResumePoint(tracks, progressMap[candidate.id]);
-    return point.index > 0 || point.position > 0;
-  });
+  const { lessons: byId } = useLessonsByIds(candidateIds, hydrated);
+  const lesson = candidateIds
+    .map((id) => byId.get(id))
+    .find((candidate) => {
+      if (!candidate) return false;
+      const point = getResumePoint(getLessonTracks(candidate), progressMap[candidate.id]);
+      return point.index > 0 || point.position > 0;
+    });
 
   if (!hydrated || !lesson) return null;
 
@@ -81,7 +61,10 @@ export function ContinueListeningSection({ title }: Props) {
   return (
     <section
       aria-label={title}
-      className="relative flex items-center gap-3 rounded-2xl bg-[hsl(var(--surface-elevated))] py-2.5 ps-3 pe-2.5"
+      className={cn(
+        'relative flex items-center gap-3 rounded-2xl bg-[hsl(var(--surface-elevated))] py-2.5 pe-2.5 ps-3',
+        className,
+      )}
     >
       <div className="grid min-w-0 flex-1 gap-1.5">
         <p className="text-[13px] font-semibold text-primary">
@@ -96,7 +79,7 @@ export function ContinueListeningSection({ title }: Props) {
           {lesson.hebrew_title || lesson.title}
         </Link>
         <span
-          className="block h-[3px] overflow-hidden rounded-full bg-foreground/12"
+          className="bg-foreground/12 block h-[3px] overflow-hidden rounded-full"
           role="progressbar"
           aria-label={lesson.hebrew_title || lesson.title}
           aria-valuemin={0}

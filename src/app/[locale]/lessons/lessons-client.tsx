@@ -312,7 +312,6 @@ export function LessonsClient({
               <LessonCard
                 key={lesson.id}
                 lesson={lesson}
-                showProgress={!selectionMode}
                 selectable={selectionMode}
                 selected={selectedIds.has(lesson.id)}
                 onToggleSelect={toggleSelect}

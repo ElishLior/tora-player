@@ -115,7 +115,7 @@ export default async function CategoryDetailPage({ params }: Props) {
       {lessons.length > 0 ? (
         <LessonCardList>
           {lessons.map((lesson) => (
-            <LessonCard key={lesson.id} lesson={lesson} showProgress />
+            <LessonCard key={lesson.id} lesson={lesson} />
           ))}
         </LessonCardList>
       ) : childCategories.length === 0 ? (

@@ -12,6 +12,7 @@ import { getTrackLessonId } from '@/lib/player-track-actions';
 import { PlayPauseIcon } from './player-controls';
 import { CastStatusMessage } from './cast-status';
 import { PlayerShareButton } from './player-share-button';
+import { DesktopPlayerBar } from './desktop-player-bar';
 
 export function MiniPlayer() {
   const t = useTranslations('player');
@@ -29,7 +30,8 @@ export function MiniPlayer() {
 
   return (
     <>
-      <div className="fixed bottom-0 inset-x-0 z-50 safe-area-bottom">
+      {/* Phones and tablets. From lg the desktop bar (DesktopPlayerBar) replaces it. */}
+      <div className="fixed bottom-0 inset-x-0 z-50 safe-area-bottom lg:hidden">
         {/* Thin progress bar -- Spotify style; fills from the inline start */}
         <div className="h-[2px] bg-[hsl(0,0%,24%)]">
           <div className="h-full bg-primary transition-[width] duration-200" style={{ width: `${progress}%` }} />
@@ -103,6 +105,8 @@ export function MiniPlayer() {
           </div>
         </div>
       </div>
+
+      <DesktopPlayerBar />
 
       <CastStatusMessage />
 

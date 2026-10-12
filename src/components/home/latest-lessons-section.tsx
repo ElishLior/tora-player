@@ -2,7 +2,7 @@ import { getTranslations } from 'next-intl/server';
 import { generateLessonMetadata } from '@/lib/hebrew-date';
 import { groupLessonsByWeek, type WeekGroup } from '@/lib/lesson-week-groups';
 import { HomeSectionHeader } from '@/components/home/home-section-header';
-import { LatestLessonRow } from '@/components/home/latest-lesson-row';
+import { LessonCard } from '@/components/lessons/lesson-card';
 import type { LessonWithRelations } from '@/types/database';
 
 interface LatestLessonsSectionProps {
@@ -70,7 +70,7 @@ function WeekBlock({
       <ul className="grid">
         {group.lessons.map((lesson) => (
           <li key={lesson.id}>
-            <LatestLessonRow lesson={lesson} />
+            <LessonCard lesson={lesson} />
           </li>
         ))}
       </ul>

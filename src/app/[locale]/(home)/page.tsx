@@ -78,12 +78,13 @@ export default async function HomePage({ params }: Props) {
         </Link>
       )}
 
-      {/* From 1360px, while something is loaded, the now-playing panel sits at the inline end; otherwise the feed takes the full width. */}
+      {/* From 1360px the now-playing panel sits at the inline end beside the feed. */}
       <div className="flex items-start gap-6">
         <div className="grid min-w-0 flex-1 gap-7">
           <HomeIntro />
 
-          <ContinueListeningSection title={t('continueListening')} />
+          {/* From 1360px the now-playing panel shows this same lesson, so the strip is hidden there. */}
+          <ContinueListeningSection title={t('continueListening')} className="min-[1360px]:hidden" />
 
           {latestLesson ? (
             <LatestLessonHero eyebrow={latestLesson.date === today ? t('todayLesson') : t('latestLesson')} lesson={latestLesson} />
@@ -120,8 +121,8 @@ export default async function HomePage({ params }: Props) {
           <CategoriesSection categories={categories} counts={counts} />
         </div>
 
-        {/* NowPlayingPanel renders nothing without a track, so the empty aside collapses. */}
-        <aside className="hidden w-[280px] flex-shrink-0 self-stretch empty:hidden min-[1360px]:block">
+        {/* From 1360px the panel is always here: the loaded track, else the last-played lesson or an empty state. */}
+        <aside className="hidden w-[280px] flex-shrink-0 self-stretch min-[1360px]:block">
           <NowPlayingPanel />
         </aside>
       </div>

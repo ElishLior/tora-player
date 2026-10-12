@@ -855,5 +855,12 @@
     "partWithLength": "{name}: {length}",
     "seconds": "{seconds} שנ׳",
     "minutes": "{minutes} דק׳"
+  },
+  "desktopPlayer": {
+    "panelLabel": "נגן שיעורים",
+    "lastPlayed": "האזנה אחרונה",
+    "resume": "המשך האזנה",
+    "nothingPlayedTitle": "עוד לא הושמע שיעור",
+    "nothingPlayedHint": "שיעור שתתחילו להאזין לו יופיע כאן."
   }
 }

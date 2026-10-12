@@ -86,7 +86,7 @@ export default async function SeriesDetailPage({ params }: Props) {
       {lessons.length > 0 ? (
         <LessonCardList>
           {seriesLessons.map((lesson) => (
-            <LessonCard key={lesson.id} lesson={lesson} showProgress />
+            <LessonCard key={lesson.id} lesson={lesson} />
           ))}
         </LessonCardList>
       ) : (
