@@ -855,5 +855,17 @@
     "partWithLength": "{name}: {length}",
     "seconds": "{seconds} sec",
     "minutes": "{minutes} min"
+  },
+  "categoryPlayback": {
+    "play": "Play category",
+    "playing": "Playing through the category",
+    "resume": "Continue playing the category",
+    "loading": "Loading the next lesson…",
+    "tapToContinue": "Tap to continue",
+    "finished": "Category finished",
+    "playAgain": "Play again from the start",
+    "stopped": "No playable lessons left — try again",
+    "retry": "Try again",
+    "skipped": "Skipped an unavailable lesson: {title}"
   }
 }

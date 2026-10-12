@@ -4,7 +4,14 @@ import { cache } from 'react';
 import type { Metadata } from 'next';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { isSupabaseConfigured } from '@/lib/supabase/server';
-import { getCachedAllCategories, getCachedCategoryById, getCachedCategoryLessons } from '@/lib/supabase/anon';
+import {
+  createAnonSupabaseClient,
+  getCachedAllCategories,
+  getCachedCategoryById,
+  getCachedCategoryLessons,
+} from '@/lib/supabase/anon';
+import { CATEGORY_SEGMENT_SIZE, loadCategoryQueueSegment, scopeCategoryIds } from '@/lib/category-queue';
+import { PlayCategoryButton } from '@/components/lessons/play-category-button';
 import { LessonCard } from '@/components/lessons/lesson-card';
 import { LessonCardList } from '@/components/lessons/lesson-card-list';
 import { EmptyState } from '@/components/shared/empty-state';
@@ -55,6 +62,16 @@ export default async function CategoryDetailPage({ params }: Props) {
 
   const lessons = await getCachedCategoryLessons(categoryId);
 
+  // The continuous-play session starts from this first segment, read now so the tap can play synchronously.
+  const scopeIds = scopeCategoryIds(allCategories, categoryId);
+  const snapshotAt = new Date().toISOString();
+  const firstSegment = await loadCategoryQueueSegment(createAnonSupabaseClient(), {
+    scopeIds,
+    cursor: null,
+    snapshotAt,
+    limit: CATEGORY_SEGMENT_SIZE,
+  }).catch(() => null);
+
   const tCategories = await getTranslations({ locale: DEFAULT_LOCALE, namespace: 'categories' });
 
   return (
@@ -90,6 +107,14 @@ export default async function CategoryDetailPage({ params }: Props) {
         {category.description && (
           <p className="text-sm text-muted-foreground mt-1">{category.description}</p>
         )}
+        <div className="mt-3">
+          <PlayCategoryButton
+            categoryId={category.id}
+            scopeIds={scopeIds}
+            snapshotAt={snapshotAt}
+            seed={firstSegment}
+          />
+        </div>
       </div>
 
       {/* Sub-categories (if this is a parent) */}

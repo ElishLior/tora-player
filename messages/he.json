@@ -855,5 +855,17 @@
     "partWithLength": "{name}: {length}",
     "seconds": "{seconds} שנ׳",
     "minutes": "{minutes} דק׳"
+  },
+  "categoryPlayback": {
+    "play": "ניגון רציף של הקטגוריה",
+    "playing": "מנגן ברצף בקטגוריה",
+    "resume": "המשך ניגון רציף",
+    "loading": "טוען את השיעור הבא…",
+    "tapToContinue": "הקישו להמשך",
+    "finished": "הקטגוריה הסתיימה",
+    "playAgain": "נגן שוב מההתחלה",
+    "stopped": "אין שיעורים לניגון — נסו שוב",
+    "retry": "נסו שוב",
+    "skipped": "דילגנו על שיעור שאינו זמין: {title}"
   }
 }
