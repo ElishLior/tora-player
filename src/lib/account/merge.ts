@@ -16,6 +16,8 @@ export interface ServerBookmark {
   tag: string | null;
   audio_file_id: string | null;
   created_at: string;
+  /** Absent before migration 024 (the select then omits it). */
+  updated_at?: string | null;
   lesson: { title: string; hebrew_title: string | null } | null;
 }
 
@@ -28,9 +30,13 @@ export interface ServerProgress {
 }
 
 /**
- * Account rows win for bookmarks both sides know; local-only bookmarks (not
- * uploaded yet, or for lessons the server skipped) are kept; anything the user
- * deleted locally (`pendingDeletes`) never comes back.
+ * Bookmarks both sides know: the copy with the newer `updated_at` wins for
+ * its note and tag (a device edit that landed after the sync read the rows
+ * is kept; an edit made on another device is taken). Without `updated_at`
+ * on either side (before migration 024, or a copy the account never
+ * confirmed) the account copy wins, as before. Local-only bookmarks (not
+ * uploaded yet, or for lessons the server skipped) are kept; anything the
+ * user deleted locally (`pendingDeletes`) never comes back.
  */
 export function mergeBookmarks(
   local: LocalBookmark[],
@@ -46,16 +52,18 @@ export function mergeBookmarks(
     if (deleted.has(row.id) || seen.has(row.id)) continue;
     seen.add(row.id);
     const previous = localById.get(row.id);
+    const keepLocalEdit = previous !== undefined && isNewerThan(previous.updatedAt, row.updated_at);
     merged.push({
       id: row.id,
       lessonId: row.lesson_id,
       // Server stores whole seconds; keep the precise local value when it rounds to the same second.
       position: previous && Math.round(previous.position) === row.position ? previous.position : row.position,
-      note: row.note ?? '',
-      tag: row.tag ?? '',
+      note: keepLocalEdit ? previous.note : (row.note ?? ''),
+      tag: keepLocalEdit ? previous.tag : (row.tag ?? ''),
       createdAt: row.created_at,
       lessonTitle: row.lesson?.hebrew_title || row.lesson?.title || previous?.lessonTitle,
       audioFileId: row.audio_file_id,
+      updatedAt: keepLocalEdit ? previous.updatedAt : (row.updated_at ?? undefined),
     });
   }
 
@@ -68,6 +76,11 @@ export function mergeBookmarks(
 function toMillis(iso: string): number {
   const time = Date.parse(iso);
   return Number.isNaN(time) ? 0 : time;
+}
+
+/** Both timestamps known and `a` strictly later. Unknown on either side means "not newer". */
+function isNewerThan(a: string | undefined, b: string | null | undefined): boolean {
+  return a !== undefined && b !== null && b !== undefined && toMillis(a) > toMillis(b);
 }
 
 /** Local entries that are newer than (or missing from) the account. */
