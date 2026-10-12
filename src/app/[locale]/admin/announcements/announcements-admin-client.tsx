@@ -263,6 +263,9 @@ export function ReleaseAnnouncementsClient({
             {t('preview')}
           </h2>
           <div className="space-y-1 rounded-xl bg-background/60 p-3">
+            <p className="text-xs text-muted-foreground" dir="ltr">
+              {t('previewVersion', { version: preview.row.version })}
+            </p>
             <p className="text-sm font-semibold">{preview.row.titleHe}</p>
             <p className="text-sm text-muted-foreground">{preview.row.bodyHe}</p>
           </div>
@@ -276,7 +279,9 @@ export function ReleaseAnnouncementsClient({
 
           {confirming ? (
             <div className="space-y-3 rounded-xl border border-red-400/40 p-3">
-              <p className="text-sm font-semibold">{t('confirmQuestion', { count: preview.audience })}</p>
+              <p className="text-sm font-semibold">
+                {t('confirmQuestion', { version: preview.row.version, count: preview.audience })}
+              </p>
               <p className="text-xs text-muted-foreground">{t('confirmBody')}</p>
               <div className="flex flex-wrap gap-2">
                 <button

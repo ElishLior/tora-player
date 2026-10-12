@@ -142,7 +142,7 @@ export function useAppUpdate(): AppUpdate {
 
   const refresh = useCallback(() => {
     if (!target || refreshDecision({ target, playing: isPlayingNow() }) !== 'refresh') return;
-    writeStorage(window.sessionStorage, UPDATE_RELOAD_KEY, refreshRecord(target, Date.now()));
+    writeStorage(window.sessionStorage, UPDATE_RELOAD_KEY, refreshRecord(target, BUILD_ID, Date.now()));
     window.location.reload();
   }, [target]);
 

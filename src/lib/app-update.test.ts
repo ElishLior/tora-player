@@ -155,8 +155,8 @@ describe('update scenarios', () => {
     ).toBe('dpl_newer');
   });
 
-  it('reload guard: a refresh that landed on the wrong build is snoozed, so it is never offered (or reloaded) again', () => {
-    const raw = refreshRecord('dpl_new', NOW);
+  it('reload guard: a refresh that came back on the build it left is snoozed, so it is never offered (or reloaded) again', () => {
+    const raw = refreshRecord('dpl_new', running, NOW);
     expect(verifyRefresh({ raw, runningBuildId: running, now: NOW + 1_000 })).toBe('mismatch');
     // The hook snoozes the record's target on a mismatch:
     expect(
@@ -172,22 +172,28 @@ describe('update scenarios', () => {
 
 describe('refresh record and reload verification', () => {
   it('verifies when the page now runs the target build', () => {
-    const raw = refreshRecord('dpl_new', NOW);
+    const raw = refreshRecord('dpl_new', 'dpl_old', NOW);
     expect(verifyRefresh({ raw, runningBuildId: 'dpl_new', now: NOW + 5_000 })).toBe('verified');
   });
 
-  it('reports a mismatch when the reload brought back another build (no retry is planned)', () => {
-    const raw = refreshRecord('dpl_new', NOW);
+  it('verifies when the reload landed on a third, newer build (a hotfix shipped in between)', () => {
+    const raw = refreshRecord('dpl_new', 'dpl_old', NOW);
+    expect(verifyRefresh({ raw, runningBuildId: 'dpl_newer', now: NOW + 5_000 })).toBe('verified');
+  });
+
+  it('reports a mismatch only when the reload came back on the build it left (no retry is planned)', () => {
+    const raw = refreshRecord('dpl_new', 'dpl_old', NOW);
     expect(verifyRefresh({ raw, runningBuildId: 'dpl_old', now: NOW + 5_000 })).toBe('mismatch');
   });
 
   it('ignores a record that expired, or that is in the future, or is missing or broken', () => {
-    const raw = refreshRecord('dpl_new', NOW);
+    const raw = refreshRecord('dpl_new', 'dpl_old', NOW);
     expect(verifyRefresh({ raw, runningBuildId: 'dpl_old', now: NOW + UPDATE_RELOAD_TTL_MS + 1 })).toBe('none');
     expect(verifyRefresh({ raw, runningBuildId: 'dpl_old', now: NOW - 1 })).toBe('none');
     expect(verifyRefresh({ raw: null, runningBuildId: 'dpl_old', now: NOW })).toBe('none');
     expect(verifyRefresh({ raw: '{not json', runningBuildId: 'dpl_old', now: NOW })).toBe('none');
     expect(verifyRefresh({ raw: '{"target":"dev","at":1}', runningBuildId: 'dpl_old', now: NOW })).toBe('none');
+    expect(verifyRefresh({ raw: '{"target":"dpl_new","at":1}', runningBuildId: 'dpl_old', now: NOW })).toBe('none');
   });
 });
 

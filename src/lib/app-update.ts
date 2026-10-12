@@ -110,12 +110,15 @@ export function refreshDecision({ target, playing }: { target: string | null; pl
 }
 
 export interface RefreshRecord {
+  /** The build the user was offered. */
   target: string;
+  /** The build the tab was running when it asked for the refresh. */
+  from: string;
   at: number;
 }
 
-export function refreshRecord(target: string, now: number): string {
-  const record: RefreshRecord = { target, at: now };
+export function refreshRecord(target: string, from: string, now: number): string {
+  const record: RefreshRecord = { target, from, at: now };
   return JSON.stringify(record);
 }
 
@@ -123,8 +126,8 @@ export function parseRefreshRecord(raw: string | null): RefreshRecord | null {
   if (!raw) return null;
   try {
     const value = JSON.parse(raw) as Partial<RefreshRecord>;
-    return isDeployedBuildId(value.target) && typeof value.at === 'number'
-      ? { target: value.target, at: value.at }
+    return isDeployedBuildId(value.target) && isDeployedBuildId(value.from) && typeof value.at === 'number'
+      ? { target: value.target, from: value.from, at: value.at }
       : null;
   } catch {
     return null;
@@ -132,10 +135,12 @@ export function parseRefreshRecord(raw: string | null): RefreshRecord | null {
 }
 
 /**
- * After a page load: did the refresh we started land on its target build?
+ * After a page load, did the refresh we started move the tab forward?
  * - 'none': no refresh record (or it expired): nothing to report.
- * - 'verified': running the target build.
- * - 'mismatch': the reload brought back another build; show recovery, do not retry.
+ * - 'verified': the page now runs a build other than the one it left. That is
+ *   the target, or a newer one shipped in the meantime (a hotfix): both are fine.
+ * - 'mismatch': the reload came back on the same build it left. Show recovery
+ *   and do not retry: the build is snoozed, nothing reloads by itself.
  */
 export function verifyRefresh({
   raw,
@@ -148,7 +153,7 @@ export function verifyRefresh({
 }): 'none' | 'verified' | 'mismatch' {
   const record = parseRefreshRecord(raw);
   if (!record || now - record.at > UPDATE_RELOAD_TTL_MS || now < record.at) return 'none';
-  return runningBuildId === record.target ? 'verified' : 'mismatch';
+  return runningBuildId === record.from ? 'mismatch' : 'verified';
 }
 
 /** True when the URL asks for the refresh flow (`?update=1`, from a push notification). */
