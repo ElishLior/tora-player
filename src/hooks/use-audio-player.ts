@@ -35,6 +35,7 @@ export function useAudioPlayer() {
       isPlaying: s.isPlaying,
       playbackStatus: s.playbackStatus,
       playbackIssue: s.playbackIssue,
+      queueNotice: s.queueNotice,
       currentTime: s.currentTime,
       duration: s.duration,
       playbackSpeed: s.playbackSpeed,

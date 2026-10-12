@@ -85,11 +85,14 @@ export function appendUniqueTracks(queue: readonly AudioTrack[], incoming: reado
 
 /**
  * A failure that will not go away by retrying: decode errors (3) and sources
- * the element rejects (4), which is what a 404 or 403 stream reports. Network
- * errors (2) and every failure while offline are temporary.
+ * the element rejects (4), which is what a 404 or 403 stream reports. Chrome
+ * reports 4 for any non-media body, so a transient 5xx looks the same: a
+ * decode/source error counts as permanent only after one retry of the same
+ * track has failed too (`retriesFailed` = recovery attempts). Network errors
+ * (2) and every failure while offline are temporary.
  */
-export function isPermanentMediaError(code: number | undefined, online: boolean): boolean {
-  if (!online) return false;
+export function isPermanentMediaError(code: number | undefined, online: boolean, retriesFailed: number): boolean {
+  if (!online || retriesFailed < 1) return false;
   return code === 3 || code === 4;
 }
 

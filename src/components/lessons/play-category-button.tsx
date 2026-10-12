@@ -1,12 +1,10 @@
 'use client';
 
-import { useMemo } from 'react';
 import { Loader2, Pause, Play } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useHydrated } from '@/hooks/use-hydrated';
-import { createCategoryQueueSource, type CategorySegment } from '@/lib/category-queue';
+import { createCategoryQueueSource, type CategorySeed } from '@/lib/category-queue';
 import { togglePlay, play } from '@/lib/audio-controller';
-import { getLessonTracks } from '@/lib/lesson-tracks';
 import { playLessons } from '@/lib/play-lesson';
 import { getTransportState, useAudioStore } from '@/stores/audio-store';
 
@@ -16,8 +14,8 @@ interface PlayCategoryButtonProps {
   scopeIds: string[];
   /** Lessons created after this instant are not part of the session. */
   snapshotAt: string;
-  /** The first segment, read with the page. Null when that read failed: the button then stays hidden. */
-  seed: CategorySegment | null;
+  /** The first lessons' tracks and cursor, built on the page from its cached list. */
+  seed: CategorySeed;
 }
 
 /**
@@ -33,19 +31,13 @@ export function PlayCategoryButton({ categoryId, scopeIds, snapshotAt, seed }: P
   const issue = useAudioStore((s) => s.playbackIssue);
   const transport = useAudioStore((s) => getTransportState(s));
 
-  // The lessons with audio, one list of parts each, in list order.
-  const playable = useMemo(
-    () => (seed ? seed.lessons.map((lesson) => getLessonTracks(lesson)).filter((tracks) => tracks.length > 0) : []),
-    [seed],
-  );
-
-  if (!seed || playable.length === 0) return null;
+  if (seed.lessons.length === 0) return null;
 
   const active = hydrated && source?.kind === 'category' && source.categoryId === categoryId;
 
   // Starts from the first lesson in the same tap (no await), so the browser allows playback.
   const startFromFirst = () => {
-    playLessons(playable, 0, {
+    playLessons(seed.lessons, 0, {
       source: createCategoryQueueSource({
         categoryId,
         scopeIds,

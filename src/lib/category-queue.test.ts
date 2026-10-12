@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
+  CATEGORY_LIST_LIMIT,
   CATEGORY_SEGMENT_SIZE,
   compareQueueOrder,
   createCategoryQueueSource,
@@ -10,6 +11,7 @@ import {
   nextSegmentRequest,
   parseCategorySegmentRequest,
   scopeCategoryIds,
+  seedFromCategoryRows,
   segmentToPage,
   segmentToTracks,
   type CategorySegmentRequest,
@@ -368,5 +370,80 @@ describe('createCategoryQueueSource and nextSegmentRequest', () => {
     const second = createCategoryQueueSource(base);
     expect(first.sessionId).not.toBe(second.sessionId);
     expect(first.sessionId.length).toBeGreaterThan(0);
+  });
+});
+
+describe('seedFromCategoryRows', () => {
+  /** The cached list rows, newest first: row i is listed at position i. */
+  function rows(count: number, audioAt: (index: number) => boolean = () => true): LessonWithRelations[] {
+    return Array.from({ length: count }, (_, index) => {
+      const id = `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`;
+      return lessonRow(
+        id,
+        '2026-10-12',
+        `2026-10-12T18:00:00.${String(index).padStart(6, '0')}+00:00`,
+        audioAt(index) ? 1 : 0,
+      );
+    });
+  }
+
+  it('is an exhausted empty seed for a category without lessons', () => {
+    expect(seedFromCategoryRows([])).toEqual({ lessons: [], cursor: null, exhausted: true });
+  });
+
+  it('takes the whole short list, with the cursor on its last row, as exhausted', () => {
+    const list = rows(3);
+
+    const seed = seedFromCategoryRows(list);
+
+    expect(seed.exhausted).toBe(true);
+    expect(seed.lessons).toHaveLength(3);
+    expect(seed.cursor).toEqual({ date: list[2].date, createdAt: list[2].created_at, id: list[2].id });
+  });
+
+  it('treats exactly one page of a complete list as exhausted', () => {
+    const seed = seedFromCategoryRows(rows(CATEGORY_SEGMENT_SIZE));
+
+    expect(seed.exhausted).toBe(true);
+    expect(seed.lessons).toHaveLength(CATEGORY_SEGMENT_SIZE);
+  });
+
+  it('cuts the seed at one page and leaves the rest to the segments after its cursor', () => {
+    const list = rows(CATEGORY_SEGMENT_SIZE + 1);
+
+    const seed = seedFromCategoryRows(list);
+
+    expect(seed.exhausted).toBe(false);
+    expect(seed.lessons).toHaveLength(CATEGORY_SEGMENT_SIZE);
+    expect(seed.cursor?.id).toBe(list[CATEGORY_SEGMENT_SIZE - 1].id);
+  });
+
+  it('is never exhausted when the cached list reached its limit, even at one page', () => {
+    const seed = seedFromCategoryRows(rows(CATEGORY_SEGMENT_SIZE), CATEGORY_SEGMENT_SIZE);
+
+    expect(seed.exhausted).toBe(false);
+    expect(seed.cursor?.id).toBe(rows(CATEGORY_SEGMENT_SIZE)[CATEGORY_SEGMENT_SIZE - 1].id);
+  });
+
+  it('uses the default list limit of the category page', () => {
+    expect(seedFromCategoryRows(rows(CATEGORY_LIST_LIMIT)).exhausted).toBe(false);
+    expect(seedFromCategoryRows(rows(CATEGORY_LIST_LIMIT - 1)).exhausted).toBe(false);
+  });
+
+  it('keeps the cursor on a silent row while leaving it out of the tracks', () => {
+    const list = rows(CATEGORY_SEGMENT_SIZE, (index) => index !== CATEGORY_SEGMENT_SIZE - 1);
+
+    const seed = seedFromCategoryRows(list);
+
+    expect(seed.lessons).toHaveLength(CATEGORY_SEGMENT_SIZE - 1);
+    expect(seed.cursor?.id).toBe(list[CATEGORY_SEGMENT_SIZE - 1].id);
+  });
+
+  it('builds a cursor the segment request validation accepts', () => {
+    const seed = seedFromCategoryRows(rows(CATEGORY_SEGMENT_SIZE + 5));
+
+    expect(
+      parseCategorySegmentRequest({ scopeIds: [UUID_A], snapshotAt: SNAPSHOT, cursor: seed.cursor }),
+    ).not.toBeNull();
   });
 });

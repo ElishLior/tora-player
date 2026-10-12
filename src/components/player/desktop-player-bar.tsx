@@ -8,6 +8,7 @@ import { audioEngine } from '@/lib/audio-engine';
 import { handleCastClick, isCastableSource } from '@/lib/cast-utils';
 import { getTrackLessonId } from '@/lib/player-track-actions';
 import { cn } from '@/lib/utils';
+import { useQueueNoticeText } from '@/hooks/use-queue-notice-text';
 import { useAudioStore } from '@/stores/audio-store';
 import { useBookmarksStore } from '@/stores/bookmarks-store';
 import { PlayerShareButton } from './player-share-button';
@@ -37,6 +38,7 @@ export const DesktopPlayerBar = memo(function DesktopPlayerBar() {
   const isBookmarked = useBookmarksStore((s) => s.bookmarks.some((b) => b.lessonId === lessonId));
   const [bookmarkPosition, setBookmarkPosition] = useState<number | null>(null);
   const [showUpNext, setShowUpNext] = useState(false);
+  const queueNoticeText = useQueueNoticeText();
   // Offline (blob:) copies cannot be cast. Checked inside the selector, so it is re-read on every store
   // update (an offline copy can start loading after the track changed) and the bar re-renders only when it flips.
   const canCast = useAudioStore((s) => s.currentTrack !== null && isCastableSource(audioEngine.getCurrentUrl()));
@@ -72,6 +74,10 @@ export const DesktopPlayerBar = memo(function DesktopPlayerBar() {
                 </span>
                 {playbackIssue ? (
                   <span className="block truncate text-[13px] text-amber-300">{t(`issue.${playbackIssue}`)}</span>
+                ) : queueNoticeText ? (
+                  <span className="block truncate text-[13px] text-muted-foreground" dir="auto">
+                    {queueNoticeText}
+                  </span>
                 ) : (
                   track.seriesName && (
                     <span className="block truncate text-[13px] text-muted-foreground" dir="auto">
@@ -83,7 +89,7 @@ export const DesktopPlayerBar = memo(function DesktopPlayerBar() {
             </button>
             {/* Announces playback problems; text inside a button is not a live region. */}
             <p role="status" className="sr-only">
-              {playbackIssue ? t(`issue.${playbackIssue}`) : ''}
+              {playbackIssue ? t(`issue.${playbackIssue}`) : (queueNoticeText ?? '')}
             </p>
           </div>
 
