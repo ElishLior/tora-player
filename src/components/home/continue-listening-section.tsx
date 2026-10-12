@@ -5,6 +5,7 @@ import { useProgressStore } from '@/stores/progress-store';
 import { useHydrated } from '@/hooks/use-hydrated';
 import { getLessonsByIds } from '@/actions/lessons';
 import { LessonCard } from '@/components/lessons/lesson-card';
+import { LessonCardList } from '@/components/lessons/lesson-card-list';
 import { getLessonTracks } from '@/lib/lesson-tracks';
 import { getResumePoint } from '@/lib/lesson-progress';
 import type { LessonWithRelations } from '@/types/database';
@@ -74,11 +75,11 @@ export function ContinueListeningSection({ title }: Props) {
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-lg font-bold">{title}</h2>
       </div>
-      <div className="space-y-0.5">
+      <LessonCardList>
         {visible.map((lesson) => (
           <LessonCard key={lesson.id} lesson={lesson} showProgress />
         ))}
-      </div>
+      </LessonCardList>
     </section>
   );
 }

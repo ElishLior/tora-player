@@ -109,6 +109,11 @@ export function getLessonTracks(lesson: LessonWithRelations): AudioTrack[] {
   return assets.map((asset, index) => createLessonTrack(lesson, asset, index, assets.length));
 }
 
+/** Each part's stored length in seconds, in play order (0 = unknown). Feeds `<PartDurations>`. */
+export function getLessonPartSeconds(lesson: LessonWithRelations): number[] {
+  return getLessonAudioAssets(lesson).map((asset) => asset.duration);
+}
+
 /** The tracks of a lesson saved on this device (played from IndexedDB). */
 export function getOfflineLessonTracks(lesson: OfflineLessonMeta): AudioTrack[] {
   const files = [...lesson.audioFiles].sort((a, b) => a.sortOrder - b.sortOrder);

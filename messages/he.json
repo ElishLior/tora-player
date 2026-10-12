@@ -410,6 +410,11 @@
     "publishFailed": "הפרסום נכשל: {error}",
     "filesFailed": "{count, plural, one {קובץ אחד נכשל} other {# קבצים נכשלו}} — השיעור לא פורסם",
     "leaveWarning": "העלאה בתהליך — לצאת בכל זאת?",
+    "notifyPending": {
+      "hint": "ההתראה תישלח אחרי ניסיון חוזר מוצלח",
+      "sendNow": "לשלוח התראה עכשיו",
+      "leaveWarning": "ההתראה על השיעורים עוד לא נשלחה — לצאת בכל זאת?"
+    },
     "imageUnreadable": "הדפדפן לא מצליח לקרוא את התמונה — המירו ל-JPEG ונסו שוב",
     "imagesFailed": "השיעור נשמר, אבל העלאת חלק מהתמונות נכשלה:",
     "audioFailed": "העלאת חלק מקבצי השמע נכשלה:",
@@ -477,9 +482,9 @@
     "search": "חיפוש",
     "tags": "נושאים",
     "library": "הספרייה שלי",
-    "driving": "מצב נהיגה",
-    "more": "עוד",
-    "sidebarLabel": "תפריט צד"
+    "sidebarLabel": "תפריט צד",
+    "searchPlaceholder": "חיפוש שיעורים…",
+    "browse": "עיון"
   },
   "auth": {
     "adminArea": "אזור ניהול",
@@ -561,12 +566,14 @@
     },
     "push": {
       "newLessonTitle": "שיעור חדש עלה",
+      "partsAddedTitle": "{count, plural, one {נוסף חלק חדש} other {נוספו # חלקים חדשים}}",
       "testTitle": "בדיקת התראה",
       "testBody": "ההתראות פועלות במכשיר הזה."
     },
     "email": {
       "appName": "נגן תורה",
       "subject": "שיעור חדש: {title}",
+      "partsSubject": "{count, plural, one {חלק חדש} other {חלקים חדשים}}: {title}",
       "heading": "שיעור חדש עלה",
       "cta": "להאזנה לשיעור",
       "footer": "קיבלת את המייל כי ביקשת עדכונים על שיעורים חדשים.",
@@ -575,7 +582,10 @@
     "batch": {
       "title": "{count, plural, one {שיעור חדש עלה} other {# שיעורים חדשים עלו}}",
       "range": "{from} – {to}",
-      "emailCta": "לכל השיעורים"
+      "partsLessons": "{count, plural, one {חלקים חדשים בשיעור אחד} other {חלקים חדשים ב־# שיעורים}}",
+      "addedParts": "נוספו: {parts}",
+      "emailCta": "לכל השיעורים",
+      "more": "ועוד {count}"
     },
     "admin": {
       "title": "התראות",
@@ -746,6 +756,60 @@
     "clearDate": "ניקוי סינון התאריך",
     "clearTag": "ניקוי סינון התגית {tag}",
     "filteredEmpty": "לא נמצאו שיעורים שמתאימים לסינון"
+  },
+  "notificationPrompt": {
+    "title": "לקבל התראה כשעולה שיעור חדש?",
+    "body": "נשלח הודעה למכשיר הזה ברגע שיעלה שיעור חדש.",
+    "enable": "הפעלת התראות",
+    "notNow": "לא עכשיו",
+    "neverAgain": "אל תציגו לי את זה שוב",
+    "gotIt": "הבנתי",
+    "close": "סגירה",
+    "enabled": "ההתראות הופעלו"
+  },
+  "categoryAdmin": {
+    "title": "ניהול קטגוריות",
+    "topLevelCount": "{count, plural, =0 {אין קטגוריות ראשיות} one {קטגוריה ראשית אחת} other {# קטגוריות ראשיות}}",
+    "addCategory": "קטגוריה חדשה",
+    "addSubcategory": "תת-קטגוריה חדשה",
+    "newCategory": "קטגוריה חדשה",
+    "newSubcategory": "תת-קטגוריה חדשה תחת {parent}",
+    "hebrewName": "שם בעברית",
+    "hebrewNameRequired": "שם בעברית הוא שדה חובה",
+    "englishName": "שם באנגלית",
+    "englishNameHint": "ריק = השם בעברית",
+    "description": "תיאור",
+    "icon": "אייקון (אימוג׳י או שם)",
+    "parent": "קטגוריית אב",
+    "topLevelOption": "ללא (קטגוריה ראשית)",
+    "parentLocked": "לקטגוריה זו יש תתי-קטגוריות, לכן היא נשארת ברמה הראשית.",
+    "save": "שמירה",
+    "cancel": "ביטול",
+    "edit": "עריכה",
+    "delete": "מחיקה",
+    "moveUp": "הזזה למעלה",
+    "moveDown": "הזזה למטה",
+    "dismiss": "סגירה",
+    "protectedBadge": "מוגנת",
+    "protectedHint": "משמשת את העלאת השיעורים ולא ניתן למחוק אותה.",
+    "protectedChildHint": "מכילה קטגוריה שמשמשת את העלאת השיעורים ולא ניתן למחוק אותה.",
+    "deleteConfirm": "למחוק את \"{name}\"?",
+    "deleteChildren": "{count, plural, one {תת-קטגוריה אחת תימחק גם.} other {# תת-קטגוריות יימחקו גם.}}",
+    "deleteLessons": "{count, plural, =0 {אין שיעורים משויכים אליה.} one {שיעור אחד יישאר ללא קטגוריה.} other {# שיעורים יישארו ללא קטגוריה.}}",
+    "deleteCounting": "בודקים כמה שיעורים משויכים...",
+    "deleteCountFailed": "לא הצלחנו לספור את השיעורים המשויכים.",
+    "deleteIrreversible": "פעולה זו לא ניתנת לביטול.",
+    "confirmDelete": "מחיקה",
+    "created": "הקטגוריה נוצרה",
+    "updated": "הקטגוריה עודכנה",
+    "deleted": "הקטגוריה נמחקה",
+    "loadFailed": "לא ניתן לטעון את הקטגוריות",
+    "reorderFailed": "לא ניתן לשנות את הסדר. הסדר הקודם שוחזר.",
+    "empty": "אין קטגוריות עדיין. צרו את הראשונה.",
+    "lessonCategory": "קטגוריה",
+    "noCategory": "ללא קטגוריה",
+    "lessonCategorySaveFailed": "לא ניתן לשמור את הקטגוריה. נסו שוב.",
+    "manageLink": "ניהול קטגוריות"
   },
   "diagnostics": {
     "title": "יומן נגינה",

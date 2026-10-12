@@ -35,6 +35,8 @@ import {
 } from '@/lib/upload-drafts';
 import { formatDuration } from '@/lib/utils';
 import type { CategoryWithChildren } from '@/types/database';
+import { CategoryPicker } from '@/components/categories/category-picker';
+import { categorySubtree } from '@/lib/category-tree';
 import { inputClass, type DraftRun, type FileEntry, type RowStatus } from './upload-state';
 
 const iconButton = 'rounded p-0.5 disabled:opacity-30';
@@ -192,7 +194,8 @@ function DraftEditor({ draft, run, status, open, files, categories, onChange, on
   const locked = !open;
   // A failed row whose lesson exists keeps its fields, but files that never landed can be dropped.
   const droppable = (id: string) => run.phase === 'failed' && files[id]?.status !== 'done';
-  const categoryOptions = draft.isShort ? categories.filter((c) => c.id === SHORTS_CATEGORY_ID) : categories;
+  // Short clips may only use the shorts branch (the category itself and its children).
+  const categoryChoices = draft.isShort ? categorySubtree(categories, SHORTS_CATEGORY_ID) : categories;
 
   const editPart = (fileId: string, patch: Partial<DraftAudioPart>) =>
     onChange((d) => ({
@@ -275,25 +278,15 @@ function DraftEditor({ draft, run, status, open, files, categories, onChange, on
           </label>
           <label className="space-y-1">
             <span className="text-xs font-bold text-muted-foreground">{t('category')}</span>
-            <select
+            <CategoryPicker
               value={draft.categoryId}
               disabled={locked}
-              onChange={(e) => onChange((d) => ({ ...d, categoryId: e.target.value }))}
+              onChange={(categoryId) => onChange((d) => ({ ...d, categoryId }))}
+              categories={categoryChoices}
+              includeNone={!draft.isShort}
+              noneLabel={t('noCategory')}
               className={inputClass}
-            >
-              {!draft.isShort && <option value="">{t('noCategory')}</option>}
-              {categoryOptions.map((parent) => (
-                <optgroup key={parent.id} label={parent.hebrew_name}>
-                  {draft.isShort && <option value={parent.id}>{parent.hebrew_name}</option>}
-                  {parent.children.map((child) => (
-                    <option key={child.id} value={child.id}>{child.hebrew_name}</option>
-                  ))}
-                  {!draft.isShort && parent.children.length === 0 && (
-                    <option value={parent.id}>{parent.hebrew_name}</option>
-                  )}
-                </optgroup>
-              ))}
-            </select>
+            />
           </label>
           <label className="space-y-1">
             <span className="text-xs font-bold text-muted-foreground">{t('description')}</span>

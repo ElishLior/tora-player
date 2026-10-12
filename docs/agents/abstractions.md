@@ -34,7 +34,9 @@ Building blocks to compose before writing new code. Each has a small interface, 
 | Lesson routes | `src/lib/supabase/lesson-route.ts` | `resolveLessonRoute(client, param)`, `lessonRedirectUrl(path, locale, params)` | UUID, current slug and old slug resolution; preserve locale and playback query parameters. |
 | Slug creation | `src/lib/supabase/create-lesson-slug.ts` | `insertLessonWithSlug(client, row, input)` | Upload drafts: reserve current/history names, retry slug races, tolerate missing migration. |
 | Slug select compatibility | `src/lib/supabase/lesson-slug-select.ts` | `withLessonSlugSelect(columns, read)` | Explicit catalog selects before and after migration 020. |
+| Part lengths | `src/lib/part-durations.ts`, `src/components/lessons/part-durations.tsx`, `getLessonPartSeconds(lesson)` (`src/lib/lesson-tracks.ts`) | `formatPartDurations(seconds[], t)` → `["חלק 1: 82 דק׳", …]` (minutes only; one part = its length only; unknown length = name only); `<PartDurations seconds />` | Showing a lesson's parts and lengths anywhere (cards, hero, shorts, notifications). The component keeps one line; on overflow it fades the hidden side and reveals by swipe/tap or hover/keyboard focus. In a card with a stretched link, render it as a sibling of the link. |
 | Site identity | `src/config/site.ts` | `SITE_URL`, `localePath`, `pageUrl`, `lessonPath`, ... | Any origin, name or URL. Never hardcode them. |
+| New-content announcement | `src/lib/notifications/notify.ts` (server), pure rules in `announcement.ts`, `recipients.ts`, `upload-announcement.ts` | `notifyNewLessons(lessonIds, mode)`, `notifyNewLesson(id)` | Telling listeners about published lessons or appended parts. Pass every touched lesson id; it claims what is new (idempotent), sends one push + one email per person, never throws. Never send push/email directly. |
 
 ## Verification
 
@@ -43,3 +45,24 @@ Building blocks to compose before writing new code. Each has a small interface, 
 | Page loading skeleton | `src/components/shared/page-loading.tsx` and route-scoped `loading.tsx` exports | Keep loading UI outside lesson detail ancestors so asynchronous resolution can send HTTP 308/404 before streaming. |
 | CI script | `.factory/checks.sh` | The canonical local run: install, type-check, lint, unit tests, build. |
 | Controller test harness | `src/lib/audio-controller.test.ts` (fake audio element, `becomePlaying`, `endCurrentFile`) | Modeled playback scenarios. Results are "modeled", never "device verified". |
+
+## Notifications
+
+| Block | Where | Interface | Use it for |
+|---|---|---|---|
+| `notificationPromptView` + `<NotificationPrompt />` | `src/lib/notification-prompt.ts`, `src/components/notifications/notification-prompt.tsx` | `notificationPromptView({ status, neverAgain, snoozedUntil, now })` → `'enable' \| 'ios-install' \| null`; `<NotificationPrompt />` mounted once in the locale layout | The once-per-device "get an alert for new lessons?" question. Built on `usePushNotifications()`; reuse the rule and the memory helpers (`readPromptMemory`, `rememberNotNow`, `rememberEnabled`), never a second prompt. |
+
+## Categories
+
+| Block | Where | Interface | Use it for |
+|---|---|---|---|
+| Category tree rules | `src/lib/category-tree.ts` | `categoryOptions(tree)`, `validateCategoryParent({ tree, id?, parentId })` → `null \| 'self' \| 'too-deep' \| 'has-children' \| 'missing-parent'`, `nextSortOrder(tree, parentId)`, `isProtectedCategory(id)`, `containsProtectedCategory(tree, id)`, `findCategory`, `childrenOf`, `categorySubtree` | Any code that reads or changes the two-level category tree. Pure; the actions and the admin page both call it. |
+| `<CategoryPicker />` | `src/components/categories/category-picker.tsx` | `value`, `onChange`, `categories` (tree), `includeNone?`, `noneLabel?`, `noneValue?`, `placeholder?`, `className?`, `disabled?` | Choosing a category anywhere (lesson editor, bulk bar, upload draft, snippets, lesson page). Every top-level category and its children are selectable. |
+| `updateLessonCategory(lessonId, categoryId \| null)` | `src/actions/categories.ts` | `{ categoryId } \| { error }`; admin only, validates the category, revalidates the catalog | Setting one lesson's category from a lesson page. Use `bulkUpdateLessonCategory` for many lessons. |
+
+## Layout
+
+| Block | Where | Interface | Use it for |
+|---|---|---|---|
+| App sections | `src/components/layout/nav-items.ts` | `PRIMARY_NAV`, `BROWSE_NAV`, `isNavActive(pathname, locale, href)` | Every navigation surface. `BottomNav` (phones/tablets) and `SideNav` (lg+, inline start, so right in Hebrew and left in English) both read it; add a section here, not in a component. |
+| `<LessonCardList>` | `src/components/lessons/lesson-card-list.tsx` | children = `LessonCard`s / skeletons | Any list of lesson cards: one column, two from `xl` so rows never stretch across a wide screen. |

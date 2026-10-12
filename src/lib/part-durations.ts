@@ -7,7 +7,10 @@
  */
 
 /** next-intl translator scoped to the `partDurations` namespace. */
-export type PartDurationsTranslator = (key: string, values?: Record<string, string | number>) => string;
+export type PartDurationsTranslator = (
+  key: 'part' | 'partWithLength' | 'seconds' | 'minutes',
+  values: Record<string, string | number>,
+) => string;
 
 export type PartLength = { unit: 'seconds'; seconds: number } | { unit: 'minutes'; minutes: number };
 

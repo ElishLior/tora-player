@@ -25,6 +25,7 @@ import { ImageUnreadableError, useUpload, uploadImageFile, type FileWithMeta } f
 import { UploadZone, type SelectedFile } from '@/components/upload/upload-zone';
 import type { LessonAudio, LessonImage, CategoryWithChildren } from '@/types/database';
 import { getCategories } from '@/actions/categories';
+import { CategoryPicker } from '@/components/categories/category-picker';
 import { generateLessonMetadata } from '@/lib/hebrew-date';
 import { TagInput } from '@/components/tags/tag-input';
 import { lessonPath } from '@/config/site';
@@ -655,32 +656,22 @@ export default function EditLessonClient({ lessonId }: { lessonId: string }) {
 
         {/* Category picker */}
         <div>
-          <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">
-            קטגוריה
-          </label>
-          <select
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            <label htmlFor="lesson-category" className="block text-xs font-bold text-muted-foreground uppercase tracking-wider">
+              קטגוריה
+            </label>
+            <Link href="/admin/categories" className="text-xs text-primary hover:underline">
+              ניהול קטגוריות
+            </Link>
+          </div>
+          <CategoryPicker
+            id="lesson-category"
             value={categoryId}
-            onChange={(e) => setCategoryId(e.target.value)}
-            className="w-full rounded-lg bg-[hsl(var(--surface-elevated))] px-4 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 border-0"
-            dir="rtl"
-          >
-            <option value="">ללא קטגוריה</option>
-            {categories.map((parent) => (
-              parent.children.length > 0 ? (
-                <optgroup key={parent.id} label={parent.hebrew_name}>
-                  {parent.children.map((child) => (
-                    <option key={child.id} value={child.id}>
-                      {child.hebrew_name}
-                    </option>
-                  ))}
-                </optgroup>
-              ) : (
-                <option key={parent.id} value={parent.id}>
-                  {parent.hebrew_name}
-                </option>
-              )
-            ))}
-          </select>
+            onChange={setCategoryId}
+            categories={categories}
+            includeNone
+            noneLabel="ללא קטגוריה"
+          />
         </div>
 
         {/* Topic tags */}

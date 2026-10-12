@@ -40,7 +40,7 @@ import { BookmarkChips, BookmarkMarkers } from '@/components/bookmarks/lesson-bo
 import { NoteImageStrip } from '@/components/notes/note-image-strip';
 import { handleCastClick } from '@/lib/cast-utils';
 import { buildAudioDownloadFilename, getAudioDownloadUrl } from '@/lib/audio-download';
-import type { LessonWithRelations, LessonImage } from '@/types/database';
+import type { LessonWithRelations, LessonImage, CategoryWithChildren } from '@/types/database';
 import { normalizeAudioUrl } from '@/lib/audio-url';
 import { getLessonAudioAssets, getLessonTracks, getSortedAudioFiles, isMomentInPart, type LessonAudioAsset } from '@/lib/lesson-tracks';
 import { getResumePoint } from '@/lib/lesson-progress';
@@ -59,7 +59,9 @@ import { useBookmarksStore, type LocalBookmark } from '@/stores/bookmarks-store'
 import { useNotesStore, type LocalNote } from '@/stores/notes-store';
 import { submitSnippet } from '@/actions/snippets';
 import { updateLessonTags } from '@/actions/lessons';
+import { updateLessonCategory } from '@/actions/categories';
 import { TagInput } from '@/components/tags/tag-input';
+import { CategoryPicker } from '@/components/categories/category-picker';
 import { normalizeTags } from '@/lib/tags';
 import { tagPath } from '@/lib/tag-links';
 import { getImageStreamUrl } from '@/lib/image-keys';
@@ -1463,13 +1465,80 @@ interface LessonTagsProps {
   lessonId: string;
   tags: string[];
   admin: boolean;
+  /** Admins only: the lesson's category and the category tree for its inline picker. */
+  categoryId?: string | null;
+  categories?: CategoryWithChildren[];
+}
+
+interface LessonCategoryEditorProps {
+  lessonId: string;
+  categoryId: string | null;
+  categories: CategoryWithChildren[];
+}
+
+/**
+ * Admin control for the lesson's category. Saves on change: the new value
+ * shows at once and rolls back with an error message if saving fails.
+ */
+function LessonCategoryEditor({ lessonId, categoryId, categories }: LessonCategoryEditorProps) {
+  const t = useTranslations('categoryAdmin');
+  const [value, setValue] = useState(categoryId ?? '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!error) return;
+    const timer = setTimeout(() => setError(null), 4000);
+    return () => clearTimeout(timer);
+  }, [error]);
+
+  const change = async (next: string) => {
+    const previous = value;
+    setValue(next);
+    setSaving(true);
+    setError(null);
+    try {
+      const result = await updateLessonCategory(lessonId, next || null);
+      if ('error' in result) throw new Error(result.error);
+    } catch {
+      setValue(previous);
+      setError(t('lessonCategorySaveFailed'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <label htmlFor={`lesson-category-${lessonId}`} className="text-xs font-medium text-muted-foreground">
+        {t('lessonCategory')}
+      </label>
+      <CategoryPicker
+        id={`lesson-category-${lessonId}`}
+        value={value}
+        onChange={change}
+        categories={categories}
+        includeNone
+        noneLabel={t('noCategory')}
+        disabled={saving}
+        className="max-w-full rounded-full bg-[hsl(var(--surface-elevated))] px-3 py-1 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 border-0"
+      />
+      {saving && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" aria-hidden="true" />}
+      {error && (
+        <p role="alert" className="w-full text-xs font-medium text-red-400">
+          {error}
+        </p>
+      )}
+    </div>
+  );
 }
 
 /**
  * Topic tags under the lesson title; each opens its tag page. Admins edit them
- * inline: the new tags show immediately and roll back if saving fails.
+ * inline: the new tags show immediately and roll back if saving fails. The
+ * admin category picker sits under the tags.
  */
-export function LessonTags({ lessonId, tags: initialTags, admin }: LessonTagsProps) {
+export function LessonTags({ lessonId, tags: initialTags, admin, categoryId, categories }: LessonTagsProps) {
   const t = useTranslations('tagBrowse');
   const browseT = useTranslations('lessonBrowse');
   const [tags, setTags] = useState(initialTags);
@@ -1564,6 +1633,14 @@ export function LessonTags({ lessonId, tags: initialTags, admin }: LessonTagsPro
           </li>
         )}
       </ul>
+      {admin && categories && (
+        <LessonCategoryEditor
+          key={lessonId}
+          lessonId={lessonId}
+          categoryId={categoryId ?? null}
+          categories={categories}
+        />
+      )}
       {error && (
         <div className="fixed inset-x-0 bottom-24 z-50 flex justify-center px-4">
           <p

@@ -7,17 +7,17 @@ import { Check, ListChecks, ListPlus, Play, Pause } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/routing';
 import { Link } from '@/i18n/routing';
-import { formatDuration } from '@/lib/utils';
 import { parshaLabel } from '@/lib/parsha-label';
 import { useAudioStore } from '@/stores/audio-store';
 import { useProgressStore } from '@/stores/progress-store';
 import { isNewSince, useVisitStore } from '@/stores/visit-store';
 import { useIsDownloaded } from '@/hooks/use-offline';
 import { useHydrated } from '@/hooks/use-hydrated';
-import { getLessonTracks } from '@/lib/lesson-tracks';
+import { getLessonPartSeconds, getLessonTracks } from '@/lib/lesson-tracks';
 import { getListenedFraction } from '@/lib/lesson-progress';
 import { playLesson } from '@/lib/play-lesson';
 import { LessonDateLink, LessonTagLink } from './lesson-browse-links';
+import { PartDurations } from './part-durations';
 import type { LessonWithRelations } from '@/types/database';
 
 interface LessonCardProps {
@@ -37,6 +37,7 @@ export function LessonCard({ lesson, showProgress, selectable, selected, onToggl
   const hydrated = useHydrated();
   const saved = useProgressStore((s) => s.progressMap[lesson.id]);
   const tracks = useMemo(() => getLessonTracks(lesson), [lesson]);
+  const partSeconds = useMemo(() => getLessonPartSeconds(lesson), [lesson]);
   const previousVisitAt = useVisitStore((s) => s.previousVisitAt);
   const isQueuedNext = useAudioStore((s) =>
     s.queue.some((track, index) => index > s.queueIndex && (track.lessonId || track.id) === lesson.id),
@@ -87,12 +88,26 @@ export function LessonCard({ lesson, showProgress, selectable, selected, onToggl
       >
         {lesson.hebrew_title || lesson.title}
       </h3>
-      <p className="mt-0.5 truncate text-xs text-muted-foreground" dir="rtl">
-        {lesson.parsha && <span className="text-primary/80">{parshaLabel(lesson.parsha)}</span>}
-        {lesson.parsha && lesson.duration > 0 && ' · '}
-        {lesson.duration > 0 && <bdi>{formatDuration(lesson.duration)}</bdi>}
-      </p>
     </>
+  );
+
+  // Reading name and each part's length on one line. The lengths sit outside the
+  // stretched link so a clipped line can be swiped, tapped or focused.
+  const hasPartLengths = partSeconds.some((seconds) => seconds > 0);
+  const metaLine = (lesson.parsha || hasPartLengths) && (
+    <div className="mt-0.5 flex min-w-0 items-baseline text-xs text-muted-foreground">
+      {lesson.parsha && (
+        <span className="flex-shrink-0 text-primary/80" dir="rtl">
+          {parshaLabel(lesson.parsha)}
+        </span>
+      )}
+      {lesson.parsha && hasPartLengths && (
+        <span aria-hidden="true" className="flex-shrink-0 whitespace-pre">
+          {' · '}
+        </span>
+      )}
+      <PartDurations seconds={partSeconds} className="flex-1" />
+    </div>
   );
 
   const cardContent = (
@@ -154,6 +169,7 @@ export function LessonCard({ lesson, showProgress, selectable, selected, onToggl
               {infoContent}
             </Link>
           )}
+          {metaLine}
           {selectable ? (
             /* Bulk-select mode: a tap toggles the card, so the date is plain text. */
             <p className="text-xs text-muted-foreground" dir="rtl">

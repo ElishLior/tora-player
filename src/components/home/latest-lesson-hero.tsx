@@ -8,7 +8,7 @@ import { Link } from '@/i18n/routing';
 import { useHydrated } from '@/hooks/use-hydrated';
 import { togglePlay } from '@/lib/audio-controller';
 import { getResumePoint } from '@/lib/lesson-progress';
-import { getLessonTracks } from '@/lib/lesson-tracks';
+import { getLessonPartSeconds, getLessonTracks } from '@/lib/lesson-tracks';
 import { playLesson } from '@/lib/play-lesson';
 import { getTrackLessonId } from '@/lib/player-track-actions';
 import { formatDuration } from '@/lib/utils';
@@ -16,6 +16,7 @@ import { getTransportState, useAudioStore } from '@/stores/audio-store';
 import { useProgressStore } from '@/stores/progress-store';
 import { PlayPauseIcon } from '@/components/player/player-controls';
 import { LessonDateLink } from '@/components/lessons/lesson-browse-links';
+import { PartDurations } from '@/components/lessons/part-durations';
 import type { LessonWithRelations } from '@/types/database';
 
 interface LatestLessonHeroProps {
@@ -28,6 +29,7 @@ export function LatestLessonHero({ title, lesson }: LatestLessonHeroProps) {
   const t = useTranslations('player');
   const hydrated = useHydrated();
   const tracks = useMemo(() => getLessonTracks(lesson), [lesson]);
+  const partSeconds = useMemo(() => getLessonPartSeconds(lesson), [lesson]);
   const saved = useProgressStore((s) => s.progressMap[lesson.id]);
   const isCurrent = useAudioStore((s) => !!s.currentTrack && getTrackLessonId(s.currentTrack) === lesson.id);
   const transport = useAudioStore((s) => getTransportState(s));
@@ -67,15 +69,17 @@ export function LatestLessonHero({ title, lesson }: LatestLessonHeroProps) {
           >
             {lesson.hebrew_title || lesson.title}
           </Link>
-          <p className="text-xs text-muted-foreground">
-            <LessonDateLink date={lesson.date} hebrewDate={lesson.hebrew_date} />
-            {lesson.duration > 0 && (
-              <>
+          <div className="flex min-w-0 items-baseline text-xs text-muted-foreground">
+            <span className="flex-shrink-0">
+              <LessonDateLink date={lesson.date} hebrewDate={lesson.hebrew_date} />
+            </span>
+            {partSeconds.some((seconds) => seconds > 0) && (
+              <span aria-hidden="true" className="flex-shrink-0 whitespace-pre">
                 {' · '}
-                <bdi>{formatDuration(lesson.duration)}</bdi>
-              </>
+              </span>
             )}
-          </p>
+            <PartDurations seconds={partSeconds} className="flex-1" />
+          </div>
           {hasResume && !isCurrent && <p className="text-xs text-primary">{label}</p>}
         </div>
         <button

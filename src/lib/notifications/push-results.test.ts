@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { summarizePushOutcomes } from './push-results';
+import { configRejectionsByService, pushServiceOf, summarizePushOutcomes } from './push-results';
 import { pushSubscriptionSchema } from '@/lib/validators';
 
 describe('summarizePushOutcomes', () => {
@@ -48,5 +48,37 @@ describe('pushSubscriptionSchema endpoint allowlist', () => {
     ]) {
       expect(pushSubscriptionSchema.safeParse({ endpoint, keys }).success).toBe(false);
     }
+  });
+});
+
+describe('pushServiceOf', () => {
+  it('names the push service by host only', () => {
+    expect(pushServiceOf('https://web.push.apple.com/QGx-token')).toEqual({ service: 'apple', host: 'web.push.apple.com' });
+    expect(pushServiceOf('https://fcm.googleapis.com/fcm/send/abc')).toEqual({ service: 'fcm', host: 'fcm.googleapis.com' });
+    expect(pushServiceOf('https://wns2-par02p.notify.windows.com/w/?token=abc')).toEqual({
+      service: 'wns',
+      host: '*.notify.windows.com',
+    });
+    expect(pushServiceOf('https://updates.push.services.mozilla.com/wpush/v2/abc')).toEqual({
+      service: 'mozilla',
+      host: 'updates.push.services.mozilla.com',
+    });
+    expect(pushServiceOf('https://example.com/push')).toEqual({ service: 'other', host: 'example.com' });
+    expect(pushServiceOf('not a url')).toEqual({ service: 'other', host: 'invalid' });
+  });
+});
+
+describe('configRejectionsByService', () => {
+  it('counts only 400/403 rejections per service, without tokens', () => {
+    expect(
+      configRejectionsByService([
+        { endpoint: 'https://web.push.apple.com/a', statusCode: 403 },
+        { endpoint: 'https://web.push.apple.com/b', statusCode: 403 },
+        { endpoint: 'https://fcm.googleapis.com/fcm/send/c', statusCode: 400 },
+        { endpoint: 'https://fcm.googleapis.com/fcm/send/d', statusCode: 410 },
+        { endpoint: 'https://fcm.googleapis.com/fcm/send/e', statusCode: 503 },
+        { endpoint: 'https://fcm.googleapis.com/fcm/send/f' },
+      ]),
+    ).toEqual({ '403 apple web.push.apple.com': 2, '400 fcm fcm.googleapis.com': 1 });
   });
 });

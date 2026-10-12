@@ -36,7 +36,8 @@ export function MiniPlayer() {
         </div>
 
         <div className="bg-[hsl(var(--surface-elevated))] backdrop-blur-xl">
-          <div className="flex items-center gap-3 px-3 py-2">
+          {/* Wide screens: keep the title next to its controls instead of at opposite edges. */}
+          <div className="flex items-center gap-3 px-3 py-2 lg:mx-auto lg:max-w-3xl lg:px-6">
             {/* Opens the full player; the other controls sit beside it, never inside. */}
             <button
               type="button"

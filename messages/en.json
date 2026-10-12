@@ -410,6 +410,11 @@
     "publishFailed": "Publishing failed: {error}",
     "filesFailed": "{count, plural, one {1 file failed} other {# files failed}} — the lesson was not published",
     "leaveWarning": "Upload in progress — leave anyway?",
+    "notifyPending": {
+      "hint": "The notification waits for a successful retry",
+      "sendNow": "Send notification now",
+      "leaveWarning": "The lesson notification hasn't been sent yet — leave anyway?"
+    },
     "imageUnreadable": "The browser can't read this image — convert it to JPEG and try again",
     "imagesFailed": "The lesson was saved, but some images failed to upload:",
     "audioFailed": "Some audio files failed to upload:",
@@ -477,9 +482,9 @@
     "search": "Search",
     "tags": "Topics",
     "library": "My library",
-    "driving": "Driving mode",
-    "more": "More",
-    "sidebarLabel": "Side menu"
+    "sidebarLabel": "Side menu",
+    "searchPlaceholder": "Search lessons…",
+    "browse": "Browse"
   },
   "auth": {
     "adminArea": "Admin area",
@@ -561,12 +566,14 @@
     },
     "push": {
       "newLessonTitle": "New lesson published",
+      "partsAddedTitle": "{count, plural, one {A new part was added} other {# new parts were added}}",
       "testTitle": "Test notification",
       "testBody": "Notifications work on this device."
     },
     "email": {
       "appName": "Tora Player",
       "subject": "New lesson: {title}",
+      "partsSubject": "{count, plural, one {New part} other {New parts}}: {title}",
       "heading": "A new lesson was published",
       "cta": "Listen to the lesson",
       "footer": "You received this email because you asked for new lesson updates.",
@@ -575,7 +582,10 @@
     "batch": {
       "title": "{count, plural, one {A new lesson was published} other {# new lessons were published}}",
       "range": "{from} – {to}",
-      "emailCta": "All lessons"
+      "partsLessons": "{count, plural, one {New parts in 1 lesson} other {New parts in # lessons}}",
+      "addedParts": "Added: {parts}",
+      "emailCta": "All lessons",
+      "more": "and {count} more"
     },
     "admin": {
       "title": "Notifications",
@@ -746,6 +756,60 @@
     "clearDate": "Clear date filter",
     "clearTag": "Clear tag filter {tag}",
     "filteredEmpty": "No lessons match these filters"
+  },
+  "notificationPrompt": {
+    "title": "Get an alert when a new lesson is published?",
+    "body": "We'll send a notification to this device as soon as a new lesson goes up.",
+    "enable": "Turn on notifications",
+    "notNow": "Not now",
+    "neverAgain": "Don't show me this again",
+    "gotIt": "Got it",
+    "close": "Close",
+    "enabled": "Notifications are on"
+  },
+  "categoryAdmin": {
+    "title": "Manage categories",
+    "topLevelCount": "{count, plural, =0 {No top-level categories} one {One top-level category} other {# top-level categories}}",
+    "addCategory": "New category",
+    "addSubcategory": "New subcategory",
+    "newCategory": "New category",
+    "newSubcategory": "New subcategory under {parent}",
+    "hebrewName": "Hebrew name",
+    "hebrewNameRequired": "Hebrew name is required",
+    "englishName": "English name",
+    "englishNameHint": "Empty = the Hebrew name",
+    "description": "Description",
+    "icon": "Icon (emoji or name)",
+    "parent": "Parent category",
+    "topLevelOption": "None (top-level)",
+    "parentLocked": "This category has subcategories, so it stays top-level.",
+    "save": "Save",
+    "cancel": "Cancel",
+    "edit": "Edit",
+    "delete": "Delete",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "dismiss": "Dismiss",
+    "protectedBadge": "Protected",
+    "protectedHint": "Used by lesson uploads, so it cannot be deleted.",
+    "protectedChildHint": "Contains a category used by lesson uploads, so it cannot be deleted.",
+    "deleteConfirm": "Delete \"{name}\"?",
+    "deleteChildren": "{count, plural, one {One subcategory will be deleted too.} other {# subcategories will be deleted too.}}",
+    "deleteLessons": "{count, plural, =0 {No lessons are in it.} one {One lesson will lose its category.} other {# lessons will lose their category.}}",
+    "deleteCounting": "Counting the lessons in it...",
+    "deleteCountFailed": "Could not count the lessons in this category.",
+    "deleteIrreversible": "This cannot be undone.",
+    "confirmDelete": "Delete",
+    "created": "Category created",
+    "updated": "Category updated",
+    "deleted": "Category deleted",
+    "loadFailed": "Could not load categories",
+    "reorderFailed": "Could not change the order. The previous order was restored.",
+    "empty": "No categories yet. Create the first one.",
+    "lessonCategory": "Category",
+    "noCategory": "No category",
+    "lessonCategorySaveFailed": "Could not save the category. Try again.",
+    "manageLink": "Manage categories"
   },
   "diagnostics": {
     "title": "Playback log",

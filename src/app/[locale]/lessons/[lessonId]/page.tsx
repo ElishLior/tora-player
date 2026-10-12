@@ -16,6 +16,7 @@ import { JsonLd } from '@/components/seo/json-ld';
 import { OG_LOCALE, SITE_NAME, categoryPath, isSiteLocale, lessonPath, pageUrl } from '@/config/site';
 import { breadcrumbJsonLd, lessonDescription, lessonJsonLd, pageAlternates } from '@/lib/seo';
 import { lessonsHref } from '@/lib/tag-links';
+import { getCachedCategoriesTree } from '@/lib/supabase/anon';
 
 type Props = {
   params: Promise<{ locale: string; lessonId: string }>;
@@ -79,6 +80,8 @@ export default async function LessonDetailPage({ params, searchParams }: Props) 
   }
 
   const admin = await isAdmin();
+  // The category tree is only needed by the admin's inline picker. A failed read hides the picker, not the lesson.
+  const categories = admin ? await getCachedCategoriesTree().catch(() => []) : undefined;
   const hasAudio = lesson.audio_url || (lesson.audio_files && lesson.audio_files.length > 0);
   const hasImages = lesson.images && lesson.images.length > 0;
   const hasParts = lesson.parts && lesson.parts.length > 1;
@@ -128,7 +131,13 @@ export default async function LessonDetailPage({ params, searchParams }: Props) 
         <h1 className="text-xl font-bold" dir="auto">
           {lesson.hebrew_title || lesson.title}
         </h1>
-        <LessonTags lessonId={lesson.id} tags={lesson.tags ?? []} admin={admin} />
+        <LessonTags
+          lessonId={lesson.id}
+          tags={lesson.tags ?? []}
+          admin={admin}
+          categoryId={lesson.category_id}
+          categories={categories}
+        />
         {lesson.series && (
           <Link
             href={`/lessons?series=${lesson.series.id}`}

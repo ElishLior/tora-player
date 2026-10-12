@@ -37,8 +37,13 @@ export function Header({ locale }: HeaderProps) {
 
   return (
     <header className="sticky top-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-xl">
-      <div className="container mx-auto flex h-12 items-center justify-between px-4">
-        <Link href={`/${locale}`} className="flex flex-shrink-0 items-center gap-2" aria-label={t('common.appName')}>
+      {/* Desktop: the logo sits over the side menu column and a search field starts where the content does. */}
+      <div className="container mx-auto flex h-12 items-center justify-between px-4 lg:max-w-none lg:px-0 lg:pe-6">
+        <Link
+          href={`/${locale}`}
+          className="flex flex-shrink-0 items-center gap-2 lg:w-60 lg:px-6 xl:w-64"
+          aria-label={t('common.appName')}
+        >
           <div className="flex items-center gap-2">
             <Image src="/brand/logo-mark.webp" alt="" width={28} height={28} className="h-7 w-7 rounded-full" priority />
             <span className={`text-base font-bold text-foreground ${currentTrack ? 'hidden sm:block' : ''}`}>
@@ -47,7 +52,21 @@ export function Header({ locale }: HeaderProps) {
           </div>
         </Link>
 
-        <div className="flex min-w-0 items-center gap-0.5">
+        <form action={`/${locale}/search`} role="search" className="relative hidden w-full max-w-sm lg:ms-8 lg:block">
+          <Search
+            className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <input
+            type="search"
+            name="q"
+            aria-label={t('common.search')}
+            placeholder={t('nav.searchPlaceholder')}
+            className="h-8 w-full rounded-full border border-transparent bg-[hsl(var(--surface-elevated))] pe-4 ps-9 text-sm transition-colors placeholder:text-muted-foreground hover:bg-[hsl(var(--surface-highlight))] focus:border-primary/40 focus:bg-[hsl(var(--surface-highlight))] focus:outline-none"
+          />
+        </form>
+
+        <div className="flex min-w-0 items-center gap-0.5 lg:ms-auto">
           {/* Offline indicator */}
           {isOffline && (
             <div className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-orange-500/15 text-orange-400 border border-orange-500/20">
@@ -89,7 +108,7 @@ export function Header({ locale }: HeaderProps) {
 
           <Link
             href={`/${locale}/search`}
-            className="rounded-full p-2 text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--surface-highlight))] transition-colors"
+            className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-[hsl(var(--surface-highlight))] hover:text-foreground lg:hidden"
             aria-label={t('common.search')}
           >
             <Search className="h-4 w-4" />

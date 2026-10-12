@@ -16,6 +16,7 @@ import {
   deleteSnippetSubmission,
 } from '@/actions/snippets';
 import { getCategories } from '@/actions/categories';
+import { CategoryPicker } from '@/components/categories/category-picker';
 import type { SnippetSubmissionWithLesson, CategoryWithChildren } from '@/types/database';
 import { createDraftLesson, publishUploadedLesson } from '@/actions/upload';
 import { uploadAudioFile } from '@/hooks/use-upload';
@@ -810,24 +811,14 @@ export default function AdminSnippetsPage() {
                         <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
                           בחר קטגוריה לקטע החדש
                         </h4>
-                        <select
+                        <CategoryPicker
                           value={selectedCategoryId}
-                          onChange={(e) => setSelectedCategoryId(e.target.value)}
+                          onChange={setSelectedCategoryId}
+                          categories={categories}
+                          includeNone
+                          noneLabel="ללא קטגוריה"
                           className={selectClasses}
-                          dir="rtl"
-                        >
-                          <option value="">ללא קטגוריה</option>
-                          {categories.map((parent) => (
-                            <optgroup key={parent.id} label={parent.hebrew_name}>
-                              <option value={parent.id}>{parent.hebrew_name}</option>
-                              {parent.children.map((child) => (
-                                <option key={child.id} value={child.id}>
-                                  &nbsp;&nbsp;{child.hebrew_name}
-                                </option>
-                              ))}
-                            </optgroup>
-                          ))}
-                        </select>
+                        />
 
                         <div className="flex gap-2">
                           <button

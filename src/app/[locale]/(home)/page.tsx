@@ -10,6 +10,7 @@ import {
 } from '@/lib/supabase/anon';
 import { SHORTS_CATEGORY_ID } from '@/lib/upload-drafts';
 import { LessonCard } from '@/components/lessons/lesson-card';
+import { LessonCardList } from '@/components/lessons/lesson-card-list';
 import { EmptyState } from '@/components/shared/empty-state';
 import { Link } from '@/i18n/routing';
 import { BookOpen, Wrench, Sparkles, Music, Scissors, FolderOpen, ChevronLeft, Upload } from 'lucide-react';
@@ -128,11 +129,11 @@ export default async function HomePage({ params }: Props) {
               <ChevronLeft className="h-3.5 w-3.5" />
             </Link>
           </div>
-          <div className="space-y-0.5">
+          <LessonCardList>
             {recentShorts.map((lesson) => (
               <LessonCard key={lesson.id} lesson={lesson} />
             ))}
-          </div>
+          </LessonCardList>
         </section>
       )}
 
@@ -150,11 +151,11 @@ export default async function HomePage({ params }: Props) {
             </Link>
           </div>
           {latestLesson ? (
-            <div className="space-y-0.5">
+            <LessonCardList>
               {olderLessons.map((lesson) => (
                 <LessonCard key={lesson.id} lesson={lesson} />
               ))}
-            </div>
+            </LessonCardList>
           ) : (
             <EmptyState
               icon={BookOpen}
@@ -187,7 +188,7 @@ export default async function HomePage({ params }: Props) {
             <ChevronLeft className="h-3.5 w-3.5" />
           </Link>
         </div>
-        <div className="grid grid-cols-2 gap-2.5">
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-4">
           {categories.map((cat) => {
             const IconComponent = ICON_MAP[cat.icon || ''] || FolderOpen;
             const gradient = COLOR_MAP[cat.icon || ''] || 'from-gray-500/40 to-gray-500/20';

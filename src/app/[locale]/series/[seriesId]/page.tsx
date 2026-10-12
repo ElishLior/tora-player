@@ -7,6 +7,7 @@ import { isSupabaseConfigured } from '@/lib/supabase/server';
 import { getCachedSeriesById, getCachedSeriesLessons } from '@/lib/supabase/anon';
 import { notFound } from 'next/navigation';
 import { LessonCard } from '@/components/lessons/lesson-card';
+import { LessonCardList } from '@/components/lessons/lesson-card-list';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PlayLessonsButtons } from '@/components/lessons/play-lessons-buttons';
 import { Link } from '@/i18n/routing';
@@ -86,11 +87,11 @@ export default async function SeriesDetailPage({ params }: Props) {
       )}
 
       {lessons.length > 0 ? (
-        <div className="space-y-3">
+        <LessonCardList>
           {lessons.map((lesson) => (
             <LessonCard key={lesson.id} lesson={lesson as LessonWithRelations} showProgress />
           ))}
-        </div>
+        </LessonCardList>
       ) : (
         <EmptyState icon={BookOpen} title={locale === 'he' ? 'אין שיעורים בסדרה' : 'No lessons in this series'} />
       )}
