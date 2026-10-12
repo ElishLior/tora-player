@@ -6,7 +6,7 @@ import { lessonPath } from '@/config/site';
 import { useState } from 'react';
 import { Clock, Pencil, Play, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { BookmarkDialog, getTagInfo } from '@/components/bookmarks/bookmark-dialog';
+import { BookmarkDialog, getTagInfo, useBookmarkSavedNotice } from '@/components/bookmarks/bookmark-dialog';
 import { Link } from '@/i18n/routing';
 import { lessonMomentPath } from '@/lib/lesson-tracks';
 import { formatDuration } from '@/lib/utils';
@@ -23,6 +23,7 @@ export function BookmarkGroups({ bookmarks, locale, lessons }: { bookmarks: Loca
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [editing, setEditing] = useState<LocalBookmark | null>(null);
   const te = useTranslations('bookmarkEdit');
+  const saved = useBookmarkSavedNotice();
   const isRTL = locale === 'he';
 
   const grouped = bookmarks.reduce<Record<string, LocalBookmark[]>>((acc, bm) => {
@@ -117,7 +118,7 @@ export function BookmarkGroups({ bookmarks, locale, lessons }: { bookmarks: Loca
                         e.currentTarget.focus();
                         setEditing(bm);
                       }}
-                      className="flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground transition-colors flex-shrink-0 [@media(hover:hover)]:opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 hover:text-primary hover:bg-primary/10 motion-reduce:transition-none"
+                      className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 group-hover:opacity-100 motion-reduce:transition-none [@media(hover:hover)]:opacity-0"
                       aria-label={te('editBookmark', { time: formatDuration(Math.round(bm.position)) })}
                     >
                       <Pencil className="h-4 w-4" aria-hidden />
@@ -125,10 +126,10 @@ export function BookmarkGroups({ bookmarks, locale, lessons }: { bookmarks: Loca
 
                     <button
                       onClick={() => handleDelete(bm.id)}
-                      className={`flex h-11 w-11 items-center justify-center rounded-full transition-colors flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 motion-reduce:transition-none ${
+                      className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 motion-reduce:transition-none ${
                         isConfirming
-                          ? 'text-red-400 bg-red-500/15'
-                          : 'text-muted-foreground [@media(hover:hover)]:opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-red-400 hover:bg-red-500/10'
+                          ? 'bg-red-500/15 text-red-400'
+                          : 'text-muted-foreground hover:bg-red-500/10 hover:text-red-400 focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:hover)]:opacity-0'
                       }`}
                       aria-label={isRTL ? 'מחק' : 'Delete'}
                     >
@@ -141,7 +142,12 @@ export function BookmarkGroups({ bookmarks, locale, lessons }: { bookmarks: Loca
           </div>
         );
       })}
-      {editing && <BookmarkDialog key={editing.id} bookmark={editing} onClose={() => setEditing(null)} />}
+      <div role="status" aria-live="polite">
+        {saved.text && <p className="text-[13px] font-medium text-emerald-300">{saved.text}</p>}
+      </div>
+      {editing && (
+        <BookmarkDialog key={editing.id} bookmark={editing} onClose={() => setEditing(null)} onSaved={saved.onSaved} />
+      )}
     </div>
   );
 }

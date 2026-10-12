@@ -17,7 +17,7 @@
 ALTER TABLE public.bookmarks ADD COLUMN IF NOT EXISTS updated_at timestamptz;
 
 UPDATE public.bookmarks
-SET updated_at = created_at
+SET updated_at = date_trunc('milliseconds', created_at)
 WHERE updated_at IS NULL;
 
 ALTER TABLE public.bookmarks

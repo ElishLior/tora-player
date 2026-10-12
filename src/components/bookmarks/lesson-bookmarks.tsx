@@ -5,7 +5,7 @@ import { Bookmark, Pencil, X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { formatDuration } from '@/lib/utils';
 import { useBookmarksStore, type LocalBookmark } from '@/stores/bookmarks-store';
-import { BookmarkDialog, hasSyncError } from './bookmark-dialog';
+import { BookmarkDialog, hasSyncError, useBookmarkSavedNotice } from './bookmark-dialog';
 
 const MARKER_COLOR_BY_TAG: Record<string, string> = {
   important: 'bg-red-400',
@@ -69,6 +69,7 @@ export function BookmarkChips({ bookmarks, onSeek }: BookmarkChipsProps) {
   const removeBookmark = useBookmarksStore((s) => s.removeBookmark);
   const [deleteSyncFailed, setDeleteSyncFailed] = useState(false);
   const [editing, setEditing] = useState<LocalBookmark | null>(null);
+  const saved = useBookmarkSavedNotice();
 
   if (bookmarks.length === 0) return null;
 
@@ -128,7 +129,12 @@ export function BookmarkChips({ bookmarks, onSeek }: BookmarkChipsProps) {
           {t('deleteSyncFailed')}
         </p>
       )}
-      {editing && <BookmarkDialog key={editing.id} bookmark={editing} onClose={() => setEditing(null)} />}
+      <div role="status" aria-live="polite">
+        {saved.text && <p className="text-[13px] font-medium text-emerald-300">{saved.text}</p>}
+      </div>
+      {editing && (
+        <BookmarkDialog key={editing.id} bookmark={editing} onClose={() => setEditing(null)} onSaved={saved.onSaved} />
+      )}
     </div>
   );
 }

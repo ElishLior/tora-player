@@ -469,6 +469,7 @@
     "editBookmark": "Edit bookmark {time}",
     "saving": "Saving...",
     "reload": "Reload",
+    "saved": "Bookmark updated",
     "noteCount": "{count} / {max}",
     "saveFailed": "The change was not saved. Check your connection and try again. Your text is still here.",
     "changedElsewhere": "This bookmark was changed on another device. Reload to see the latest version, then edit it again.",

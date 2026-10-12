@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Bookmark } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
@@ -13,7 +13,12 @@ const PREDEFINED_TAGS = [
   { value: 'important', label: 'חשוב', labelEn: 'Important', color: 'bg-red-500/20 text-red-400 border-red-500/30' },
   { value: 'review', label: 'לחזור', labelEn: 'Review', color: 'bg-amber-500/20 text-amber-400 border-amber-500/30' },
   { value: 'quote', label: 'ציטוט', labelEn: 'Quote', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
-  { value: 'question', label: 'שאלה', labelEn: 'Question', color: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
+  {
+    value: 'question',
+    label: 'שאלה',
+    labelEn: 'Question',
+    color: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+  },
 ];
 
 export function getTagInfo(tagValue: string) {
@@ -28,7 +33,27 @@ export function hasSyncError(result: unknown): boolean {
   return typeof result === 'object' && result !== null && 'error' in result && Boolean(result.error);
 }
 
-type BookmarkDialogProps = { onClose: () => void } & (
+/**
+ * Shows a short "saved" line after an edit. Its owner renders `text` in a
+ * `role="status"` box (always present, so screen readers announce the change)
+ * and passes `onSaved` to the dialog. A cancel never calls it.
+ */
+export function useBookmarkSavedNotice() {
+  const te = useTranslations('bookmarkEdit');
+  const [notice, setNotice] = useState<number | null>(null);
+  useEffect(() => {
+    if (notice === null) return;
+    const timer = window.setTimeout(() => setNotice(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+  return { text: notice === null ? '' : te('saved'), onSaved: () => setNotice(Date.now()) };
+}
+
+type BookmarkDialogProps = {
+  onClose: () => void;
+  /** Edit mode: called when the change is saved (not on cancel). */
+  onSaved?: () => void;
+} & (
   | {
       /** Edit mode: the existing bookmark. Its id, lesson, part and position stay as they are. */
       bookmark: LocalBookmark;
@@ -98,8 +123,10 @@ export function BookmarkDialog(props: BookmarkDialogProps) {
           { note, tag },
           { expectedUpdatedAt: initial.updatedAt ?? null },
         );
-        if (!result.error) onClose();
-        else if (result.error === 'sync_failed') setStatus('sync-failed');
+        if (!result.error) {
+          props.onSaved?.();
+          onClose();
+        } else if (result.error === 'sync_failed') setStatus('sync-failed');
         else if (result.error === 'changed_elsewhere') setStatus('changed-elsewhere');
         else setStatus('save-failed');
         return;
@@ -120,7 +147,7 @@ export function BookmarkDialog(props: BookmarkDialogProps) {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in"
+      className="animate-fade-in fixed inset-0 z-[300] flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center"
       onClick={(e) => {
         // Portalled: keep clicks from reaching the player that opened the dialog.
         e.stopPropagation();
@@ -133,7 +160,7 @@ export function BookmarkDialog(props: BookmarkDialogProps) {
         tabIndex={-1}
         aria-modal="true"
         aria-labelledby="bookmark-dialog-title"
-        className="w-full sm:max-w-md bg-[hsl(0,0%,12%)] rounded-t-2xl sm:rounded-2xl p-5 space-y-4 animate-slide-up focus:outline-none"
+        className="animate-slide-up w-full space-y-4 rounded-t-2xl bg-[hsl(0,0%,12%)] p-5 focus:outline-none sm:max-w-md sm:rounded-2xl"
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -147,7 +174,7 @@ export function BookmarkDialog(props: BookmarkDialogProps) {
             onClick={requestClose}
             disabled={status === 'saving'}
             aria-label={t('close')}
-            className="rounded-full p-1.5 text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--surface-highlight))] transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 motion-reduce:transition-none"
+            className="rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-[hsl(var(--surface-highlight))] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:opacity-50 motion-reduce:transition-none"
           >
             <X className="h-5 w-5" />
           </button>
@@ -155,29 +182,32 @@ export function BookmarkDialog(props: BookmarkDialogProps) {
 
         <div className="flex items-center gap-2 text-sm">
           <span className="text-muted-foreground">{t('time')}</span>
-          <bdi className="font-mono text-primary font-bold text-base tabular-nums">
+          <bdi className="font-mono text-base font-bold tabular-nums text-primary">
             {formatDuration(Math.round(position))}
           </bdi>
         </div>
 
         {status === 'sync-failed' ? (
           <>
-            <p role="alert" className="rounded-xl border border-amber-400/25 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
+            <p
+              role="alert"
+              className="rounded-xl border border-amber-400/25 bg-amber-400/10 px-4 py-3 text-sm text-amber-100"
+            >
               {initial ? te('notUploaded') : t('syncFailed')}
             </p>
             <button
               type="button"
               onClick={onClose}
-              className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground hover:bg-primary/90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 motion-reduce:transition-none"
+              className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 motion-reduce:transition-none"
             >
               {t('close')}
             </button>
           </>
         ) : (
           <>
-            <fieldset disabled={locked} className="space-y-4 min-w-0">
+            <fieldset disabled={locked} className="min-w-0 space-y-4">
               <div className="space-y-2">
-                <span className="text-sm text-muted-foreground font-medium">{t('tag')}</span>
+                <span className="text-sm font-medium text-muted-foreground">{t('tag')}</span>
                 <div className="flex flex-wrap gap-2">
                   {PREDEFINED_TAGS.map((option) => (
                     <button
@@ -186,10 +216,10 @@ export function BookmarkDialog(props: BookmarkDialogProps) {
                       // Edit mode: tapping the active tag removes it (an old bookmark may have none).
                       onClick={() => setTag(initial && tag === option.value ? '' : option.value)}
                       aria-pressed={tag === option.value}
-                      className={`min-h-11 px-3 py-1.5 rounded-full text-sm font-medium border transition-all motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 ${
+                      className={`min-h-11 rounded-full border px-3 py-1.5 text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 motion-reduce:transition-none ${
                         tag === option.value
-                          ? `${option.color} border-current ring-1 ring-current/30 scale-105 motion-reduce:scale-100`
-                          : 'bg-[hsl(var(--surface-elevated))] text-muted-foreground border-transparent hover:border-[hsl(0,0%,30%)]'
+                          ? `${option.color} ring-current/30 scale-105 border-current ring-1 motion-reduce:scale-100`
+                          : 'border-transparent bg-[hsl(var(--surface-elevated))] text-muted-foreground hover:border-[hsl(0,0%,30%)]'
                       }`}
                     >
                       {isHebrew ? option.label : option.labelEn}
@@ -199,7 +229,7 @@ export function BookmarkDialog(props: BookmarkDialogProps) {
               </div>
 
               <div className="block space-y-2">
-                <label htmlFor={noteId} className="text-sm text-muted-foreground font-medium">
+                <label htmlFor={noteId} className="text-sm font-medium text-muted-foreground">
                   {t('note')}
                 </label>
                 <textarea
@@ -209,13 +239,13 @@ export function BookmarkDialog(props: BookmarkDialogProps) {
                   placeholder={t('notePlaceholder')}
                   maxLength={BOOKMARK_NOTE_MAX}
                   aria-describedby={counterId}
-                  className="w-full rounded-xl bg-[hsl(var(--surface-elevated))] border border-[hsl(0,0%,22%)] px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 resize-none disabled:opacity-60"
+                  className="w-full resize-none rounded-xl border border-[hsl(0,0%,22%)] bg-[hsl(var(--surface-elevated))] px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-60"
                   rows={3}
                   dir="auto"
                 />
                 <p
                   id={counterId}
-                  className={`text-end text-xs tabular-nums ${note.length >= BOOKMARK_NOTE_MAX ? 'text-amber-300' : 'text-muted-foreground'}`}
+                  className={`text-end text-[13px] tabular-nums ${note.length >= BOOKMARK_NOTE_MAX ? 'text-amber-300' : 'text-muted-foreground'}`}
                 >
                   <bdi dir="ltr">{te('noteCount', { count: note.length, max: BOOKMARK_NOTE_MAX })}</bdi>
                 </p>
@@ -223,12 +253,18 @@ export function BookmarkDialog(props: BookmarkDialogProps) {
             </fieldset>
 
             {status === 'save-failed' && (
-              <p role="alert" className="rounded-xl border border-red-400/25 bg-red-400/10 px-4 py-3 text-sm text-red-100">
+              <p
+                role="alert"
+                className="rounded-xl border border-red-400/25 bg-red-400/10 px-4 py-3 text-sm text-red-100"
+              >
                 {te('saveFailed')}
               </p>
             )}
             {status === 'changed-elsewhere' && (
-              <p role="alert" className="rounded-xl border border-amber-400/25 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
+              <p
+                role="alert"
+                className="rounded-xl border border-amber-400/25 bg-amber-400/10 px-4 py-3 text-sm text-amber-100"
+              >
                 {te('changedElsewhere')}
               </p>
             )}
@@ -239,14 +275,14 @@ export function BookmarkDialog(props: BookmarkDialogProps) {
                   <button
                     type="button"
                     onClick={onClose}
-                    className="flex-1 min-h-11 rounded-xl bg-[hsl(var(--surface-elevated))] px-4 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 motion-reduce:transition-none"
+                    className="min-h-11 flex-1 rounded-xl bg-[hsl(var(--surface-elevated))] px-4 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 motion-reduce:transition-none"
                   >
                     {t('close')}
                   </button>
                   <button
                     type="button"
                     onClick={() => window.location.reload()}
-                    className="flex-1 min-h-11 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground hover:bg-primary/90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 motion-reduce:transition-none"
+                    className="min-h-11 flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 motion-reduce:transition-none"
                   >
                     {te('reload')}
                   </button>
@@ -257,7 +293,7 @@ export function BookmarkDialog(props: BookmarkDialogProps) {
                     type="button"
                     onClick={requestClose}
                     disabled={status === 'saving'}
-                    className="flex-1 min-h-11 rounded-xl bg-[hsl(var(--surface-elevated))] px-4 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 motion-reduce:transition-none"
+                    className="min-h-11 flex-1 rounded-xl bg-[hsl(var(--surface-elevated))] px-4 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:opacity-60 motion-reduce:transition-none"
                   >
                     {t('cancel')}
                   </button>
@@ -266,7 +302,7 @@ export function BookmarkDialog(props: BookmarkDialogProps) {
                     onClick={() => void handleSave()}
                     disabled={status === 'saving'}
                     aria-busy={status === 'saving'}
-                    className="flex-1 min-h-11 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-60 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 motion-reduce:transition-none"
+                    className="min-h-11 flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:opacity-60 motion-reduce:transition-none"
                   >
                     {status === 'saving' ? te('saving') : t('save')}
                   </button>
