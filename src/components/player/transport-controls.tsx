@@ -25,7 +25,7 @@ export function TransportControls({ className }: { className?: string }) {
   const nextTrack = useAudioStore((s) => s.nextTrack);
 
   return (
-    <div className={cn('flex items-center justify-center gap-2', className)}>
+    <div className={cn('flex items-center justify-center gap-1.5', className)}>
       <div className="flex h-11 w-11 items-center justify-center">
         {hasPreviousTrack && (
           <button

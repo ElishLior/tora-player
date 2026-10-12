@@ -103,7 +103,7 @@ export function SeekBar({ currentTime, duration, onSeek, timeMode = 'remaining' 
       </div>
 
       {timeMode === 'total' ? (
-        <div className="flex justify-between text-[13px] text-muted-foreground tabular-nums">
+        <div className="flex justify-between text-[13px] leading-4 text-muted-foreground tabular-nums">
           <bdi dir="ltr">{formatDuration(Math.round(displayTime))}</bdi>
           <bdi dir="ltr">{duration > 0 ? formatDuration(Math.round(duration)) : '--:--'}</bdi>
         </div>

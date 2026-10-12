@@ -49,7 +49,7 @@ export function SideNav({ locale }: { locale: string }) {
         className={cn(
           'sticky top-12 flex flex-col gap-6 overflow-y-auto px-3 py-5',
           // Header is h-12; the desktop player bar (h-24, DESKTOP_PLAYER_BAR_CLASS) covers the bottom while a track is loaded.
-          hasMiniPlayer ? 'h-[calc(100dvh-3rem-6rem)]' : 'h-[calc(100dvh-3rem)]',
+          hasMiniPlayer ? 'h-[calc(100dvh-3rem-6rem-env(safe-area-inset-bottom))]' : 'h-[calc(100dvh-3rem)]',
         )}
       >
         <ul className="space-y-0.5">{PRIMARY_NAV.map(renderItem)}</ul>

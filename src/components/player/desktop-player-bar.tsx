@@ -15,9 +15,6 @@ import { SpeedControl } from './speed-control';
 import { PlaybackTimeline, TransportControls, VolumeControl } from './transport-controls';
 import { UpNextSheet } from './up-next';
 
-/** Matches the layout's bottom padding (`lg:pb-24`) and the side menu's height calc. */
-const DESKTOP_PLAYER_BAR_CLASS = 'h-24';
-
 const iconButton =
   'flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary';
 
@@ -40,22 +37,19 @@ export const DesktopPlayerBar = memo(function DesktopPlayerBar() {
   const isBookmarked = useBookmarksStore((s) => s.bookmarks.some((b) => b.lessonId === lessonId));
   const [bookmarkPosition, setBookmarkPosition] = useState<number | null>(null);
   const [showUpNext, setShowUpNext] = useState(false);
+  // Offline (blob:) copies cannot be cast. Checked inside the selector, so it is re-read on every store
+  // update (an offline copy can start loading after the track changed) and the bar re-renders only when it flips.
+  const canCast = useAudioStore((s) => s.currentTrack !== null && isCastableSource(audioEngine.getCurrentUrl()));
 
   if (!track) return null;
 
   const title = track.hebrewTitle || track.title;
-  // Offline (blob:) copies cannot be cast; checked for the loaded track.
-  const canCast = isCastableSource(audioEngine.getCurrentUrl());
 
+  // The bar is 96px (h-24, the layout's lg:pb-24 and the side menu's calc); the inset is added outside it.
   return (
     <>
-      <div
-        className={cn(
-          'safe-area-bottom fixed inset-x-0 bottom-0 z-50 hidden border-t border-[hsl(0,0%,16%)] bg-[hsl(var(--surface-elevated))] backdrop-blur-xl lg:block',
-          DESKTOP_PLAYER_BAR_CLASS,
-        )}
-      >
-        <div className="grid h-full grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)_minmax(0,1.2fr)] items-center gap-4 px-4 xl:px-6">
+      <div className="fixed inset-x-0 bottom-0 z-50 hidden border-t border-[hsl(0,0%,16%)] bg-[hsl(var(--surface-elevated))] pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:block">
+        <div className="grid h-24 grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1.4fr)] items-center gap-4 px-4 xl:px-6">
           <div className="flex min-w-0 items-center">
             <button
               type="button"
