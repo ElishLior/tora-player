@@ -2,8 +2,9 @@ import { withLessonSlugSelect } from './lesson-slug-select';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Category, LessonWithRelations } from '@/types/database';
 import { dateFromSearchParam, matchTags, type TagCount } from '@/lib/tag-links';
-import { getAllCategories } from './queries';
-import { LESSON_AUDIO_FILES, LESSON_CARD_COLUMNS } from './lesson-selects';
+import { getAllCategories, getCategoriesTree } from './queries';
+import { LESSON_AUDIO_FILES, LESSON_CARD_COLUMNS, LESSON_CATEGORY } from './lesson-selects';
+import { descendantIds } from '@/lib/category-tree';
 
 export const DEFAULT_LESSON_PAGE_SIZE = 20;
 
@@ -53,7 +54,8 @@ export interface LessonQueryFilters {
 
 export interface LessonListReader {
   getAllCategories(): Promise<Category[]>;
-  getChildCategoryIds(categoryId: string): Promise<string[]>;
+  /** The category and all its descendants (up to three levels), for the `cat` filter. */
+  getDescendantCategoryIds(categoryId: string): Promise<string[]>;
   getTagCounts(): Promise<TagCount[]>;
   /** Text matches plus lessons carrying any of `matchedTags`, newest first. */
   searchLessons(query: string, filters: LessonQueryFilters, matchedTags: string[]): Promise<LessonWithRelations[]>;
@@ -145,7 +147,7 @@ async function getFilters(
   params: Pick<InitialLessonListParams, 'audioTypeFilter' | 'categoryFilter' | 'tagFilter' | 'dateFilter'>,
 ): Promise<LessonQueryFilters> {
   const categoryIds = params.categoryFilter
-    ? [params.categoryFilter, ...(await reader.getChildCategoryIds(params.categoryFilter))]
+    ? await reader.getDescendantCategoryIds(params.categoryFilter)
     : undefined;
 
   return {
@@ -254,7 +256,7 @@ function throwIfError<T>(result: { data: T | null; error: unknown }) {
   return result.data;
 }
 
-const LESSON_LIST_SELECT = `${LESSON_CARD_COLUMNS}, series(id, name, hebrew_name), category:categories(id, hebrew_name), ${LESSON_AUDIO_FILES}`;
+const LESSON_LIST_SELECT = `${LESSON_CARD_COLUMNS}, series(id, name, hebrew_name), ${LESSON_CATEGORY}, ${LESSON_AUDIO_FILES}`;
 export const SEARCH_RESULT_LIMIT = 50;
 
 /**
@@ -316,10 +318,8 @@ export function createSupabaseLessonListReader(supabase: SupabaseClient): Lesson
 
     getTagCounts: () => fetchTagCounts(supabase),
 
-    async getChildCategoryIds(categoryId) {
-      const result = await supabase.from('categories').select('id').eq('parent_id', categoryId);
-      const data = throwIfError(result);
-      return (data || []).map((row: { id: string }) => row.id);
+    async getDescendantCategoryIds(categoryId) {
+      return descendantIds(await getCategoriesTree(supabase), categoryId);
     },
 
     async searchLessons(queryText, filters, matchedTags) {

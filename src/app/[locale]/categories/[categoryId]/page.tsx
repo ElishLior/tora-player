@@ -4,7 +4,7 @@ import { cache } from 'react';
 import type { Metadata } from 'next';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { isSupabaseConfigured } from '@/lib/supabase/server';
-import { getCachedAllCategories, getCachedCategoryById, getCachedCategoryLessons } from '@/lib/supabase/anon';
+import { getCachedCategoriesTree, getCachedCategoryLessons } from '@/lib/supabase/anon';
 import { LessonCard } from '@/components/lessons/lesson-card';
 import { LessonCardList } from '@/components/lessons/lesson-card-list';
 import { EmptyState } from '@/components/shared/empty-state';
@@ -14,23 +14,54 @@ import { notFound } from 'next/navigation';
 import { JsonLd } from '@/components/seo/json-ld';
 import { DEFAULT_LOCALE, SITE_NAME, SITE_TAGLINE, categoryPath } from '@/config/site';
 import { breadcrumbJsonLd, pageAlternates, truncateText } from '@/lib/seo';
+import { categoryAncestors, categoryLabel, childrenOf, findCategory } from '@/lib/category-tree';
+import type { CategoryWithChildren } from '@/types/database';
 
 type Props = {
   params: Promise<{ locale: string; categoryId: string }>;
 };
 
-/** One category lookup per request, shared by generateMetadata and the page. */
-const loadCategory = cache((categoryId: string) => getCachedCategoryById(categoryId).catch(() => null));
+/** One category tree read per request, shared by generateMetadata and the page. Null when the read fails. */
+const loadTree = cache(() => getCachedCategoriesTree().catch(() => null));
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { categoryId } = await params;
-  const category = await loadCategory(categoryId);
+  const tree = await loadTree();
+  const category = tree ? findCategory(tree, categoryId) : undefined;
   if (!category) return {};
+  const name = categoryLabel(category, 'he');
   return {
-    title: category.hebrew_name,
-    description: truncateText(category.description || `${category.hebrew_name} — ${SITE_TAGLINE.he}`),
+    title: name,
+    description: truncateText(category.description || `${name} — ${SITE_TAGLINE.he}`),
     alternates: pageAlternates(categoryPath(category.id)),
   };
+}
+
+/** Subcategories as links, each with its own subcategories nested below (up to three levels). */
+function SubcategoryLinks({ nodes, locale }: { nodes: CategoryWithChildren[]; locale: string }) {
+  return (
+    <div className="space-y-1">
+      {nodes.map((node) => (
+        <div key={node.id} className="space-y-0.5">
+          <Link
+            href={`/categories/${node.id}`}
+            className="flex items-center gap-3 rounded-lg bg-[hsl(var(--surface-elevated))] p-3 transition-colors hover:bg-[hsl(var(--surface-highlight))] focus-visible:ring-2 focus-visible:ring-primary/60 motion-reduce:transition-none"
+          >
+            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md bg-primary/10">
+              <FolderOpen className="h-4 w-4 text-primary" />
+            </div>
+            <span className="flex-1 text-sm font-medium">{categoryLabel(node, locale)}</span>
+            <ChevronLeft className="h-4 w-4 text-muted-foreground" />
+          </Link>
+          {node.children.length > 0 && (
+            <div className="ms-6">
+              <SubcategoryLinks nodes={node.children} locale={locale} />
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export default async function CategoryDetailPage({ params }: Props) {
@@ -41,75 +72,59 @@ export default async function CategoryDetailPage({ params }: Props) {
 
   if (!isSupabaseConfigured()) return notFound();
 
-  const category = await loadCategory(categoryId);
+  const tree = await loadTree();
+  if (!tree) return notFound();
+  const category = findCategory(tree, categoryId);
   if (!category) return notFound();
 
-  // Get all categories to find parent name and sibling sub-categories
-  const allCategories = await getCachedAllCategories();
-  const parentCategory = category.parent_id
-    ? allCategories.find(c => c.id === category.parent_id) || null
-    : null;
-  const childCategories = allCategories
-    .filter(c => c.parent_id === categoryId)
-    .sort((a, b) => a.sort_order - b.sort_order);
+  // Breadcrumb: top level first, then each ancestor. Subcategories are listed below.
+  const ancestors = categoryAncestors(tree, categoryId);
+  const subcategories = childrenOf(tree, categoryId);
+  const name = categoryLabel(category, locale);
 
+  // Lessons of this category and of all its subcategories (see getLessonsByCategory).
   const lessons = await getCachedCategoryLessons(categoryId);
 
   const tCategories = await getTranslations({ locale: DEFAULT_LOCALE, namespace: 'categories' });
 
   return (
-    <div className="space-y-5 animate-fade-in">
+    <div className="animate-fade-in space-y-5">
       <JsonLd
         data={breadcrumbJsonLd([
           { name: SITE_NAME.he, pathname: '/' },
           { name: tCategories('title'), pathname: '/categories' },
-          ...(parentCategory ? [{ name: parentCategory.hebrew_name, pathname: categoryPath(parentCategory.id) }] : []),
-          { name: category.hebrew_name, pathname: categoryPath(category.id) },
+          ...ancestors.map((ancestor) => ({
+            name: categoryLabel(ancestor, DEFAULT_LOCALE),
+            pathname: categoryPath(ancestor.id),
+          })),
+          { name: categoryLabel(category, DEFAULT_LOCALE), pathname: categoryPath(category.id) },
         ])}
       />
       {/* Breadcrumb */}
-      <nav className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <Link href="/categories" className="hover:text-foreground transition-colors">
+      <nav className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+        <Link href="/categories" className="transition-colors hover:text-foreground">
           {isRTL ? 'קטגוריות' : 'Categories'}
         </Link>
-        {parentCategory && (
-          <>
+        {ancestors.map((ancestor) => (
+          <span key={ancestor.id} className="flex items-center gap-1.5">
             <ChevronLeft className="h-3 w-3" />
-            <Link href={`/categories/${parentCategory.id}`} className="hover:text-foreground transition-colors">
-              {parentCategory.hebrew_name}
+            <Link href={`/categories/${ancestor.id}`} className="transition-colors hover:text-foreground">
+              {categoryLabel(ancestor, locale)}
             </Link>
-          </>
-        )}
+          </span>
+        ))}
         <ChevronLeft className="h-3 w-3" />
-        <span className="text-foreground font-medium">{category.hebrew_name}</span>
+        <span className="font-medium text-foreground">{name}</span>
       </nav>
 
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold">{category.hebrew_name}</h1>
-        {category.description && (
-          <p className="text-sm text-muted-foreground mt-1">{category.description}</p>
-        )}
+        <h1 className="text-2xl font-bold">{name}</h1>
+        {category.description && <p className="mt-1 text-sm text-muted-foreground">{category.description}</p>}
       </div>
 
-      {/* Sub-categories (if this is a parent) */}
-      {childCategories.length > 0 && (
-        <div className="space-y-1">
-          {childCategories.map((child) => (
-            <Link
-              key={child.id}
-              href={`/categories/${child.id}`}
-              className="flex items-center gap-3 rounded-lg bg-[hsl(var(--surface-elevated))] p-3 hover:bg-[hsl(var(--surface-highlight))] transition-colors"
-            >
-              <div className="h-8 w-8 rounded-md bg-primary/10 flex items-center justify-center flex-shrink-0">
-                <FolderOpen className="h-4 w-4 text-primary" />
-              </div>
-              <span className="text-sm font-medium flex-1">{child.hebrew_name}</span>
-              <ChevronLeft className="h-4 w-4 text-muted-foreground" />
-            </Link>
-          ))}
-        </div>
-      )}
+      {/* Subcategories, and theirs (if this category has any) */}
+      {subcategories.length > 0 && <SubcategoryLinks nodes={subcategories} locale={locale} />}
 
       {/* Lessons */}
       {lessons.length > 0 ? (
@@ -118,7 +133,7 @@ export default async function CategoryDetailPage({ params }: Props) {
             <LessonCard key={lesson.id} lesson={lesson} showProgress />
           ))}
         </LessonCardList>
-      ) : childCategories.length === 0 ? (
+      ) : subcategories.length === 0 ? (
         <EmptyState
           icon={BookOpen}
           title={isRTL ? 'אין שיעורים בקטגוריה זו עדיין' : 'No lessons in this category yet'}

@@ -15,6 +15,7 @@ import {
 } from '@/lib/lessons/pagination-state';
 import { CheckSquare, X, Save, Loader2, Play } from 'lucide-react';
 import { getLessonTracks } from '@/lib/lesson-tracks';
+import { buildCategoryTree } from '@/lib/category-tree';
 import { playLessons } from '@/lib/play-lesson';
 import type { LessonWithRelations, Category } from '@/types/database';
 
@@ -61,16 +62,6 @@ function groupByDate(lessons: LessonWithRelations[], locale: string): DateGroup[
   }
 
   return groups.filter((g) => g.lessons.length > 0);
-}
-
-function buildCategoryTree(categories: Category[]) {
-  const parents = categories.filter((c) => !c.parent_id);
-  return parents.map((parent) => ({
-    ...parent,
-    children: categories
-      .filter((c) => c.parent_id === parent.id)
-      .sort((a, b) => a.sort_order - b.sort_order),
-  }));
 }
 
 export function LessonsClient({
