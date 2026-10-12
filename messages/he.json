@@ -473,7 +473,13 @@
     "bookmarks": "סימניות",
     "playlists": "רשימות",
     "downloads": "הורדות",
-    "label": "ניווט ראשי"
+    "label": "ניווט ראשי",
+    "search": "חיפוש",
+    "tags": "נושאים",
+    "library": "הספרייה שלי",
+    "driving": "מצב נהיגה",
+    "more": "עוד",
+    "sidebarLabel": "תפריט צד"
   },
   "auth": {
     "adminArea": "אזור ניהול",
@@ -755,5 +761,12 @@
     "clear": "ניקוי",
     "entries": "{count} רשומות",
     "empty": "אין עדיין רשומות. הפעילו את היומן, נגנו שיעור, ובצעו את הבדיקה."
+  },
+  "partDurations": {
+    "label": "משך החלקים",
+    "part": "חלק {number}",
+    "partWithLength": "{name}: {length}",
+    "seconds": "{seconds} שנ׳",
+    "minutes": "{minutes} דק׳"
   }
 }

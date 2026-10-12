@@ -473,7 +473,13 @@
     "bookmarks": "Bookmarks",
     "playlists": "Playlists",
     "downloads": "Downloads",
-    "label": "Main navigation"
+    "label": "Main navigation",
+    "search": "Search",
+    "tags": "Topics",
+    "library": "My library",
+    "driving": "Driving mode",
+    "more": "More",
+    "sidebarLabel": "Side menu"
   },
   "auth": {
     "adminArea": "Admin area",
@@ -755,5 +761,12 @@
     "clear": "Clear",
     "entries": "{count} entries",
     "empty": "No entries yet. Turn the log on, play a lesson, then run the check."
+  },
+  "partDurations": {
+    "label": "Part lengths",
+    "part": "Part {number}",
+    "partWithLength": "{name}: {length}",
+    "seconds": "{seconds} sec",
+    "minutes": "{minutes} min"
   }
 }
