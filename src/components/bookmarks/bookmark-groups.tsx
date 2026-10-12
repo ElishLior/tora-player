@@ -4,8 +4,9 @@ import type { LessonWithRelations } from '@/types/database';
 import { lessonPath } from '@/config/site';
 
 import { useState } from 'react';
-import { Clock, Play, Trash2 } from 'lucide-react';
-import { getTagInfo } from '@/components/bookmarks/bookmark-dialog';
+import { Clock, Pencil, Play, Trash2 } from 'lucide-react';
+import { useTranslations } from 'next-intl';
+import { BookmarkDialog, getTagInfo } from '@/components/bookmarks/bookmark-dialog';
 import { Link } from '@/i18n/routing';
 import { lessonMomentPath } from '@/lib/lesson-tracks';
 import { formatDuration } from '@/lib/utils';
@@ -14,11 +15,14 @@ import { useBookmarksStore } from '@/stores/bookmarks-store';
 
 /**
  * Bookmarks grouped by lesson (most recent lesson first), each linking into
- * the lesson at its position (`?t=`). Deleting asks for a second tap.
+ * the lesson at its position (`?t=`). Editing opens the bookmark dialog in
+ * edit mode (it never plays the lesson). Deleting asks for a second tap.
  */
 export function BookmarkGroups({ bookmarks, locale, lessons }: { bookmarks: LocalBookmark[]; locale: string; lessons?: Record<string, LessonWithRelations> | null }) {
   const removeBookmark = useBookmarksStore((s) => s.removeBookmark);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [editing, setEditing] = useState<LocalBookmark | null>(null);
+  const te = useTranslations('bookmarkEdit');
   const isRTL = locale === 'he';
 
   const grouped = bookmarks.reduce<Record<string, LocalBookmark[]>>((acc, bm) => {
@@ -107,8 +111,21 @@ export function BookmarkGroups({ bookmarks, locale, lessons }: { bookmarks: Loca
                     </div>
 
                     <button
+                      type="button"
+                      onClick={(e) => {
+                        // Focus the button first so focus returns here when the dialog closes (Safari does not focus on tap).
+                        e.currentTarget.focus();
+                        setEditing(bm);
+                      }}
+                      className="flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground transition-colors flex-shrink-0 [@media(hover:hover)]:opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 hover:text-primary hover:bg-primary/10 motion-reduce:transition-none"
+                      aria-label={te('editBookmark', { time: formatDuration(Math.round(bm.position)) })}
+                    >
+                      <Pencil className="h-4 w-4" aria-hidden />
+                    </button>
+
+                    <button
                       onClick={() => handleDelete(bm.id)}
-                      className={`p-1.5 rounded-full transition-colors flex-shrink-0 ${
+                      className={`flex h-11 w-11 items-center justify-center rounded-full transition-colors flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 motion-reduce:transition-none ${
                         isConfirming
                           ? 'text-red-400 bg-red-500/15'
                           : 'text-muted-foreground [@media(hover:hover)]:opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-red-400 hover:bg-red-500/10'
@@ -124,6 +141,7 @@ export function BookmarkGroups({ bookmarks, locale, lessons }: { bookmarks: Loca
           </div>
         );
       })}
+      {editing && <BookmarkDialog key={editing.id} bookmark={editing} onClose={() => setEditing(null)} />}
     </div>
   );
 }

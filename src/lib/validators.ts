@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { LISTEN_MIN_SECONDS, LISTEN_SOURCES } from '@/lib/listen-tracking';
 import { NOTIFY_MODES } from '@/lib/notifications/batch-rules';
 import { MAX_NOTE_LENGTH } from '@/lib/note-rules';
+import { BOOKMARK_NOTE_MAX } from '@/lib/bookmark-rules';
 import { normalizeTags } from '@/lib/tags';
 
 // Relaxed UUID pattern — accepts any 8-4-4-4-12 hex string
@@ -103,7 +104,7 @@ export const bookmarkSchema = z.object({
   id: uuidLike,
   lesson_id: uuidLike,
   position: z.number().min(0),
-  note: z.string().max(2000).optional().nullable(),
+  note: z.string().max(BOOKMARK_NOTE_MAX).optional().nullable(),
   tag: z.string().max(40).optional().nullable(),
   audio_file_id: uuidLike.optional().nullable(),
 });

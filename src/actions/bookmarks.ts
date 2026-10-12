@@ -22,6 +22,18 @@ type BookmarkInput = {
 const AUTH_REQUIRED = 'auth_required';
 const BOOKMARK_COLUMNS = 'id, lesson_id, position, note, tag, audio_file_id, created_at, lesson:lessons(title, hebrew_title)';
 
+/** Result of a write that reports the row's server `updated_at` (null before migration 024). */
+export type BookmarkWriteResult = { error?: string; updatedAt?: string | null };
+
+/**
+ * Migration 024 not applied yet: the column is missing from the select, the
+ * filter or the write. Callers retry without it (src/lib/supabase/lesson-slug-select.ts
+ * does the same for slugs).
+ */
+function isMissingUpdatedAt(error: { code?: string; message?: string }): boolean {
+  return ['42703', 'PGRST204'].includes(error.code ?? '') && /updated_at/i.test(error.message ?? '');
+}
+
 function toRow(bookmark: BookmarkInput, userId: string) {
   return {
     id: bookmark.id,
@@ -34,29 +46,50 @@ function toRow(bookmark: BookmarkInput, userId: string) {
   };
 }
 
-export async function createBookmark(data: BookmarkInput): Promise<{ error?: string }> {
+export async function createBookmark(data: BookmarkInput): Promise<BookmarkWriteResult> {
   const parsed = bookmarkSchema.safeParse(data);
   if (!parsed.success) return { error: 'invalid_bookmark' };
 
   const session = await getSignedInClient();
   if (!session) return { error: AUTH_REQUIRED };
 
-  const { error } = await session.supabase
-    .from('bookmarks')
-    .upsert(toRow(parsed.data, session.userId), { onConflict: 'id' });
-  if (error) {
-    console.error('[bookmarks] create failed:', error.message);
-    return { error: error.message };
+  const row = toRow(parsed.data, session.userId);
+  const write = (columns: string) =>
+    session.supabase.from('bookmarks').upsert(row, { onConflict: 'id' }).select(columns);
+  let result = await write('updated_at');
+  if (result.error && isMissingUpdatedAt(result.error)) result = await write('id');
+  if (result.error) {
+    console.error('[bookmarks] create failed:', result.error.message);
+    return { error: result.error.message };
   }
-  return {};
+  const created = (result.data ?? []) as Array<{ updated_at?: string | null }>;
+  return { updatedAt: created[0]?.updated_at ?? null };
 }
 
+/**
+ * Edits the note and/or tag of one of the caller's bookmarks (id, lesson and
+ * position never change). Ownership is enforced here: the update filters on
+ * the session's user id, never on a client-supplied one.
+ *
+ * `expectedUpdatedAt` is the server `updated_at` the editor was based on. The
+ * update only applies while the row still has it; 0 rows then means the
+ * bookmark changed or was removed elsewhere (`changed_elsewhere`), and nothing
+ * is overwritten. `null` = unconditional (a bookmark the account never
+ * confirmed; 0 rows = `not_uploaded`). Before migration 024 the check is not
+ * possible, so the update is unconditional by id + user.
+ */
 export async function updateBookmark(
   id: string,
   updates: { note?: string | null; tag?: string | null },
-): Promise<{ error?: string }> {
+  expectedUpdatedAt?: string | null,
+): Promise<BookmarkWriteResult> {
   const parsed = bookmarkSchema.pick({ id: true, note: true, tag: true }).safeParse({ id, ...updates });
   if (!parsed.success) return { error: 'invalid_bookmark' };
+  if (expectedUpdatedAt != null && (typeof expectedUpdatedAt !== 'string' || expectedUpdatedAt.length > 64)) {
+    return { error: 'invalid_bookmark' };
+  }
+  // Kept exactly as the server returned it: a timestamp string compares equal only in its original form.
+  const expectedValue = expectedUpdatedAt || null;
 
   const session = await getSignedInClient();
   if (!session) return { error: AUTH_REQUIRED };
@@ -65,12 +98,21 @@ export async function updateBookmark(
   if (parsed.data.note !== undefined) patch.note = parsed.data.note || null;
   if (parsed.data.tag !== undefined) patch.tag = parsed.data.tag || null;
 
-  const { error } = await session.supabase.from('bookmarks').update(patch).eq('id', parsed.data.id);
-  if (error) {
-    console.error('[bookmarks] update failed:', error.message);
-    return { error: error.message };
+  const write = (columns: string, conditional: boolean) => {
+    let query = session.supabase.from('bookmarks').update(patch).eq('id', parsed.data.id).eq('user_id', session.userId);
+    if (conditional && expectedValue) query = query.eq('updated_at', expectedValue);
+    return query.select(columns);
+  };
+
+  let result = await write('id, updated_at', true);
+  if (result.error && isMissingUpdatedAt(result.error)) result = await write('id', false);
+  if (result.error) {
+    console.error('[bookmarks] update failed:', result.error.message);
+    return { error: result.error.message };
   }
-  return {};
+  const rows = (result.data ?? []) as Array<{ updated_at?: string | null }>;
+  if (rows.length === 0) return { error: expectedValue ? 'changed_elsewhere' : 'not_uploaded' };
+  return { updatedAt: rows[0].updated_at ?? null };
 }
 
 export async function deleteBookmark(id: string): Promise<{ error?: string }> {
@@ -130,10 +172,10 @@ export async function syncBookmarks(input: {
       }
     }
 
-    const { data, error } = await supabase
-      .from('bookmarks')
-      .select(BOOKMARK_COLUMNS)
-      .order('created_at', { ascending: true });
+    const readAll = (columns: string) =>
+      supabase.from('bookmarks').select(columns).order('created_at', { ascending: true });
+    let { data, error } = await readAll(`${BOOKMARK_COLUMNS}, updated_at`);
+    if (error && isMissingUpdatedAt(error)) ({ data, error } = await readAll(BOOKMARK_COLUMNS));
     if (error) throw new Error(error.message);
     return { data: (data ?? []) as unknown as ServerBookmark[] };
   } catch (err) {

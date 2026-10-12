@@ -1,11 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { Bookmark, X } from 'lucide-react';
+import { Bookmark, Pencil, X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { formatDuration } from '@/lib/utils';
 import { useBookmarksStore, type LocalBookmark } from '@/stores/bookmarks-store';
-import { hasSyncError } from './bookmark-dialog';
+import { BookmarkDialog, hasSyncError } from './bookmark-dialog';
 
 const MARKER_COLOR_BY_TAG: Record<string, string> = {
   important: 'bg-red-400',
@@ -59,11 +59,16 @@ interface BookmarkChipsProps {
   onSeek: (bookmark: LocalBookmark) => void;
 }
 
-/** Tap a chip to jump to it; the × deletes it (no long-press/right-click needed). */
+/**
+ * Tap a chip to jump to it; the pencil edits its note and tag (the dialog never
+ * plays); the × deletes it (no long-press/right-click needed).
+ */
 export function BookmarkChips({ bookmarks, onSeek }: BookmarkChipsProps) {
   const t = useTranslations('bookmarks');
+  const te = useTranslations('bookmarkEdit');
   const removeBookmark = useBookmarksStore((s) => s.removeBookmark);
   const [deleteSyncFailed, setDeleteSyncFailed] = useState(false);
+  const [editing, setEditing] = useState<LocalBookmark | null>(null);
 
   if (bookmarks.length === 0) return null;
 
@@ -84,7 +89,7 @@ export function BookmarkChips({ bookmarks, onSeek }: BookmarkChipsProps) {
                 type="button"
                 onClick={() => onSeek(bookmark)}
                 aria-label={t('jumpToTime', { time })}
-                className="flex min-w-0 items-center gap-1 rounded-full py-1 pe-1 ps-2.5 text-xs font-medium transition-colors hover:bg-amber-500/25"
+                className="flex min-w-0 items-center gap-1 rounded-full py-1 pe-1 ps-2.5 text-xs font-medium transition-colors hover:bg-amber-500/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 motion-reduce:transition-none"
               >
                 <Bookmark aria-hidden className="h-3 w-3 flex-shrink-0 fill-current" />
                 <bdi className="tabular-nums">{time}</bdi>
@@ -96,9 +101,21 @@ export function BookmarkChips({ bookmarks, onSeek }: BookmarkChipsProps) {
               </button>
               <button
                 type="button"
+                onClick={(e) => {
+                  // Focus the button first so focus returns here when the dialog closes (Safari does not focus on tap).
+                  e.currentTarget.focus();
+                  setEditing(bookmark);
+                }}
+                aria-label={te('editBookmark', { time })}
+                className="flex min-h-11 min-w-11 items-center justify-center rounded-full text-amber-400/70 transition-colors hover:text-amber-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 motion-reduce:transition-none"
+              >
+                <Pencil aria-hidden className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
                 onClick={() => void handleDelete(bookmark.id)}
                 aria-label={t('deleteBookmark', { time })}
-                className="rounded-full p-1.5 pe-2 text-amber-400/70 transition-colors hover:text-red-400"
+                className="rounded-full p-1.5 pe-2 text-amber-400/70 transition-colors hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 motion-reduce:transition-none"
               >
                 <X aria-hidden className="h-3.5 w-3.5" />
               </button>
@@ -111,6 +128,7 @@ export function BookmarkChips({ bookmarks, onSeek }: BookmarkChipsProps) {
           {t('deleteSyncFailed')}
         </p>
       )}
+      {editing && <BookmarkDialog key={editing.id} bookmark={editing} onClose={() => setEditing(null)} />}
     </div>
   );
 }

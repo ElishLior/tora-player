@@ -464,6 +464,16 @@
     "jumpTo": "Jump to",
     "syncFailed": "Saved on this device, but syncing to your account failed. We'll retry next time the app opens."
   },
+  "bookmarkEdit": {
+    "title": "Edit bookmark",
+    "editBookmark": "Edit bookmark {time}",
+    "saving": "Saving...",
+    "reload": "Reload",
+    "noteCount": "{count} / {max}",
+    "saveFailed": "The change was not saved. Check your connection and try again. Your text is still here.",
+    "changedElsewhere": "This bookmark was changed on another device. Reload to see the latest version, then edit it again.",
+    "notUploaded": "Saved on this device. The change will reach your account the next time the app syncs."
+  },
   "offline": {
     "title": "Downloads",
     "download": "Download for offline",
