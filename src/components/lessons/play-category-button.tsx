@@ -3,10 +3,12 @@
 import { Loader2, Pause, Play } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useHydrated } from '@/hooks/use-hydrated';
-import { createCategoryQueueSource, type CategorySeed } from '@/lib/category-queue';
+import { useMemo } from 'react';
+import { createCategoryQueueSource, seedFromCategoryRows } from '@/lib/category-queue';
 import { togglePlay, play } from '@/lib/audio-controller';
 import { playLessons } from '@/lib/play-lesson';
 import { getTransportState, useAudioStore } from '@/stores/audio-store';
+import type { LessonWithRelations } from '@/types/database';
 
 interface PlayCategoryButtonProps {
   categoryId: string;
@@ -14,8 +16,8 @@ interface PlayCategoryButtonProps {
   scopeIds: string[];
   /** Lessons created after this instant are not part of the session. */
   snapshotAt: string;
-  /** The first lessons' tracks and cursor, built on the page from its cached list. */
-  seed: CategorySeed;
+  /** The page's cached list rows (the same ones its cards render). The first segment is built from them here: track building is client code. */
+  rows: LessonWithRelations[];
 }
 
 /**
@@ -23,7 +25,8 @@ interface PlayCategoryButtonProps {
  * the category's lessons in list order. Shows what the category queue is doing
  * when it is the active queue; other queues leave it on its start label.
  */
-export function PlayCategoryButton({ categoryId, scopeIds, snapshotAt, seed }: PlayCategoryButtonProps) {
+export function PlayCategoryButton({ categoryId, scopeIds, snapshotAt, rows }: PlayCategoryButtonProps) {
+  const seed = useMemo(() => seedFromCategoryRows(rows), [rows]);
   const t = useTranslations('categoryPlayback');
   const hydrated = useHydrated();
   const source = useAudioStore((s) => s.queueSource);

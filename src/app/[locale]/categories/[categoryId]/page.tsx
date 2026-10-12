@@ -5,7 +5,6 @@ import type { Metadata } from 'next';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { isSupabaseConfigured } from '@/lib/supabase/server';
 import { getCachedCategoriesTree, getCachedCategoryLessons } from '@/lib/supabase/anon';
-import { seedFromCategoryRows } from '@/lib/category-queue';
 import { PlayCategoryButton } from '@/components/lessons/play-category-button';
 import { LessonCard } from '@/components/lessons/lesson-card';
 import { LessonCardList } from '@/components/lessons/lesson-card-list';
@@ -91,7 +90,6 @@ export default async function CategoryDetailPage({ params }: Props) {
   // so the tap can play synchronously. Snapshot is taken after the cached read: its rows predate it.
   const scopeIds = descendantIds(tree, categoryId);
   const snapshotAt = new Date().toISOString();
-  const seed = seedFromCategoryRows(lessons);
 
   const tCategories = await getTranslations({ locale: DEFAULT_LOCALE, namespace: 'categories' });
 
@@ -134,7 +132,7 @@ export default async function CategoryDetailPage({ params }: Props) {
             categoryId={category.id}
             scopeIds={scopeIds}
             snapshotAt={snapshotAt}
-            seed={seed}
+            rows={lessons}
           />
         </div>
       </div>
