@@ -51,7 +51,7 @@ export function NowPlayingPanel({ className }: { className?: string }) {
       aria-label={tDesktop('panelLabel')}
       data-now-playing-panel
       className={cn(
-        'max-h-[calc(100dvh-11rem-env(safe-area-inset-bottom))]flex-col sticky top-16 flex gap-4 overflow-y-auto overscroll-contain rounded-2xl bg-[hsl(var(--surface-elevated))] p-4',
+        'sticky top-16 flex max-h-[calc(100dvh-11rem-env(safe-area-inset-bottom))] flex-col gap-4 overflow-y-auto overscroll-contain rounded-2xl bg-[hsl(var(--surface-elevated))] p-4',
         className,
       )}
     >
