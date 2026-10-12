@@ -4,8 +4,8 @@ import { cache } from 'react';
 import type { Metadata } from 'next';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { isSupabaseConfigured } from '@/lib/supabase/server';
-import { createAnonSupabaseClient, getCachedCategoriesTree, getCachedCategoryLessons } from '@/lib/supabase/anon';
-import { CATEGORY_SEGMENT_SIZE, loadCategoryQueueSegment } from '@/lib/category-queue';
+import { getCachedCategoriesTree, getCachedCategoryLessons } from '@/lib/supabase/anon';
+import { seedFromCategoryRows } from '@/lib/category-queue';
 import { PlayCategoryButton } from '@/components/lessons/play-category-button';
 import { LessonCard } from '@/components/lessons/lesson-card';
 import { LessonCardList } from '@/components/lessons/lesson-card-list';
@@ -87,15 +87,11 @@ export default async function CategoryDetailPage({ params }: Props) {
   // Lessons of this category and of all its subcategories (see getLessonsByCategory).
   const lessons = await getCachedCategoryLessons(categoryId);
 
-  // The continuous-play session starts from this first segment, read now so the tap can play synchronously.
+  // The continuous-play session starts from the first lessons of the list above (no second read),
+  // so the tap can play synchronously. Snapshot is taken after the cached read: its rows predate it.
   const scopeIds = descendantIds(tree, categoryId);
   const snapshotAt = new Date().toISOString();
-  const firstSegment = await loadCategoryQueueSegment(createAnonSupabaseClient(), {
-    scopeIds,
-    cursor: null,
-    snapshotAt,
-    limit: CATEGORY_SEGMENT_SIZE,
-  }).catch(() => null);
+  const seed = seedFromCategoryRows(lessons);
 
   const tCategories = await getTranslations({ locale: DEFAULT_LOCALE, namespace: 'categories' });
 
@@ -138,7 +134,7 @@ export default async function CategoryDetailPage({ params }: Props) {
             categoryId={category.id}
             scopeIds={scopeIds}
             snapshotAt={snapshotAt}
-            seed={firstSegment}
+            seed={seed}
           />
         </div>
       </div>

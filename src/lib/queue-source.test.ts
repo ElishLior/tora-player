@@ -96,16 +96,23 @@ describe('appendUniqueTracks', () => {
 });
 
 describe('isPermanentMediaError', () => {
-  it('treats decode and unsupported-source errors as permanent while online', () => {
-    expect(isPermanentMediaError(3, true)).toBe(true);
-    expect(isPermanentMediaError(4, true)).toBe(true);
+  it('treats decode and unsupported-source errors as permanent once a retry has failed too', () => {
+    expect(isPermanentMediaError(3, true, 1)).toBe(true);
+    expect(isPermanentMediaError(4, true, 1)).toBe(true);
+    expect(isPermanentMediaError(4, true, 2)).toBe(true);
+  });
+
+  it('gives a first source error one retry: a transient 5xx also reports 4', () => {
+    expect(isPermanentMediaError(4, true, 0)).toBe(false);
+    expect(isPermanentMediaError(3, true, 0)).toBe(false);
   });
 
   it('treats network errors, aborts and anything offline as temporary', () => {
-    expect(isPermanentMediaError(2, true)).toBe(false);
-    expect(isPermanentMediaError(1, true)).toBe(false);
-    expect(isPermanentMediaError(undefined, true)).toBe(false);
-    expect(isPermanentMediaError(4, false)).toBe(false);
+    expect(isPermanentMediaError(2, true, 0)).toBe(false);
+    expect(isPermanentMediaError(2, true, 3)).toBe(false);
+    expect(isPermanentMediaError(1, true, 3)).toBe(false);
+    expect(isPermanentMediaError(undefined, true, 3)).toBe(false);
+    expect(isPermanentMediaError(4, false, 3)).toBe(false);
   });
 });
 

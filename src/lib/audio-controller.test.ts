@@ -7,11 +7,13 @@ import {
   pause,
   play,
   playTrack,
+  previousTrackOrSkip,
   skipBackward,
   skipForward,
   startAudioController,
   togglePlay,
 } from "./audio-controller";
+import { getTransportState } from "@/stores/audio-store";
 import { useMediaSession } from "@/hooks/use-media-session";
 import { getResumePoint } from "./lesson-progress";
 import { playLesson } from "./play-lesson";
@@ -1048,6 +1050,13 @@ function failElement(code: number) {
   element().emit("error");
 }
 
+/** A stream the server refuses: the first failure is retried (a 5xx reads the same), and the retry fails too. */
+function failUnavailable(code: number) {
+  failElement(code);
+  element().error = null; // the retry reloads the element, which clears its error
+  failElement(code);
+}
+
 describe("category queue playback", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -1192,22 +1201,69 @@ describe("category queue playback", () => {
     expect(state().currentTrack?.id).toBe("b");
   });
 
-  it("skips an unavailable lesson and says which one", () => {
+  it("retries a source error once before skipping, since a 5xx also reads as 4", () => {
+    useRetryClock();
     startCategory([...makeParts("a", 1), ...makeParts("b", 1)]);
     becomePlaying();
 
     failElement(4);
+
+    expect(state().currentTrack?.id).toBe("a");
+    expect(state().playbackIssue).toBe("retrying");
+    expect(state().queueNotice).toBeNull();
+
+    vi.advanceTimersByTime(1000);
+    becomePlaying(); // the retry worked: the lesson plays on
+
+    expect(state().currentTrack?.id).toBe("a");
+    expect(state().playbackIssue).toBeNull();
+    expect(state().queueNotice).toBeNull();
+    expect(state().isPlaying).toBe(true);
+  });
+
+  it("skips a lesson whose retry also fails with a source error", () => {
+    useRetryClock();
+    startCategory([...makeParts("a", 1), ...makeParts("b", 1)]);
+    becomePlaying();
+
+    failElement(4);
+    vi.advanceTimersByTime(1000);
+    failElement(4);
+
+    expect(state().currentTrack?.id).toBe("b");
+    expect(state().queueNotice).toEqual({ kind: "skipped", title: "a" });
+  });
+
+  it("skips an unavailable lesson and says which one", () => {
+    startCategory([...makeParts("a", 1), ...makeParts("b", 1)]);
+    becomePlaying();
+
+    failUnavailable(4);
 
     expect(state().currentTrack?.id).toBe("b");
     expect(state().queueNotice).toEqual({ kind: "skipped", title: "a" });
     expect(state().isPlaying).toBe(true);
   });
 
+  it("announces a skipped lesson for 8 seconds, then the notice clears", () => {
+    useRetryClock();
+    startCategory([...makeParts("a", 1), ...makeParts("b", 1)]);
+    becomePlaying();
+
+    failUnavailable(4);
+    expect(state().queueNotice).toEqual({ kind: "skipped", title: "a" });
+
+    vi.advanceTimersByTime(7_999);
+    expect(state().queueNotice).toEqual({ kind: "skipped", title: "a" });
+    vi.advanceTimersByTime(1);
+    expect(state().queueNotice).toBeNull();
+  });
+
   it("stops after more unavailable lessons in a row than allowed", () => {
     startCategory([...makeParts("a", 1), ...makeParts("b", 1), ...makeParts("c", 1), ...makeParts("d", 1), ...makeParts("e", 1)]);
     becomePlaying();
 
-    for (let i = 0; i < 4; i += 1) failElement(4);
+    for (let i = 0; i < 4; i += 1) failUnavailable(4);
 
     expect(state().currentTrack?.id).toBe("d");
     expect(state().isPlaying).toBe(false);
@@ -1315,20 +1371,70 @@ describe("category queue playback", () => {
     expect(state().queueIndex).toBe(2);
   });
 
-  it("toggling play while the next lesson loads cancels the wait", async () => {
+  it("toggling play while the next lesson loads keeps the wait and moves on when it arrives", async () => {
+    const resolve = deferredSegment();
+    startCategory(makeParts("a", 1), { exhausted: false });
+    becomePlaying();
+    endCurrentFile();
+    await vi.waitFor(() => expect(state().queueNotice).toEqual({ kind: "loading" }));
+    expect(getTransportState(state())).toBe("loading");
+
+    togglePlay();
+    expect(state().queueNotice).toEqual({ kind: "loading" });
+    expect(state().isPlaying).toBe(true);
+
+    resolve(segmentResult([segmentLesson("b")], true));
+    await vi.waitFor(() => expect(state().currentTrack?.id).toBe("b"));
+    expect(state().isPlaying).toBe(true);
+  });
+
+  it("play during the wait (lock screen) is a no-op: the wait continues", async () => {
     const resolve = deferredSegment();
     startCategory(makeParts("a", 1), { exhausted: false });
     becomePlaying();
     endCurrentFile();
     await vi.waitFor(() => expect(state().queueNotice).toEqual({ kind: "loading" }));
 
-    togglePlay();
+    play();
+
+    expect(state().queueNotice).toEqual({ kind: "loading" });
+    resolve(segmentResult([segmentLesson("b")], true));
+    await vi.waitFor(() => expect(state().currentTrack?.id).toBe("b"));
+  });
+
+  it("an explicit pause cancels the wait and the next lesson is not started", async () => {
+    const resolve = deferredSegment();
+    startCategory(makeParts("a", 1), { exhausted: false });
+    becomePlaying();
+    endCurrentFile();
+    await vi.waitFor(() => expect(state().queueNotice).toEqual({ kind: "loading" }));
+
+    pause();
     resolve(segmentResult([segmentLesson("b")], true));
     await flush();
 
     expect(state().queueNotice).toBeNull();
     expect(state().currentTrack?.id).toBe("a");
     expect(state().isPlaying).toBe(false);
+  });
+
+  it("moving to another lesson during the wait clears it, so a later wait result does not advance", async () => {
+    const resolve = deferredSegment();
+    startCategory([...makeParts("x", 1), ...makeParts("a", 1)], { index: 1, exhausted: false });
+    becomePlaying();
+    endCurrentFile();
+    await vi.waitFor(() => expect(state().queueNotice).toEqual({ kind: "loading" }));
+
+    previousTrackOrSkip(); // lock-screen previous: x, which is not the lesson that ended
+
+    expect(state().currentTrack?.id).toBe("x");
+    expect(state().queueNotice).toBeNull();
+    resolve(segmentResult([segmentLesson("b")], true));
+    await flush();
+    await flush();
+
+    expect(state().currentTrack?.id).toBe("x");
+    expect(state().queueNotice).toBeNull();
   });
 
   it("keeps the session for a lesson inside its queue, and ends it for one elsewhere", () => {

@@ -170,6 +170,39 @@ export function segmentToTracks(lessons: LessonWithRelations[]): AudioTrack[] {
   return lessons.flatMap((lesson) => getLessonTracks(lesson));
 }
 
+/** Lessons the category page's cached list reads (`getLessonsByCategory`'s limit). */
+export const CATEGORY_LIST_LIMIT = 50;
+
+/** The first segment a category queue starts with, as the category page passes it to the button. */
+export interface CategorySeed {
+  /** Playable tracks per lesson, in list order (lessons without audio left out). */
+  lessons: AudioTrack[][];
+  cursor: QueueCursor | null;
+  exhausted: boolean;
+}
+
+/**
+ * The first segment, built from the category page's cached list rows instead
+ * of a second catalog read. Those rows share the segment query's scope and
+ * order, and were read before the play session's snapshot, so they satisfy
+ * its rule too. The cursor is the last of the first `pageSize` rows (playable
+ * or not), as segments define it. A list that reached `listLimit` may hold more
+ * lessons, so it is never exhausted; a shorter one is the whole category.
+ */
+export function seedFromCategoryRows(
+  rows: readonly LessonWithRelations[],
+  listLimit: number = CATEGORY_LIST_LIMIT,
+  pageSize: number = CATEGORY_SEGMENT_SIZE,
+): CategorySeed {
+  const page = rows.slice(0, pageSize);
+  const last = page[page.length - 1];
+  return {
+    lessons: page.map((lesson) => getLessonTracks(lesson)).filter((tracks) => tracks.length > 0),
+    cursor: last ? { date: last.date, createdAt: last.created_at, id: last.id } : null,
+    exhausted: rows.length <= pageSize && rows.length < listLimit,
+  };
+}
+
 export function segmentToPage(segment: CategorySegment): SegmentPage {
   return {
     tracks: segmentToTracks(segment.lessons),
