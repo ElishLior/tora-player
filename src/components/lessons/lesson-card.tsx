@@ -3,7 +3,7 @@
 import { lessonPath } from '@/config/site';
 
 import { useMemo } from 'react';
-import { Check, ListChecks, ListPlus } from 'lucide-react';
+import { Check, ChevronLeft, ListChecks, ListPlus } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
 import { categoryLabel } from '@/lib/category-tree';
 import { Link } from '@/i18n/routing';
@@ -31,6 +31,20 @@ interface LessonCardProps {
 }
 
 const TILE = 'h-[58px] w-[52px] flex-shrink-0';
+
+/*
+ * Desktop affordances (lg and up, pointer devices only). Named group `lesson`, so an
+ * outer `group` never lights up every card. Only background, colour and opacity change:
+ * no transform or filter on any element between the title link and the row, because a
+ * transform would become the containing block of the stretched link (::before).
+ */
+// Full class names on purpose: Tailwind only generates utilities it finds as literal text in the source.
+const LIFT =
+  'lg:[@media(hover:hover)]:hover:bg-[hsl(var(--surface-highlight))] lg:has-[a:focus-visible]:bg-[hsl(var(--surface-highlight))]';
+const TITLE_HOVER =
+  'lg:[@media(hover:hover)]:group-hover/lesson:text-primary lg:[@media(hover:hover)]:group-hover/lesson:underline';
+const PLAY_HOVER =
+  'lg:[@media(hover:hover)]:group-hover/lesson:bg-primary lg:[@media(hover:hover)]:group-hover/lesson:text-primary-foreground';
 
 /**
  * The one lesson row used by every list (lessons, categories, tags, search,
@@ -110,7 +124,10 @@ export function LessonCard({ lesson, selectable, selected, onToggleSelect }: Les
             <Link
               href={lessonPath(lesson)}
               dir="auto"
-              className="line-clamp-2 before:absolute before:inset-0 before:content-[''] focus-visible:outline-none"
+              className={cn(
+                "line-clamp-2 before:absolute before:inset-0 before:content-[''] focus-visible:outline-none",
+                TITLE_HOVER,
+              )}
             >
               {title}
             </Link>
@@ -207,8 +224,19 @@ export function LessonCard({ lesson, selectable, selected, onToggleSelect }: Les
             tracks={tracks}
             playLabel={t('play')}
             pauseLabel={t('pause')}
-            className="h-11 w-11 bg-[hsl(var(--surface-highlight))] text-foreground hover:bg-primary hover:text-primary-foreground"
+            className={cn(
+              'h-11 w-11 bg-[hsl(var(--surface-highlight))] text-foreground hover:bg-primary hover:text-primary-foreground',
+              PLAY_HOVER,
+            )}
             iconClassName="h-4 w-4 translate-x-[6%] fill-current"
+          />
+          {/* The open cue at the inline end: decorative, hover devices only (it keeps its space there so the title does not shift). */}
+          <ChevronLeft
+            aria-hidden="true"
+            className={cn(
+              'hidden h-5 w-5 flex-shrink-0 text-muted-foreground opacity-0 transition-opacity duration-150 motion-reduce:transition-none ltr:rotate-180',
+              'lg:[@media(hover:hover)]:flex lg:[@media(hover:hover)]:group-hover/lesson:opacity-100',
+            )}
           />
         </div>
       )}
@@ -216,7 +244,7 @@ export function LessonCard({ lesson, selectable, selected, onToggleSelect }: Les
   );
 
   const rowClass =
-    'group relative flex items-center gap-3 rounded-2xl p-2.5 transition-colors duration-150 motion-reduce:transition-none sm:p-3';
+    'group/lesson relative flex items-center gap-3 rounded-2xl p-2.5 transition-colors duration-150 motion-reduce:transition-none sm:p-3';
 
   if (selectable) {
     return (
@@ -238,6 +266,7 @@ export function LessonCard({ lesson, selectable, selected, onToggleSelect }: Les
       className={cn(
         rowClass,
         'hover:bg-[hsl(var(--surface-elevated))] has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-primary/50',
+        LIFT,
       )}
     >
       {body}

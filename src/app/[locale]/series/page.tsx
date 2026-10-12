@@ -3,6 +3,7 @@ import { isSupabaseConfigured } from '@/lib/supabase/server';
 import { getCachedAllSeries } from '@/lib/supabase/anon';
 import { Link } from '@/i18n/routing';
 import { EmptyState } from '@/components/shared/empty-state';
+import { ListLoadError } from '@/components/shared/list-load-error';
 import { ChevronLeft, Library, Plus, Scissors } from 'lucide-react';
 import { isAdmin } from '@/lib/auth/admin';
 import type { Series } from '@/types/database';
@@ -18,11 +19,13 @@ export default async function SeriesPage({ params }: Props) {
   const admin = await isAdmin();
 
   let series: Series[] = [];
+  let failed = false;
   if (isSupabaseConfigured()) {
     try {
       series = await getCachedAllSeries();
     } catch (error) {
       console.error('Failed to load series:', error);
+      failed = true;
     }
   }
 
@@ -33,7 +36,7 @@ export default async function SeriesPage({ params }: Props) {
         {admin && (
           <Link
             href="/lessons/upload"
-            className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 transition-colors"
+            className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90"
           >
             <Plus className="h-4 w-4" />
             <span>{tCommon('add')}</span>
@@ -43,26 +46,28 @@ export default async function SeriesPage({ params }: Props) {
 
       <Link
         href="/shorts"
-        className="flex items-center gap-3 rounded-xl bg-[hsl(var(--surface-elevated))] p-4 hover:bg-[hsl(var(--surface-highlight))] transition-colors"
+        className="flex items-center gap-3 rounded-xl bg-[hsl(var(--surface-elevated))] p-4 transition-colors hover:bg-[hsl(var(--surface-highlight))]"
       >
         <Scissors className="h-5 w-5 text-rose-400" />
         <span className="flex-1 text-sm font-semibold">{tShorts('title')}</span>
-        <ChevronLeft className="h-4 w-4 text-muted-foreground rtl:rotate-0 ltr:rotate-180" />
+        <ChevronLeft className="h-4 w-4 text-muted-foreground ltr:rotate-180 rtl:rotate-0" />
       </Link>
 
-      {series.length > 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {failed ? (
+        <ListLoadError />
+      ) : series.length > 0 ? (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {series.map((s) => (
             <Link
               key={s.id}
               href={`/series/${s.id}`}
-              className="rounded-xl border bg-card p-5 hover:border-primary/30 hover:shadow-md transition-all"
+              className="rounded-xl border bg-card p-5 transition-all hover:border-primary/30 hover:shadow-md"
             >
               <h3 className="text-lg font-semibold" dir="rtl">
                 {s.hebrew_name || s.name}
               </h3>
               {s.description && (
-                <p className="text-sm text-muted-foreground mt-1 line-clamp-2" dir="rtl">
+                <p className="mt-1 line-clamp-2 text-sm text-muted-foreground" dir="rtl">
                   {s.description}
                 </p>
               )}

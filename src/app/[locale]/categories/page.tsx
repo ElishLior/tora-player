@@ -5,6 +5,7 @@ import { isSupabaseConfigured } from '@/lib/supabase/server';
 import { getCachedCategoriesTree, getCachedCategoryLessonCounts } from '@/lib/supabase/anon';
 import { categoryLabel, categoryLessonTotal, childrenOf } from '@/lib/category-tree';
 import { Link } from '@/i18n/routing';
+import { ListLoadError } from '@/components/shared/list-load-error';
 import { BookOpen, Wrench, Sparkles, Music, Scissors, FolderOpen, ChevronLeft } from 'lucide-react';
 import type { CategoryWithChildren } from '@/types/database';
 
@@ -28,12 +29,13 @@ export default async function CategoriesPage({ params }: Props) {
 
   let categories: CategoryWithChildren[] = [];
   let counts: Record<string, number> = {};
+  let failed = false;
 
   if (isSupabaseConfigured()) {
     try {
       [categories, counts] = await Promise.all([getCachedCategoriesTree(), getCachedCategoryLessonCounts()]);
     } catch {
-      // defaults
+      failed = true;
     }
   }
 
@@ -97,7 +99,14 @@ export default async function CategoriesPage({ params }: Props) {
     <div className="animate-fade-in space-y-6">
       <h1 className="text-2xl font-bold">{isRTL ? 'קטגוריות' : 'Categories'}</h1>
 
-      <div className="space-y-4">{categories.map((cat) => renderBranch(cat, 0))}</div>
+      {failed ? (
+        <ListLoadError />
+      ) : (
+        // Top-level categories: one column on phones; two and three columns on wide screens (the pane, not the viewport).
+        <div className="space-y-4 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0 xl:grid-cols-3">
+          {categories.map((cat) => renderBranch(cat, 0))}
+        </div>
+      )}
     </div>
   );
 }

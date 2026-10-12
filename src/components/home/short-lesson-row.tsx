@@ -21,7 +21,7 @@ export function ShortLessonRow({ lesson }: { lesson: LessonWithRelations }) {
 
   return (
     <li
-      className={`group relative flex items-center gap-3 rounded-2xl p-2 transition-colors duration-150 hover:bg-[hsl(var(--surface-elevated))] has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-primary/50 motion-reduce:transition-none ${playing ? 'bg-[hsl(350_70%_50%/0.08)]' : ''}`}
+      className={`group/short relative flex items-center gap-3 rounded-2xl p-2 transition-colors duration-150 hover:bg-[hsl(var(--surface-elevated))] has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-primary/50 motion-reduce:transition-none lg:[@media(hover:hover)]:hover:bg-[hsl(var(--surface-highlight))] ${playing ? 'bg-[hsl(350_70%_50%/0.08)]' : ''}`}
     >
       <span
         aria-hidden="true"
@@ -48,7 +48,7 @@ export function ShortLessonRow({ lesson }: { lesson: LessonWithRelations }) {
         tracks={tracks}
         playLabel={t('play')}
         pauseLabel={t('pause')}
-        className="h-11 w-11 border border-rose-400/35 text-rose-400 hover:bg-rose-400/12"
+        className="hover:bg-rose-400/12 h-11 w-11 border border-rose-400/35 text-rose-400"
         iconClassName="h-4 w-4 fill-current"
       />
     </li>

@@ -9,6 +9,7 @@ import { PlayCategoryButton } from '@/components/lessons/play-category-button';
 import { LessonCard } from '@/components/lessons/lesson-card';
 import { LessonCardList } from '@/components/lessons/lesson-card-list';
 import { EmptyState } from '@/components/shared/empty-state';
+import { ListLoadError } from '@/components/shared/list-load-error';
 import { Link } from '@/i18n/routing';
 import { BookOpen, ChevronLeft, FolderOpen } from 'lucide-react';
 import { notFound } from 'next/navigation';
@@ -22,12 +23,21 @@ type Props = {
   params: Promise<{ locale: string; categoryId: string }>;
 };
 
-/** One category tree read per request, shared by generateMetadata and the page. Null when the read fails. */
-const loadTree = cache(() => getCachedCategoriesTree().catch(() => null));
+/**
+ * One category tree read per request, shared by generateMetadata and the page. `failed` tells a
+ * read that broke (error block) from a tree that loaded without this category (404).
+ */
+const loadTree = cache(async (): Promise<{ tree: CategoryWithChildren[] | null; failed: boolean }> => {
+  try {
+    return { tree: await getCachedCategoriesTree(), failed: false };
+  } catch {
+    return { tree: null, failed: true };
+  }
+});
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { categoryId } = await params;
-  const tree = await loadTree();
+  const { tree } = await loadTree();
   const category = tree ? findCategory(tree, categoryId) : undefined;
   if (!category) return {};
   const name = categoryLabel(category, 'he');
@@ -38,15 +48,27 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-/** Subcategories as links, each with its own subcategories nested below (up to three levels). */
-function SubcategoryLinks({ nodes, locale }: { nodes: CategoryWithChildren[]; locale: string }) {
+/**
+ * Subcategories as links, each with its own subcategories nested below (up to three levels).
+ * The top level is a tile grid from lg (two columns, three from xl), so a wide page is not a
+ * stack of full-width bars; phones keep the list.
+ */
+function SubcategoryLinks({
+  nodes,
+  locale,
+  topLevel = false,
+}: {
+  nodes: CategoryWithChildren[];
+  locale: string;
+  topLevel?: boolean;
+}) {
   return (
-    <div className="space-y-1">
+    <div className={topLevel ? 'space-y-1 lg:grid lg:grid-cols-2 lg:gap-3 xl:grid-cols-3' : 'space-y-1'}>
       {nodes.map((node) => (
         <div key={node.id} className="space-y-0.5">
           <Link
             href={`/categories/${node.id}`}
-            className="flex items-center gap-3 rounded-lg bg-[hsl(var(--surface-elevated))] p-3 transition-colors hover:bg-[hsl(var(--surface-highlight))] focus-visible:ring-2 focus-visible:ring-primary/60 motion-reduce:transition-none"
+            className="flex items-center gap-3 rounded-lg bg-[hsl(var(--surface-elevated))] p-3 transition-colors hover:bg-[hsl(var(--surface-highlight))] focus-visible:ring-2 focus-visible:ring-primary/60 motion-reduce:transition-none lg:rounded-xl lg:p-4"
           >
             <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md bg-primary/10">
               <FolderOpen className="h-4 w-4 text-primary" />
@@ -73,7 +95,14 @@ export default async function CategoryDetailPage({ params }: Props) {
 
   if (!isSupabaseConfigured()) return notFound();
 
-  const tree = await loadTree();
+  const { tree, failed } = await loadTree();
+  if (failed) {
+    return (
+      <div className="animate-fade-in">
+        <ListLoadError />
+      </div>
+    );
+  }
   if (!tree) return notFound();
   const category = findCategory(tree, categoryId);
   if (!category) return notFound();
@@ -84,7 +113,13 @@ export default async function CategoryDetailPage({ params }: Props) {
   const name = categoryLabel(category, locale);
 
   // Lessons of this category and of all its subcategories (see getLessonsByCategory).
-  const lessons = await getCachedCategoryLessons(categoryId);
+  let lessons: Awaited<ReturnType<typeof getCachedCategoryLessons>> = [];
+  let lessonsFailed = false;
+  try {
+    lessons = await getCachedCategoryLessons(categoryId);
+  } catch {
+    lessonsFailed = true;
+  }
 
   // The continuous-play session starts from the first lessons of the list above (no second read),
   // so the tap can play synchronously. Snapshot is taken after the cached read: its rows predate it.
@@ -123,25 +158,24 @@ export default async function CategoryDetailPage({ params }: Props) {
         <span className="font-medium text-foreground">{name}</span>
       </nav>
 
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold">{name}</h1>
-        {category.description && <p className="mt-1 text-sm text-muted-foreground">{category.description}</p>}
-        <div className="mt-3">
-          <PlayCategoryButton
-            categoryId={category.id}
-            scopeIds={scopeIds}
-            snapshotAt={snapshotAt}
-            rows={lessons}
-          />
+      {/* Header: title and description, with the continuous-play action at the inline end on desktop. */}
+      <div className="lg:flex lg:items-start lg:justify-between lg:gap-6">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold">{name}</h1>
+          {category.description && <p className="mt-1 text-sm text-muted-foreground">{category.description}</p>}
+        </div>
+        <div className="mt-3 lg:mt-0 lg:flex-shrink-0">
+          <PlayCategoryButton categoryId={category.id} scopeIds={scopeIds} snapshotAt={snapshotAt} rows={lessons} />
         </div>
       </div>
 
       {/* Subcategories, and theirs (if this category has any) */}
-      {subcategories.length > 0 && <SubcategoryLinks nodes={subcategories} locale={locale} />}
+      {subcategories.length > 0 && <SubcategoryLinks nodes={subcategories} locale={locale} topLevel />}
 
       {/* Lessons */}
-      {lessons.length > 0 ? (
+      {lessonsFailed ? (
+        <ListLoadError />
+      ) : lessons.length > 0 ? (
         <LessonCardList>
           {lessons.map((lesson) => (
             <LessonCard key={lesson.id} lesson={lesson} />

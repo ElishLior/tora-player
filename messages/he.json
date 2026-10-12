@@ -519,7 +519,8 @@
     "library": "הספרייה שלי",
     "sidebarLabel": "תפריט צד",
     "searchPlaceholder": "חיפוש שיעורים…",
-    "browse": "עיון"
+    "browse": "עיון",
+    "categories": "קטגוריות"
   },
   "auth": {
     "adminArea": "אזור ניהול",
@@ -981,5 +982,13 @@
     "resume": "המשך האזנה",
     "nothingPlayedTitle": "עוד לא הושמע שיעור",
     "nothingPlayedHint": "שיעור שתתחילו להאזין לו יופיע כאן."
+  },
+  "desktopShell": {
+    "partsCount": "{count, plural, =1 {חלק אחד} =2 {2 חלקים} other {# חלקים}}",
+    "notifyTitle": "שיעור חדש עלה?",
+    "notifyBody": "קבלו התראה ברגע שעולה שיעור.",
+    "errorTitle": "לא הצלחנו לטעון את השיעורים",
+    "errorHint": "בדקו את החיבור ונסו שוב.",
+    "retry": "נסו שוב"
   }
 }

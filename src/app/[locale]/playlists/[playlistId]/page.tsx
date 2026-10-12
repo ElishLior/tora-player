@@ -5,6 +5,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { getPlaylistWithLessons } from '@/lib/supabase/queries';
 import { notFound } from 'next/navigation';
 import { LessonCard } from '@/components/lessons/lesson-card';
+import { LessonCardList } from '@/components/lessons/lesson-card-list';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PlayLessonsButtons } from '@/components/lessons/play-lessons-buttons';
 import { Link } from '@/i18n/routing';
@@ -46,13 +47,17 @@ export default async function PlaylistDetailPage({ params }: Props) {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <Link href="/playlists" className="rounded-full p-2 hover:bg-muted transition-colors">
+        <Link href="/playlists" className="rounded-full p-2 transition-colors hover:bg-muted">
           <ArrowRight className="h-5 w-5" />
         </Link>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold" dir="rtl">{playlist.hebrew_name || playlist.name}</h1>
+          <h1 className="text-2xl font-bold" dir="rtl">
+            {playlist.hebrew_name || playlist.name}
+          </h1>
           {playlist.description && (
-            <p className="text-muted-foreground mt-1" dir="rtl">{playlist.description}</p>
+            <p className="mt-1 text-muted-foreground" dir="rtl">
+              {playlist.description}
+            </p>
           )}
         </div>
       </div>
@@ -60,16 +65,17 @@ export default async function PlaylistDetailPage({ params }: Props) {
       {items.length > 0 && <PlayLessonsButtons lessons={items.map((item) => item.lesson).filter(Boolean)} />}
 
       {items.length > 0 ? (
-        <div className="space-y-3">
+        // Same rows as every list (one column, two and three on wide panes); the gap matches the old space-y-3 on phones.
+        <LessonCardList className="gap-y-3">
           {items.map((item, i) => (
-            <div key={i} className="flex items-center gap-3">
-              <span className="text-sm text-muted-foreground w-6 text-center">{i + 1}</span>
-              <div className="flex-1">
+            <div key={i} className="flex min-w-0 items-center gap-3">
+              <span className="w-6 flex-shrink-0 text-center text-sm text-muted-foreground">{i + 1}</span>
+              <div className="min-w-0 flex-1">
                 <LessonCard lesson={item.lesson} />
               </div>
             </div>
           ))}
-        </div>
+        </LessonCardList>
       ) : (
         <EmptyState icon={BookOpen} title={locale === 'he' ? 'רשימה ריקה' : 'Empty playlist'} />
       )}
