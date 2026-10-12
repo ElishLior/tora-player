@@ -4,7 +4,9 @@ import { cache } from 'react';
 import type { Metadata } from 'next';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { isSupabaseConfigured } from '@/lib/supabase/server';
-import { getCachedCategoriesTree, getCachedCategoryLessons } from '@/lib/supabase/anon';
+import { createAnonSupabaseClient, getCachedCategoriesTree, getCachedCategoryLessons } from '@/lib/supabase/anon';
+import { CATEGORY_SEGMENT_SIZE, loadCategoryQueueSegment } from '@/lib/category-queue';
+import { PlayCategoryButton } from '@/components/lessons/play-category-button';
 import { LessonCard } from '@/components/lessons/lesson-card';
 import { LessonCardList } from '@/components/lessons/lesson-card-list';
 import { EmptyState } from '@/components/shared/empty-state';
@@ -14,7 +16,7 @@ import { notFound } from 'next/navigation';
 import { JsonLd } from '@/components/seo/json-ld';
 import { DEFAULT_LOCALE, SITE_NAME, SITE_TAGLINE, categoryPath } from '@/config/site';
 import { breadcrumbJsonLd, pageAlternates, truncateText } from '@/lib/seo';
-import { categoryAncestors, categoryLabel, childrenOf, findCategory } from '@/lib/category-tree';
+import { categoryAncestors, categoryLabel, childrenOf, descendantIds, findCategory } from '@/lib/category-tree';
 import type { CategoryWithChildren } from '@/types/database';
 
 type Props = {
@@ -85,6 +87,16 @@ export default async function CategoryDetailPage({ params }: Props) {
   // Lessons of this category and of all its subcategories (see getLessonsByCategory).
   const lessons = await getCachedCategoryLessons(categoryId);
 
+  // The continuous-play session starts from this first segment, read now so the tap can play synchronously.
+  const scopeIds = descendantIds(tree, categoryId);
+  const snapshotAt = new Date().toISOString();
+  const firstSegment = await loadCategoryQueueSegment(createAnonSupabaseClient(), {
+    scopeIds,
+    cursor: null,
+    snapshotAt,
+    limit: CATEGORY_SEGMENT_SIZE,
+  }).catch(() => null);
+
   const tCategories = await getTranslations({ locale: DEFAULT_LOCALE, namespace: 'categories' });
 
   return (
@@ -121,6 +133,14 @@ export default async function CategoryDetailPage({ params }: Props) {
       <div>
         <h1 className="text-2xl font-bold">{name}</h1>
         {category.description && <p className="mt-1 text-sm text-muted-foreground">{category.description}</p>}
+        <div className="mt-3">
+          <PlayCategoryButton
+            categoryId={category.id}
+            scopeIds={scopeIds}
+            snapshotAt={snapshotAt}
+            seed={firstSegment}
+          />
+        </div>
       </div>
 
       {/* Subcategories, and theirs (if this category has any) */}

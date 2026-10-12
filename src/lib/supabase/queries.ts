@@ -97,7 +97,10 @@ export async function getLessonsByCategory(supabase: SupabaseClient, categoryId:
     .select(columns)
     .eq('is_published', true)
     .in('category_id', categoryIds)
+    // Same order as the category's continuous-play queue (src/lib/category-queue.ts).
     .order('date', { ascending: false })
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
     .limit(limit)
     .overrideTypes<LessonWithRelations[], { merge: false }>());
 
