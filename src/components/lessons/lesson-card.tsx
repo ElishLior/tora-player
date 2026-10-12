@@ -4,7 +4,8 @@ import { lessonPath } from '@/config/site';
 
 import { useMemo } from 'react';
 import { Check, ListChecks, ListPlus, Play, Pause } from 'lucide-react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
+import { categoryLabel } from '@/lib/category-tree';
 import { useRouter } from '@/i18n/routing';
 import { Link } from '@/i18n/routing';
 import { parshaLabel } from '@/lib/parsha-label';
@@ -30,6 +31,7 @@ interface LessonCardProps {
 
 export function LessonCard({ lesson, showProgress, selectable, selected, onToggleSelect }: LessonCardProps) {
   const t = useTranslations('player');
+  const locale = useLocale();
   const router = useRouter();
   const currentTrack = useAudioStore((s) => s.currentTrack);
   const isPlaying = useAudioStore((s) => s.isPlaying);
@@ -189,7 +191,7 @@ export function LessonCard({ lesson, showProgress, selectable, selected, onToggl
             className="max-w-[100px] flex-shrink-0 truncate rounded-full bg-primary/10 px-2 py-0.5 text-[10px] text-primary/80"
             dir="rtl"
           >
-            {lesson.category.hebrew_name}
+            {categoryLabel(lesson.category, locale)}
           </span>
         )}
 

@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { setRequestLocale } from 'next-intl/server';
 import { isSupabaseConfigured } from '@/lib/supabase/server';
 import { getCachedCategoriesTree, getCachedCategoryLessonCounts } from '@/lib/supabase/anon';
+import { categoryLabel, categoryLessonTotal, childrenOf } from '@/lib/category-tree';
 import { Link } from '@/i18n/routing';
 import { BookOpen, Wrench, Sparkles, Music, Scissors, FolderOpen, ChevronLeft } from 'lucide-react';
 import type { CategoryWithChildren } from '@/types/database';
@@ -30,85 +31,73 @@ export default async function CategoriesPage({ params }: Props) {
 
   if (isSupabaseConfigured()) {
     try {
-      [categories, counts] = await Promise.all([
-        getCachedCategoriesTree(),
-        getCachedCategoryLessonCounts(),
-      ]);
+      [categories, counts] = await Promise.all([getCachedCategoriesTree(), getCachedCategoryLessonCounts()]);
     } catch {
       // defaults
     }
   }
 
-  // Calculate total count for parent categories (sum of children)
-  function getTotalCount(cat: CategoryWithChildren): number {
-    const own = counts[cat.id] || 0;
-    const childTotal = cat.children.reduce((sum, c) => sum + (counts[c.id] || 0), 0);
-    return own + childTotal;
+  const emptyLabel = isRTL ? 'ריק' : 'Empty';
+
+  /** A category and, nested under it, its subcategories (up to three levels). Each count is the whole branch. */
+  function renderBranch(cat: CategoryWithChildren, depth: number) {
+    const total = categoryLessonTotal(categories, counts, cat.id);
+    const children = childrenOf(categories, cat.id);
+    const label = categoryLabel(cat, locale);
+    const nested = children.length > 0 && (
+      <div className="ms-6 space-y-0.5">{children.map((child) => renderBranch(child, depth + 1))}</div>
+    );
+
+    if (depth === 0) {
+      const IconComponent = ICON_MAP[cat.icon || ''] || FolderOpen;
+      return (
+        <div key={cat.id} className="space-y-1">
+          {/* Top-level category card */}
+          <Link
+            href={`/categories/${cat.id}`}
+            className="flex items-center gap-3 rounded-xl bg-[hsl(var(--surface-elevated))] p-4 transition-colors hover:bg-[hsl(var(--surface-highlight))] focus-visible:ring-2 focus-visible:ring-primary/60 motion-reduce:transition-none"
+          >
+            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary/30 to-primary/10">
+              <IconComponent className="h-5 w-5 text-primary" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="font-semibold text-foreground">{label}</h2>
+              {cat.description && <p className="truncate text-xs text-muted-foreground">{cat.description}</p>}
+            </div>
+            <div className="flex flex-shrink-0 items-center gap-2">
+              <span className="text-xs text-muted-foreground">{total > 0 ? `${total}` : emptyLabel}</span>
+              <ChevronLeft className="h-4 w-4 text-muted-foreground" />
+            </div>
+          </Link>
+          {nested}
+        </div>
+      );
+    }
+
+    return (
+      <div key={cat.id} className="space-y-0.5">
+        <Link
+          href={`/categories/${cat.id}`}
+          className="flex items-center gap-3 rounded-lg p-3 transition-colors hover:bg-[hsl(var(--surface-highlight))] focus-visible:ring-2 focus-visible:ring-primary/60 motion-reduce:transition-none"
+        >
+          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md bg-[hsl(var(--surface-elevated))]">
+            <FolderOpen className="h-4 w-4 text-muted-foreground" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="truncate text-sm font-medium text-foreground">{label}</h3>
+          </div>
+          <span className="flex-shrink-0 text-xs text-muted-foreground">{total > 0 ? `${total}` : emptyLabel}</span>
+        </Link>
+        {nested}
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="animate-fade-in space-y-6">
       <h1 className="text-2xl font-bold">{isRTL ? 'קטגוריות' : 'Categories'}</h1>
 
-      <div className="space-y-4">
-        {categories.map((cat) => {
-          const IconComponent = ICON_MAP[cat.icon || ''] || FolderOpen;
-          const total = getTotalCount(cat);
-          const hasChildren = cat.children.length > 0;
-
-          return (
-            <div key={cat.id} className="space-y-1">
-              {/* Parent category card */}
-              <Link
-                href={`/categories/${cat.id}`}
-                className="flex items-center gap-3 rounded-xl bg-[hsl(var(--surface-elevated))] p-4 hover:bg-[hsl(var(--surface-highlight))] transition-colors"
-              >
-                <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center flex-shrink-0">
-                  <IconComponent className="h-5 w-5 text-primary" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h2 className="font-semibold text-foreground">{cat.hebrew_name}</h2>
-                  {cat.description && (
-                    <p className="text-xs text-muted-foreground truncate">{cat.description}</p>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <span className="text-xs text-muted-foreground">
-                    {total > 0 ? `${total}` : (isRTL ? 'ריק' : 'Empty')}
-                  </span>
-                  <ChevronLeft className="h-4 w-4 text-muted-foreground" />
-                </div>
-              </Link>
-
-              {/* Child categories */}
-              {hasChildren && (
-                <div className="ms-6 space-y-0.5">
-                  {cat.children.map((child) => {
-                    const childCount = counts[child.id] || 0;
-                    return (
-                      <Link
-                        key={child.id}
-                        href={`/categories/${child.id}`}
-                        className="flex items-center gap-3 rounded-lg p-3 hover:bg-[hsl(var(--surface-highlight))] transition-colors"
-                      >
-                        <div className="h-8 w-8 rounded-md bg-[hsl(var(--surface-elevated))] flex items-center justify-center flex-shrink-0">
-                          <FolderOpen className="h-4 w-4 text-muted-foreground" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h3 className="text-sm font-medium text-foreground truncate">{child.hebrew_name}</h3>
-                        </div>
-                        <span className="text-xs text-muted-foreground flex-shrink-0">
-                          {childCount > 0 ? `${childCount}` : (isRTL ? 'ריק' : 'Empty')}
-                        </span>
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+      <div className="space-y-4">{categories.map((cat) => renderBranch(cat, 0))}</div>
     </div>
   );
 }

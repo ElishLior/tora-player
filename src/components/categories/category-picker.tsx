@@ -1,10 +1,14 @@
 'use client';
 
+import { useLocale } from 'next-intl';
 import { categoryOptions } from '@/lib/category-tree';
 import type { CategoryWithChildren } from '@/types/database';
 
-/** Indent for child options. Non-breaking spaces survive the select's whitespace rules. */
-const CHILD_PREFIX = '    — ';
+/**
+ * Indent before an option, by depth. Non-breaking spaces survive the select's whitespace rules.
+ * Depth 0 has none; depth 1 is one step in; depth 2 is two steps in.
+ */
+const INDENT_BY_DEPTH = ['', '    — ', '        — '];
 
 const DEFAULT_CLASS =
   'w-full rounded-lg bg-[hsl(var(--surface-elevated))] px-4 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 border-0';
@@ -12,7 +16,7 @@ const DEFAULT_CLASS =
 export interface CategoryPickerProps {
   value: string;
   onChange: (categoryId: string) => void;
-  /** Two-level tree; every top-level category and its children are selectable. */
+  /** Up to three levels; every category at every level is selectable. */
   categories: CategoryWithChildren[];
   /** Adds a "no category" option whose value is `noneValue`. */
   includeNone?: boolean;
@@ -27,7 +31,10 @@ export interface CategoryPickerProps {
   'aria-label'?: string;
 }
 
-/** Native select over the category tree. Use it everywhere a lesson or draft picks a category. */
+/**
+ * Native select over the category tree. Use it everywhere a lesson or draft picks a category.
+ * Sub-subcategories name their parent too, so repeated names (several "שיעורים") stay distinct.
+ */
 export function CategoryPicker({
   value,
   onChange,
@@ -41,6 +48,8 @@ export function CategoryPicker({
   disabled,
   'aria-label': ariaLabel,
 }: CategoryPickerProps) {
+  const locale = useLocale();
+
   return (
     <select
       id={id}
@@ -57,9 +66,11 @@ export function CategoryPicker({
         </option>
       )}
       {includeNone && <option value={noneValue}>{noneLabel}</option>}
-      {categoryOptions(categories).map((option) => (
+      {categoryOptions(categories, locale).map((option) => (
         <option key={option.id} value={option.id}>
-          {option.depth > 0 ? `${CHILD_PREFIX}${option.label}` : option.label}
+          {`${INDENT_BY_DEPTH[option.depth] ?? INDENT_BY_DEPTH[2]}${option.label}${
+            option.depth >= 2 && option.parentLabel ? ` (${option.parentLabel})` : ''
+          }`}
         </option>
       ))}
     </select>
