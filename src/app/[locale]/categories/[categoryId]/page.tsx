@@ -9,6 +9,7 @@ import { PlayCategoryButton } from '@/components/lessons/play-category-button';
 import { LessonCard } from '@/components/lessons/lesson-card';
 import { LessonCardList } from '@/components/lessons/lesson-card-list';
 import { EmptyState } from '@/components/shared/empty-state';
+import { ListLoadError } from '@/components/shared/list-load-error';
 import { Link } from '@/i18n/routing';
 import { BookOpen, ChevronLeft, FolderOpen } from 'lucide-react';
 import { notFound } from 'next/navigation';
@@ -22,12 +23,21 @@ type Props = {
   params: Promise<{ locale: string; categoryId: string }>;
 };
 
-/** One category tree read per request, shared by generateMetadata and the page. Null when the read fails. */
-const loadTree = cache(() => getCachedCategoriesTree().catch(() => null));
+/**
+ * One category tree read per request, shared by generateMetadata and the page. `failed` tells a
+ * read that broke (error block) from a tree that loaded without this category (404).
+ */
+const loadTree = cache(async (): Promise<{ tree: CategoryWithChildren[] | null; failed: boolean }> => {
+  try {
+    return { tree: await getCachedCategoriesTree(), failed: false };
+  } catch {
+    return { tree: null, failed: true };
+  }
+});
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { categoryId } = await params;
-  const tree = await loadTree();
+  const { tree } = await loadTree();
   const category = tree ? findCategory(tree, categoryId) : undefined;
   if (!category) return {};
   const name = categoryLabel(category, 'he');
@@ -85,7 +95,14 @@ export default async function CategoryDetailPage({ params }: Props) {
 
   if (!isSupabaseConfigured()) return notFound();
 
-  const tree = await loadTree();
+  const { tree, failed } = await loadTree();
+  if (failed) {
+    return (
+      <div className="animate-fade-in">
+        <ListLoadError />
+      </div>
+    );
+  }
   if (!tree) return notFound();
   const category = findCategory(tree, categoryId);
   if (!category) return notFound();
@@ -96,7 +113,13 @@ export default async function CategoryDetailPage({ params }: Props) {
   const name = categoryLabel(category, locale);
 
   // Lessons of this category and of all its subcategories (see getLessonsByCategory).
-  const lessons = await getCachedCategoryLessons(categoryId);
+  let lessons: Awaited<ReturnType<typeof getCachedCategoryLessons>> = [];
+  let lessonsFailed = false;
+  try {
+    lessons = await getCachedCategoryLessons(categoryId);
+  } catch {
+    lessonsFailed = true;
+  }
 
   // The continuous-play session starts from the first lessons of the list above (no second read),
   // so the tap can play synchronously. Snapshot is taken after the cached read: its rows predate it.
@@ -150,7 +173,9 @@ export default async function CategoryDetailPage({ params }: Props) {
       {subcategories.length > 0 && <SubcategoryLinks nodes={subcategories} locale={locale} topLevel />}
 
       {/* Lessons */}
-      {lessons.length > 0 ? (
+      {lessonsFailed ? (
+        <ListLoadError />
+      ) : lessons.length > 0 ? (
         <LessonCardList>
           {lessons.map((lesson) => (
             <LessonCard key={lesson.id} lesson={lesson} />

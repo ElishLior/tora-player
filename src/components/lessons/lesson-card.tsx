@@ -38,10 +38,13 @@ const TILE = 'h-[58px] w-[52px] flex-shrink-0';
  * no transform or filter on any element between the title link and the row, because a
  * transform would become the containing block of the stretched link (::before).
  */
-const HOVER = '[@media(hover:hover)]:';
-const LIFT = `lg:${HOVER}hover:bg-[hsl(var(--surface-highlight))] lg:has-[a:focus-visible]:bg-[hsl(var(--surface-highlight))]`;
-const TITLE_HOVER = `lg:${HOVER}group-hover/lesson:text-primary lg:${HOVER}group-hover/lesson:underline`;
-const PLAY_HOVER = `lg:${HOVER}group-hover/lesson:bg-primary lg:${HOVER}group-hover/lesson:text-primary-foreground`;
+// Full class names on purpose: Tailwind only generates utilities it finds as literal text in the source.
+const LIFT =
+  'lg:[@media(hover:hover)]:hover:bg-[hsl(var(--surface-highlight))] lg:has-[a:focus-visible]:bg-[hsl(var(--surface-highlight))]';
+const TITLE_HOVER =
+  'lg:[@media(hover:hover)]:group-hover/lesson:text-primary lg:[@media(hover:hover)]:group-hover/lesson:underline';
+const PLAY_HOVER =
+  'lg:[@media(hover:hover)]:group-hover/lesson:bg-primary lg:[@media(hover:hover)]:group-hover/lesson:text-primary-foreground';
 
 /**
  * The one lesson row used by every list (lessons, categories, tags, search,
@@ -232,7 +235,7 @@ export function LessonCard({ lesson, selectable, selected, onToggleSelect }: Les
             aria-hidden="true"
             className={cn(
               'hidden h-5 w-5 flex-shrink-0 text-muted-foreground opacity-0 transition-opacity duration-150 motion-reduce:transition-none ltr:rotate-180',
-              `lg:${HOVER}flex lg:${HOVER}group-hover/lesson:opacity-100`,
+              'lg:[@media(hover:hover)]:flex lg:[@media(hover:hover)]:group-hover/lesson:opacity-100',
             )}
           />
         </div>
