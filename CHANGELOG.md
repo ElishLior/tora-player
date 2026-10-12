@@ -4,6 +4,9 @@ Versions follow `MAJOR.MINOR.PATCH`. The version in `package.json` is the releas
 
 ## 1.2.0 — in progress
 
+Migrations 023, 024 and 025 applied in production on October 13, 2026, before the deploy (checked read-only; a stale `move_category` call returns `CAT01` through PostgREST).
+
+
 - Continuous category playback: "ניגון רציף של הקטגוריה" on a category page plays the category and all its subcategories in one session. Order: date, then upload time. The queue is frozen when it starts, so new uploads don't reshuffle it. Multipart lessons finish before the next lesson, more lessons load ahead in segments of 25, and unavailable lessons are skipped with a notice (at most 3 in a row). It ends with a "category finished" notice, with no repeat or shuffle. A restored session never autoplays. A source error skips a lesson only after one retry. While the next lesson loads, the player shows loading and Play keeps waiting (only Pause cancels). Skipped, stopped and finished notices show on the mini player and the desktop bar. The saved queue keeps 50 tracks behind the current one.
 - Image download: the lesson image viewer has a "הורדת התמונה" button that saves the full-size original, named after the lesson and the image number. On iPhone home-screen apps it opens the image, and Share → Save Image saves it.
 - Bookmarks can be edited (note and tag) on /bookmarks, /me and the lesson page, keeping the same bookmark. A bookmark changed on another device is not overwritten (needs migration 024).
