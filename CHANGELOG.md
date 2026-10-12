@@ -11,6 +11,13 @@ Versions follow `MAJOR.MINOR.PATCH`. The version in `package.json` is the releas
 - Categories: every category and subcategory can be picked when assigning lessons (edit page, bulk bar, upload, snippets, and a new admin picker on the lesson page); a category can be created with only a Hebrew name; two levels are enforced; the daily and shorts categories can't be deleted; clearer admin errors, reorder rollback and delete warnings.
 - Clickable everywhere: the whole latest-lesson hero and every shorts row open the lesson (play and download stay separate), the hero shows its tags, series names link to the series page (hero, full player, lesson page, /me), the full player's title opens the lesson page, and the offline library's titles link to their lessons. On the home page "שיעורים אחרונים" now comes before "קצרים".
 - Share: the lesson page's share button moved from the top bar into the player's action row ("שיתוף", next to Bookmark). Share buttons draw the device's own share icon: Apple's square-with-arrow on iPhone, iPad and Mac, the three-dots icon on Android and elsewhere.
+- New home page (owner-chosen concept B, "השיעור של היום"):
+  - A feature intro, "כל מה שאפשר לעשות כאן". Each item uses the app's own icon, and the notifications item has a button that turns them on. The intro is open on the first visit and folds to one line on later visits; the lesson-page tip ("tap a lesson's title to open its page") always stays visible.
+  - A slim continue-listening strip.
+  - Today's lesson, with a play chip for each part.
+  - "שיעורים אחרונים" grouped by week ("השבוע · פרשת נח"), with Hebrew date tiles and colored part chips.
+  - Shorts and categories as quiet lists.
+  - From 1360px wide, a "now playing / up next" panel beside the feed while a lesson is loaded.
 - Versioning: `package.json` version, this changelog and `vX.Y.Z` release tags.
 
 ## 1.1.3 — October 8, 2026

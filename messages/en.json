@@ -167,7 +167,29 @@
     "welcomeDesc": "Listen to daily Torah lessons anytime, anywhere",
     "latestLesson": "Latest lesson",
     "categories": "Categories",
-    "showAll": "Show all"
+    "showAll": "Show all",
+    "todayLesson": "Today's lesson",
+    "thisWeek": "This week",
+    "lastWeek": "Last week",
+    "allLessons": "All lessons"
+  },
+  "homeIntro": {
+    "title": "Everything you can do here",
+    "lead": "Tora Player is built to be easy to learn from anywhere. To open a lesson and see all of it, tap the lesson's title. Here is what you have:",
+    "more": "{count} more",
+    "hide": "Hide",
+    "enableNotifications": "Turn on notifications",
+    "items": {
+      "offline": "<b>Listen without internet:</b> save a lesson to your device and it stays available on the go.",
+      "download": "<b>Download to your device:</b> keep the audio file on your device, or share it.",
+      "resume": "<b>Pick up where you stopped:</b> the player remembers where you left off, and once you sign in to the site, across your devices too.",
+      "bookmarks": "<b>Bookmarks and notes:</b> mark an important moment in a lesson and add a note of your own.",
+      "controls": "<b>Control your listening:</b> playback speed, a sleep timer and driving mode with large buttons.",
+      "notifications": "<b>New-lesson alerts:</b> allow notifications when the browser asks, and get a message as soon as a new lesson goes up. Signing up on the site is easiest, and the update also comes by email.",
+      "search": "<b>Search by topic and date:</b> tap a #tag or a date to see similar lessons.",
+      "share": "<b>Share a lesson:</b> tap the share button <share>share icon</share> to send a link to the lesson on WhatsApp, by email or in any other app. The button is in the player: on the lesson page below the play buttons, in the mini player at the bottom of the screen and in the full player."
+    },
+    "lessonPage": "<b>Lesson page:</b> tapping the lesson's title, or anywhere on its card, opens the lesson page with all its details: the recording's parts and the length of each part, the pictures, tags, bookmarks and notes."
   },
   "lessons": {
     "title": "Lessons",
@@ -251,6 +273,7 @@
     "previousTrack": "Previous",
     "nextTrack": "Next",
     "upNextEmpty": "Nothing else in the queue",
+    "showAllUpNext": "Show full queue ({count})",
     "removeFromQueue": "Remove from queue",
     "moveUp": "Move up",
     "moveDown": "Move down",

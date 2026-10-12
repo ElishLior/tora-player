@@ -2,19 +2,28 @@ import { useTranslations } from 'next-intl';
 import { Link } from '@/i18n/routing';
 import { seriesPath } from '@/config/site';
 import { lessonsHref, tagPath } from '@/lib/tag-links';
+import { cn } from '@/lib/utils';
 
 const focusClass = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50';
 
-/** Sibling of the lesson link, including on cards with a stretched title link. */
+/**
+ * Sibling of the lesson link, including on cards with a stretched title link.
+ * `children` replaces the visible date (a styled tile); the accessible name stays the full date.
+ */
 export function LessonDateLink({
   date,
   hebrewDate,
   onClick,
+  className,
+  children,
 }: {
   date: string;
   hebrewDate?: string | null;
   /** E.g. closing the full player, so the list it opens is visible. */
   onClick?: () => void;
+  /** Size or colour override for the surrounding row (merged with the default text-xs). */
+  className?: string;
+  children?: React.ReactNode;
 }) {
   const t = useTranslations('lessonBrowse');
   const label = hebrewDate || date.split('-').reverse().join('.');
@@ -24,9 +33,12 @@ export function LessonDateLink({
       onClick={onClick}
       aria-label={t('dateLink', { date: `${label} (${date})` })}
       data-lesson-date={date}
-      className={`relative z-10 inline-flex min-h-7 max-w-full items-center rounded px-0.5 text-xs text-muted-foreground hover:text-primary hover:underline ${focusClass}`}
+      className={cn(
+        `relative z-10 inline-flex min-h-7 max-w-full items-center rounded px-0.5 text-xs text-muted-foreground hover:text-primary hover:underline ${focusClass}`,
+        className,
+      )}
     >
-      <bdi className="min-w-0 break-words">{label}</bdi>
+      {children ?? <bdi className="min-w-0 break-words">{label}</bdi>}
     </Link>
   );
 }

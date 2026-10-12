@@ -8,40 +8,19 @@ import {
   getCachedRecentLessons,
   getCachedShortLessons,
 } from '@/lib/supabase/anon';
-import { SHORTS_CATEGORY_ID } from '@/lib/upload-drafts';
-import { LessonCard } from '@/components/lessons/lesson-card';
-import { LessonCardList } from '@/components/lessons/lesson-card-list';
+import { jerusalemDateString } from '@/lib/lesson-week-groups';
 import { EmptyState } from '@/components/shared/empty-state';
 import { Link } from '@/i18n/routing';
-import { BookOpen, Wrench, Sparkles, Music, Scissors, FolderOpen, ChevronLeft, Upload } from 'lucide-react';
+import { BookOpen, Upload, ChevronLeft } from 'lucide-react';
 import { isAdmin } from '@/lib/auth/admin';
+import { HomeIntro } from '@/components/home/home-intro';
 import { ContinueListeningSection } from '@/components/home/continue-listening-section';
 import { LatestLessonHero } from '@/components/home/latest-lesson-hero';
+import { LatestLessonsSection } from '@/components/home/latest-lessons-section';
+import { ShortsSection } from '@/components/home/shorts-section';
+import { CategoriesSection } from '@/components/home/categories-section';
+import { NowPlayingPanel } from '@/components/player/now-playing-panel';
 import type { CategoryWithChildren, LessonWithRelations } from '@/types/database';
-
-const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
-  BookOpen,
-  Wrench,
-  Sparkles,
-  Music,
-  Scissors,
-};
-
-const COLOR_MAP: Record<string, string> = {
-  BookOpen: 'from-primary/40 to-primary/20',
-  Wrench: 'from-blue-500/40 to-blue-500/20',
-  Sparkles: 'from-purple-500/40 to-purple-500/20',
-  Music: 'from-amber-500/40 to-amber-500/20',
-  Scissors: 'from-rose-500/40 to-rose-500/20',
-};
-
-const TEXT_COLOR_MAP: Record<string, string> = {
-  BookOpen: 'text-primary',
-  Wrench: 'text-blue-400',
-  Sparkles: 'text-purple-400',
-  Music: 'text-amber-400',
-  Scissors: 'text-rose-400',
-};
 
 type Props = {
   params: Promise<{ locale: string }>;
@@ -51,7 +30,6 @@ export default async function HomePage({ params }: Props) {
   const { locale } = await params;
   setRequestLocale(locale);
   const t = await getTranslations('home');
-  const tShorts = await getTranslations('shorts');
   const tUpload = await getTranslations('upload.entry');
 
   const admin = await isAdmin();
@@ -74,28 +52,20 @@ export default async function HomePage({ params }: Props) {
     }
   }
 
-  const isRTL = locale === 'he';
+  // The week groups are labelled from the Israeli calendar day, not the server's (UTC) one.
+  const today = jerusalemDateString();
 
-  function getTotalCount(cat: CategoryWithChildren): number {
-    const own = counts[cat.id] || 0;
-    const childTotal = cat.children.reduce((sum, c) => sum + (counts[c.id] || 0), 0);
-    return own + childTotal;
-  }
-
-  // The newest lesson gets the hero card; the list continues from the next one.
+  // The newest lesson is the hero; the sections below continue from the next one.
   const [latestLesson, ...olderLessons] = recentLessons;
 
   return (
-    <div className="space-y-8 animate-fade-in">
-      {/* Greeting - Spotify style */}
-      <section className="pt-2">
-        <h1 className="text-2xl font-bold text-foreground">{t('welcome')}</h1>
-      </section>
+    <div className="animate-fade-in space-y-6">
+      <h1 className="sr-only">{t('welcome')}</h1>
 
       {admin && (
         <Link
           href="/lessons/upload"
-          className="flex items-center gap-3 rounded-xl bg-primary p-4 text-primary-foreground transition-colors hover:bg-primary/90"
+          className="flex items-center gap-3 rounded-2xl bg-primary p-4 text-primary-foreground transition-colors hover:bg-primary/90"
         >
           <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-primary-foreground/15">
             <Upload className="h-5 w-5" />
@@ -108,113 +78,53 @@ export default async function HomePage({ params }: Props) {
         </Link>
       )}
 
-      {/* Continue Listening — client-side, reads from localStorage per device */}
-      <ContinueListeningSection title={t('continueListening')} />
+      {/* From 1360px, while something is loaded, the now-playing panel sits at the inline end; otherwise the feed takes the full width. */}
+      <div className="flex items-start gap-6">
+        <div className="grid min-w-0 flex-1 gap-7">
+          <HomeIntro />
 
-      {latestLesson && <LatestLessonHero title={t('latestLesson')} lesson={latestLesson} />}
+          <ContinueListeningSection title={t('continueListening')} />
 
-      {/* Recent Lessons */}
-      {(olderLessons.length > 0 || !latestLesson) && (
-        <section>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-bold">{t('recentLessons')}</h2>
-            <Link
-              href="/lessons"
-              className="flex items-center gap-0.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {t('showAll')}
-              <ChevronLeft className="h-3.5 w-3.5" />
-            </Link>
-          </div>
           {latestLesson ? (
-            <LessonCardList>
-              {olderLessons.map((lesson) => (
-                <LessonCard key={lesson.id} lesson={lesson} />
-              ))}
-            </LessonCardList>
+            <LatestLessonHero eyebrow={t('todayLesson')} lesson={latestLesson} />
           ) : (
             <EmptyState
               icon={BookOpen}
-              title={isRTL ? 'אין שיעורים עדיין' : 'No lessons yet'}
-              description={isRTL ? (admin ? 'הוסף שיעור ראשון כדי להתחיל' : 'שיעורים יתווספו בקרוב') : (admin ? 'Add your first lesson to get started' : 'Lessons will be added soon')}
+              title={locale === 'he' ? 'אין שיעורים עדיין' : 'No lessons yet'}
+              description={
+                locale === 'he'
+                  ? admin
+                    ? 'הוסף שיעור ראשון כדי להתחיל'
+                    : 'שיעורים יתווספו בקרוב'
+                  : admin
+                    ? 'Add your first lesson to get started'
+                    : 'Lessons will be added soon'
+              }
               action={
                 admin ? (
                   <Link
                     href="/lessons/upload"
-                    className="rounded-full bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground hover:bg-primary/90 hover:scale-105 transition-all"
+                    className="rounded-full bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground transition-all hover:scale-105 hover:bg-primary/90"
                   >
-                    {isRTL ? 'הוספת שיעור' : 'Add Lesson'}
+                    {locale === 'he' ? 'הוספת שיעור' : 'Add Lesson'}
                   </Link>
                 ) : undefined
               }
             />
           )}
-        </section>
-      )}
 
-      {/* Shorts */}
-      {recentShorts.length > 0 && (
-        <section>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="flex items-center gap-2 text-lg font-bold">
-              <Scissors className="h-4 w-4 text-rose-400" />
-              {tShorts('title')}
-            </h2>
-            <Link
-              href="/shorts"
-              className="flex items-center gap-0.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {tShorts('showAll')}
-              <ChevronLeft className="h-3.5 w-3.5" />
-            </Link>
-          </div>
-          <LessonCardList>
-            {recentShorts.map((lesson) => (
-              <LessonCard key={lesson.id} lesson={lesson} />
-            ))}
-          </LessonCardList>
-        </section>
-      )}
+          <LatestLessonsSection lessons={olderLessons} today={today} />
 
-      {/* Categories grid */}
-      <section>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-bold">{t('categories')}</h2>
-          <Link
-            href="/categories"
-            className="flex items-center gap-0.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors"
-          >
-            {t('showAll')}
-            <ChevronLeft className="h-3.5 w-3.5" />
-          </Link>
+          <ShortsSection lessons={recentShorts} />
+
+          <CategoriesSection categories={categories} counts={counts} />
         </div>
-        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-4">
-          {categories.map((cat) => {
-            const IconComponent = ICON_MAP[cat.icon || ''] || FolderOpen;
-            const gradient = COLOR_MAP[cat.icon || ''] || 'from-gray-500/40 to-gray-500/20';
-            const textColor = TEXT_COLOR_MAP[cat.icon || ''] || 'text-muted-foreground';
-            const total = getTotalCount(cat);
 
-            return (
-              <Link
-                key={cat.id}
-                href={cat.id === SHORTS_CATEGORY_ID ? '/shorts' : `/categories/${cat.id}`}
-                className="flex items-center gap-3 rounded-md bg-[hsl(var(--surface-elevated))] p-3 hover:bg-[hsl(var(--surface-highlight))] transition-colors"
-              >
-                <div className={`h-8 w-8 rounded bg-gradient-to-br ${gradient} flex items-center justify-center`}>
-                  <IconComponent className={`h-4 w-4 ${textColor}`} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <span className="text-sm font-semibold block truncate">{cat.hebrew_name}</span>
-                  {total > 0 && (
-                    <span className="text-[10px] text-muted-foreground">{total}</span>
-                  )}
-                </div>
-              </Link>
-            );
-          })}
-        </div>
-      </section>
+        {/* NowPlayingPanel renders nothing without a track, so the empty aside collapses. */}
+        <aside className="hidden w-[280px] flex-shrink-0 self-stretch empty:hidden min-[1360px]:block">
+          <NowPlayingPanel />
+        </aside>
+      </div>
     </div>
   );
 }

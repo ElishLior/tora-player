@@ -1,29 +1,33 @@
 'use client';
 
+import { lessonPath } from '@/config/site';
+
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
+import { Link } from '@/i18n/routing';
 import { useProgressStore } from '@/stores/progress-store';
 import { useHydrated } from '@/hooks/use-hydrated';
 import { getLessonsByIds } from '@/actions/lessons';
-import { LessonCard } from '@/components/lessons/lesson-card';
-import { LessonCardList } from '@/components/lessons/lesson-card-list';
+import { LessonPlayButton } from '@/components/lessons/lesson-play-button';
 import { getLessonTracks } from '@/lib/lesson-tracks';
-import { getResumePoint } from '@/lib/lesson-progress';
+import { getListenedFraction, getResumePoint } from '@/lib/lesson-progress';
 import type { LessonWithRelations } from '@/types/database';
 
 interface Props {
   title: string;
 }
 
-const SHELF_SIZE = 5;
 // Fetch a few extra: some candidates turn out to have nothing left to continue.
 const CANDIDATES = 10;
 
 /**
- * Lessons the listener left in the middle, newest first. Their cards resume
- * at the saved part and position. Follows the device progress store, so it
- * updates after listening or an account sync.
+ * The lesson the listener left in the middle most recently, as one slim strip
+ * with its progress bar. The button resumes at the saved part and position.
+ * Follows the device progress store, so it updates after listening or an
+ * account sync.
  */
 export function ContinueListeningSection({ title }: Props) {
+  const t = useTranslations('player');
   const hydrated = useHydrated();
   const progressMap = useProgressStore((s) => s.progressMap);
   const [lessons, setLessons] = useState<LessonWithRelations[]>([]);
@@ -61,25 +65,55 @@ export function ContinueListeningSection({ title }: Props) {
     };
   }, [hydrated, idsKey]);
 
-  const visible = lessons
-    .filter((lesson) => {
-      const point = getResumePoint(getLessonTracks(lesson), progressMap[lesson.id]);
-      return point.index > 0 || point.position > 0;
-    })
-    .slice(0, SHELF_SIZE);
+  const lesson = lessons.find((candidate) => {
+    const tracks = getLessonTracks(candidate);
+    const point = getResumePoint(tracks, progressMap[candidate.id]);
+    return point.index > 0 || point.position > 0;
+  });
 
-  if (!hydrated || visible.length === 0) return null;
+  if (!hydrated || !lesson) return null;
+
+  const tracks = getLessonTracks(lesson);
+  const saved = progressMap[lesson.id];
+  const percent = Math.round(getListenedFraction(tracks, saved) * 100);
+  const part = getResumePoint(tracks, saved).index + 1;
 
   return (
-    <section>
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-lg font-bold">{title}</h2>
+    <section
+      aria-label={title}
+      className="relative flex items-center gap-3 rounded-2xl bg-[hsl(var(--surface-elevated))] py-2.5 ps-3 pe-2.5"
+    >
+      <div className="grid min-w-0 flex-1 gap-1.5">
+        <p className="text-[13px] font-semibold text-primary">
+          {title}
+          {tracks.length > 1 && <span className="text-muted-foreground"> · {t('part', { number: part })}</span>}
+        </p>
+        <Link
+          href={lessonPath(lesson)}
+          dir="auto"
+          className="truncate text-[15px] font-bold text-foreground before:absolute before:inset-0 before:content-[''] focus-visible:outline-none"
+        >
+          {lesson.hebrew_title || lesson.title}
+        </Link>
+        <span
+          className="block h-[3px] overflow-hidden rounded-full bg-foreground/12"
+          role="progressbar"
+          aria-label={lesson.hebrew_title || lesson.title}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={percent}
+        >
+          <span className="block h-full rounded-full bg-primary" style={{ width: `${percent}%` }} />
+        </span>
       </div>
-      <LessonCardList>
-        {visible.map((lesson) => (
-          <LessonCard key={lesson.id} lesson={lesson} showProgress />
-        ))}
-      </LessonCardList>
+      <LessonPlayButton
+        lessonId={lesson.id}
+        tracks={tracks}
+        playLabel={t('play')}
+        pauseLabel={t('pause')}
+        className="h-11 w-11 bg-primary text-primary-foreground hover:bg-primary/90"
+        iconClassName="h-[18px] w-[18px]"
+      />
     </section>
   );
 }
