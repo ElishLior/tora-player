@@ -801,6 +801,13 @@
     "close": "סגירה",
     "enabled": "ההתראות הופעלו"
   },
+  "lessonPage": {
+    "category": "קטגוריה",
+    "edit": "עריכה",
+    "lightboxClose": "סגירה",
+    "lightboxPrevious": "התמונה הקודמת",
+    "lightboxNext": "התמונה הבאה"
+  },
   "categoryAdmin": {
     "title": "ניהול קטגוריות",
     "topLevelCount": "{count, plural, =0 {אין קטגוריות ראשיות} one {קטגוריה ראשית אחת} other {# קטגוריות ראשיות}}",

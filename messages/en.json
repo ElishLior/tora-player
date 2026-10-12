@@ -801,6 +801,13 @@
     "close": "Close",
     "enabled": "Notifications are on"
   },
+  "lessonPage": {
+    "category": "Category",
+    "edit": "Edit",
+    "lightboxClose": "Close",
+    "lightboxPrevious": "Previous image",
+    "lightboxNext": "Next image"
+  },
   "categoryAdmin": {
     "title": "Manage categories",
     "topLevelCount": "{count, plural, =0 {No top-level categories} one {One top-level category} other {# top-level categories}}",
