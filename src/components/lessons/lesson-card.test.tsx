@@ -9,6 +9,7 @@ import { LessonCard } from './lesson-card';
 vi.stubGlobal('React', React);
 
 vi.mock('next-intl', () => ({
+  useLocale: () => 'he',
   useTranslations: (namespace: string) => (key: string, values?: Record<string, string | number>) => {
     const messages = he as unknown as Record<string, Record<string, string>>;
     const template = String(messages[namespace]?.[key] ?? key);
