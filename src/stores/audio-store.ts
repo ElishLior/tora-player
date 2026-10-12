@@ -19,6 +19,8 @@ export interface AudioTrack {
   audioUrlFallback?: string;
   duration: number;
   seriesName?: string;
+  /** Set when the lesson belongs to a series; the player links the name to it. */
+  seriesId?: string;
   date: string;
   artworkUrl?: string;
   description?: string;

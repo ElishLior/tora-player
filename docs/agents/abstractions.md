@@ -28,7 +28,7 @@ Building blocks to compose before writing new code. Each has a small interface, 
 | `generateLessonMetadata(date)` | `src/lib/hebrew-date.ts` | date string in, `title`, `hebrewDate`, `parsha`, `isHolidayReading`, `readingLabel`, ... | Every lesson title and Hebrew date. Holiday wording lives in `HOLIDAY_TITLES` / `holidayTitleFor`. |
 | `parshaLabel(parsha)` | `src/lib/parsha-label.ts` | stored `lessons.parsha` in, display text out | Showing any stored reading name (cards, lesson page, SEO text). Puts the Chol HaMoed Shabbat first; no calendar import, so client components can use it. |
 | Tag and date helpers | `src/lib/tags.ts`, `src/lib/tag-links.ts` | `normalizeTags`, `tagPath`, `lessonsHref({ q, type, cat, tag, date })`, `dateFromSearchParam` | Every tag write and every tag/date link or filter. |
-| Lesson browse links | `src/components/lessons/lesson-browse-links.tsx` | `<LessonDateLink date hebrewDate? onClick? />`, `<LessonTagLink tag />` | Showing a lesson's date or tag anywhere: an accessible link to its list, safe beside a card's stretched link. |
+| Lesson browse links | `src/components/lessons/lesson-browse-links.tsx` | `<LessonDateLink date hebrewDate? onClick? />`, `<LessonTagLink tag />`, `<LessonTagList tags />`, `<LessonSeriesLink seriesId name onClick? className? />` | Showing a lesson's date, tags or series anywhere: accessible links to its list or series page, safe beside a card's stretched link. `LessonTagList` is the chip row (renders nothing without tags). `LessonSeriesLink` takes its colour from `className`; pass `onClick` in modal players. |
 | Part types | `src/lib/part-types.ts`, `src/components/lessons/part-type-field.tsx`, `getCachedPartTypes` (`src/lib/supabase/anon.ts`) | `normalizePartType`, `partTypeOptions(used)`; `<PartTypeField value onChange />` (commits a whole value, never per keystroke) | Any place that sets or lists a part's type (סידור / עץ חיים / admin-added types). |
 | Lesson slugs | `src/lib/lesson-slugs.ts` | `baseLessonSlug({ date, parsha, isShort, topic })`, `uniqueLessonSlug(base, isTaken)`, `isValidLessonSlug`, `isUuid`, `readingTopic` | Naming any lesson URL. Never hand-build a slug. |
 | Lesson routes | `src/lib/supabase/lesson-route.ts` | `resolveLessonRoute(client, param)`, `lessonRedirectUrl(path, locale, params)` | UUID, current slug and old slug resolution; preserve locale and playback query parameters. |
@@ -66,3 +66,11 @@ Building blocks to compose before writing new code. Each has a small interface, 
 |---|---|---|---|
 | App sections | `src/components/layout/nav-items.ts` | `PRIMARY_NAV`, `BROWSE_NAV`, `isNavActive(pathname, locale, href)` | Every navigation surface. `BottomNav` (phones/tablets) and `SideNav` (lg+, inline start, so right in Hebrew and left in English) both read it; add a section here, not in a component. |
 | `<LessonCardList>` | `src/components/lessons/lesson-card-list.tsx` | children = `LessonCard`s / skeletons | Any list of lesson cards: one column, two from `xl` so rows never stretch across a wide screen. |
+
+## Sharing
+
+| Block | Where | Interface | Use it for |
+|---|---|---|---|
+| `sharePlatform` | `src/lib/share-platform.ts` | `({ userAgent, platform?, maxTouchPoints? }) → 'apple' \| 'android' \| 'other'` | Pure OS detection (iPadOS desktop UA included). Read `navigator` only at the call site. |
+| `<PlatformShareIcon />` | `src/components/shared/platform-share-icon.tsx` | `className?`; decorative (`aria-hidden`) | Any share icon: Apple's square-with-arrow on Apple devices, lucide `Share2` elsewhere. Renders `Share2` until hydrated, so it never mismatches the server. Keep the button's label. |
+| `<ShareButton />` | `src/components/shared/share-button.tsx` | `lessonId`, `lessonSlug?`, `title`, `seriesName?`, `variant?: 'icon' \| 'action'` | Sharing a lesson with the share sheet (link, time, native share). `icon` for top bars; `action` for a labelled row in the lesson player. |

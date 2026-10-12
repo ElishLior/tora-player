@@ -15,7 +15,7 @@ import { formatDuration } from '@/lib/utils';
 import { getTransportState, useAudioStore } from '@/stores/audio-store';
 import { useProgressStore } from '@/stores/progress-store';
 import { PlayPauseIcon } from '@/components/player/player-controls';
-import { LessonDateLink } from '@/components/lessons/lesson-browse-links';
+import { LessonDateLink, LessonSeriesLink, LessonTagList } from '@/components/lessons/lesson-browse-links';
 import { PartDurations } from '@/components/lessons/part-durations';
 import type { LessonWithRelations } from '@/types/database';
 
@@ -52,19 +52,27 @@ export function LatestLessonHero({ title, lesson }: LatestLessonHeroProps) {
   return (
     <section>
       <h2 className="mb-3 text-lg font-bold">{title}</h2>
+      {/* Metadata links and the play button are siblings of the stretched lesson link. */}
       <div
-        className="flex items-center gap-4 rounded-xl p-4"
+        className="relative flex items-center gap-4 rounded-xl p-4 has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-primary/50"
         style={{ background: 'linear-gradient(135deg, hsl(141 30% 18%) 0%, hsl(141 20% 10%) 100%)' }}
       >
         <div className="min-w-0 flex-1 space-y-1">
-          {seriesName && (
-            <p className="truncate text-xs font-bold text-primary" dir="auto">
-              {seriesName}
-            </p>
-          )}
+          {seriesName &&
+            (lesson.series?.id ? (
+              <LessonSeriesLink
+                seriesId={lesson.series.id}
+                name={seriesName}
+                className="text-xs font-bold text-primary"
+              />
+            ) : (
+              <p className="truncate text-xs font-bold text-primary" dir="auto">
+                {seriesName}
+              </p>
+            ))}
           <Link
             href={lessonPath(lesson)}
-            className="line-clamp-2 text-base font-bold text-foreground hover:underline"
+            className="line-clamp-2 text-base font-bold text-foreground before:absolute before:inset-0 before:content-[''] hover:underline"
             dir="auto"
           >
             {lesson.hebrew_title || lesson.title}
@@ -80,12 +88,13 @@ export function LatestLessonHero({ title, lesson }: LatestLessonHeroProps) {
             )}
             <PartDurations seconds={partSeconds} className="flex-1" />
           </div>
+          <LessonTagList tags={lesson.tags} />
           {hasResume && !isCurrent && <p className="text-xs text-primary">{label}</p>}
         </div>
         <button
           type="button"
           onClick={() => (isCurrent ? togglePlay() : playLesson(tracks))}
-          className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform hover:scale-105"
+          className="relative z-10 flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform hover:scale-105"
           aria-label={label}
         >
           <PlayPauseIcon transport={showPause ? transport : 'paused'} className="h-6 w-6" />

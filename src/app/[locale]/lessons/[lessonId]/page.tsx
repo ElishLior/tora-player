@@ -10,10 +10,9 @@ import { parshaLabel } from '@/lib/parsha-label';
 import { Link } from '@/i18n/routing';
 import { ArrowRight, Calendar, Clock, Edit, MapPin, User, BookOpen, Hash } from 'lucide-react';
 import { isAdmin } from '@/lib/auth/admin';
-import { ShareButton } from '@/components/shared/share-button';
 import { LessonPlayerClient, LessonTags } from './lesson-player-client';
 import { JsonLd } from '@/components/seo/json-ld';
-import { OG_LOCALE, SITE_NAME, categoryPath, isSiteLocale, lessonPath, pageUrl } from '@/config/site';
+import { OG_LOCALE, SITE_NAME, categoryPath, isSiteLocale, lessonPath, pageUrl, seriesPath } from '@/config/site';
 import { breadcrumbJsonLd, lessonDescription, lessonJsonLd, pageAlternates } from '@/lib/seo';
 import { lessonsHref } from '@/lib/tag-links';
 import { getCachedCategoriesTree } from '@/lib/supabase/anon';
@@ -118,12 +117,6 @@ export default async function LessonDetailPage({ params, searchParams }: Props) 
             <Edit className="h-5 w-5" />
           </Link>
         )}
-        <ShareButton
-          lessonId={lesson.id}
-          lessonSlug={lesson.slug}
-          title={lesson.hebrew_title || lesson.title}
-          seriesName={lesson.series?.hebrew_name || lesson.series?.name}
-        />
       </div>
 
       {/* Title */}
@@ -140,8 +133,8 @@ export default async function LessonDetailPage({ params, searchParams }: Props) 
         />
         {lesson.series && (
           <Link
-            href={`/lessons?series=${lesson.series.id}`}
-            className="inline-block text-sm text-primary hover:underline"
+            href={seriesPath(lesson.series.id)}
+            className="inline-block rounded-sm text-sm text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
             dir="auto"
           >
             {lesson.series.hebrew_name || lesson.series.name}

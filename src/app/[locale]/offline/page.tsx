@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { Link } from '@/i18n/routing';
+import { lessonPath } from '@/config/site';
 import { Download, Trash2, HardDrive, Wifi, WifiOff, Play, Loader2 } from 'lucide-react';
 import {
   getDownloadedLessons,
@@ -128,7 +130,12 @@ export default function OfflinePage() {
                 </button>
                 <div className="flex-1 min-w-0">
                   <p className="font-medium truncate">
-                    <bdi>{lesson.hebrewTitle || lesson.title}</bdi>
+                    <Link
+                      href={lessonPath(lesson.lessonId)}
+                      className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                    >
+                      <bdi>{lesson.hebrewTitle || lesson.title}</bdi>
+                    </Link>
                   </p>
                   <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                     <span dir="ltr">{formatDuration(lesson.duration)}</span>

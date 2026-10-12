@@ -25,6 +25,7 @@ import {
 import { getLessonsByIds } from '@/actions/lessons';
 import { AccountSettings } from '@/components/auth/account-settings';
 import { BookmarkGroups } from '@/components/bookmarks/bookmark-groups';
+import { LessonSeriesLink } from '@/components/lessons/lesson-browse-links';
 import { NoteImageStrip } from '@/components/notes/note-image-strip';
 import { PushToggle } from '@/components/notifications/push-toggle';
 import { play } from '@/lib/audio-controller';
@@ -286,11 +287,18 @@ export default function MeClient({ locale, account }: { locale: string; account:
                       >
                         {lessonTitle(lesson)}
                       </Link>
-                      {(lesson.series?.hebrew_name || lesson.series?.name) && (
-                        <p className="truncate text-xs text-muted-foreground" dir="auto">
-                          {lesson.series?.hebrew_name || lesson.series?.name}
-                        </p>
-                      )}
+                      {(lesson.series?.hebrew_name || lesson.series?.name) &&
+                        (lesson.series?.id ? (
+                          <LessonSeriesLink
+                            seriesId={lesson.series.id}
+                            name={lesson.series.hebrew_name || lesson.series.name}
+                            className="text-xs text-muted-foreground"
+                          />
+                        ) : (
+                          <p className="truncate text-xs text-muted-foreground" dir="auto">
+                            {lesson.series?.hebrew_name || lesson.series?.name}
+                          </p>
+                        ))}
                     </div>
                     <button
                       type="button"

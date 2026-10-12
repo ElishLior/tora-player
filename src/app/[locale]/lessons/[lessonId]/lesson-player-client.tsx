@@ -27,7 +27,6 @@ import {
   ImagePlus,
 } from 'lucide-react';
 import Link from 'next/link';
-import { Link as LocaleLink } from '@/i18n/routing';
 import { useLocale, useTranslations } from 'next-intl';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useAudioPlayer } from '@/hooks/use-audio-player';
@@ -35,6 +34,7 @@ import { SeekBar } from '@/components/player/seek-bar';
 import { SpeedControl } from '@/components/player/speed-control';
 import { PlayPauseIcon, SkipButton } from '@/components/player/player-controls';
 import { SleepTimerControl } from '@/components/player/sleep-timer';
+import { ShareButton } from '@/components/shared/share-button';
 import { BookmarkDialog } from '@/components/bookmarks/bookmark-dialog';
 import { BookmarkChips, BookmarkMarkers } from '@/components/bookmarks/lesson-bookmarks';
 import { NoteImageStrip } from '@/components/notes/note-image-strip';
@@ -62,8 +62,8 @@ import { updateLessonTags } from '@/actions/lessons';
 import { updateLessonCategory } from '@/actions/categories';
 import { TagInput } from '@/components/tags/tag-input';
 import { CategoryPicker } from '@/components/categories/category-picker';
+import { LessonTagLink } from '@/components/lessons/lesson-browse-links';
 import { normalizeTags } from '@/lib/tags';
-import { tagPath } from '@/lib/tag-links';
 import { getImageStreamUrl } from '@/lib/image-keys';
 
 function formatDur(seconds: number): string {
@@ -848,6 +848,15 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
             <span className="text-[10px]">{t('bookmark')}</span>
           </button>
 
+          {/* Share the lesson (sheet: copy link, share at the current time, native share) */}
+          <ShareButton
+            variant="action"
+            lessonId={lesson.id}
+            lessonSlug={lesson.slug}
+            title={lesson.hebrew_title || lesson.title}
+            seriesName={lesson.series?.hebrew_name || lesson.series?.name}
+          />
+
           {/* Sleep timer (applies to whatever is playing) */}
           {isCurrentLesson && (
             <SleepTimerControl className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors" />
@@ -1540,7 +1549,6 @@ function LessonCategoryEditor({ lessonId, categoryId, categories }: LessonCatego
  */
 export function LessonTags({ lessonId, tags: initialTags, admin, categoryId, categories }: LessonTagsProps) {
   const t = useTranslations('tagBrowse');
-  const browseT = useTranslations('lessonBrowse');
   const [tags, setTags] = useState(initialTags);
   const [draft, setDraft] = useState<string[] | null>(null);
   const [saving, setSaving] = useState(false);
@@ -1603,14 +1611,7 @@ export function LessonTags({ lessonId, tags: initialTags, admin, categoryId, cat
       <ul className="flex flex-wrap items-center gap-1.5" aria-label={t('lessonTags')}>
         {tags.map((tag) => (
           <li key={tag} className="max-w-full">
-            <LocaleLink
-              href={tagPath(tag)}
-              aria-label={browseT('tagLink', { tag })}
-              data-lesson-tag={tag}
-              className="inline-flex min-h-7 max-w-full items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-            >
-              <bdi className="break-words">#{tag}</bdi>
-            </LocaleLink>
+            <LessonTagLink tag={tag} />
           </li>
         ))}
         {admin && (

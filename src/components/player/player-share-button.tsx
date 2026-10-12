@@ -2,8 +2,9 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Share2, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import { PlatformShareIcon } from '@/components/shared/platform-share-icon';
 import { useModalDialog } from '@/hooks/use-modal-dialog';
 import { getPlayingLessonShareData, sharePlayingLesson } from '@/lib/player-share';
 import { useAudioStore } from '@/stores/audio-store';
@@ -101,7 +102,7 @@ export function PlayerShareButton({ compact = false }: { compact?: boolean }) {
         aria-label={t('shareLesson')}
         className={`flex min-h-11 min-w-11 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${compact ? '' : 'flex-col gap-1.5 px-1'}`}
       >
-        <Share2 className="h-5 w-5" aria-hidden="true" />
+        <PlatformShareIcon className="h-5 w-5" />
         {!compact && <span className="text-[10px]">{t('shareAction')}</span>}
       </button>
       {copied &&

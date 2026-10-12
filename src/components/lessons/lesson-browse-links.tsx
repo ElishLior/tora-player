@@ -1,5 +1,6 @@
 import { useTranslations } from 'next-intl';
 import { Link } from '@/i18n/routing';
+import { seriesPath } from '@/config/site';
 import { lessonsHref, tagPath } from '@/lib/tag-links';
 
 const focusClass = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50';
@@ -30,6 +31,32 @@ export function LessonDateLink({
   );
 }
 
+/** A lesson's series name, linking to the series page. Sibling of the lesson link, never nested. Colour comes from `className`. */
+export function LessonSeriesLink({
+  seriesId,
+  name,
+  onClick,
+  className = '',
+}: {
+  seriesId: string;
+  name: string;
+  /** E.g. closing the full player, so the series page it opens is visible. */
+  onClick?: () => void;
+  className?: string;
+}) {
+  return (
+    <Link
+      href={seriesPath(seriesId)}
+      onClick={onClick}
+      data-lesson-series={seriesId}
+      dir="auto"
+      className={`relative z-10 inline-block max-w-full truncate rounded-sm hover:underline ${focusClass} ${className}`}
+    >
+      {name}
+    </Link>
+  );
+}
+
 export function LessonTagLink({ tag }: { tag: string }) {
   const t = useTranslations('lessonBrowse');
   return (
@@ -41,5 +68,19 @@ export function LessonTagLink({ tag }: { tag: string }) {
     >
       <bdi className="min-w-0 break-words">#{tag}</bdi>
     </Link>
+  );
+}
+
+/** A lesson's tag chips on one wrapping row. Renders nothing without tags. */
+export function LessonTagList({ tags }: { tags: readonly string[] | null | undefined }) {
+  if (!tags?.length) return null;
+  return (
+    <ul className="mt-1 flex flex-wrap gap-1.5">
+      {tags.map((tag) => (
+        <li key={tag} className="max-w-full">
+          <LessonTagLink tag={tag} />
+        </li>
+      ))}
+    </ul>
   );
 }

@@ -7,7 +7,7 @@ import { LESSON_AUDIO_FILES, LESSON_CARD_COLUMNS } from './lesson-selects';
 
 /** Latest published daily lessons; short lessons have their own section (lib/supabase/shorts). */
 export async function getRecentLessons(supabase: SupabaseClient, limit = 20) {
-  const { data, error } = await withLessonSlugSelect(`${LESSON_CARD_COLUMNS}, series(name, hebrew_name), category:categories(id, hebrew_name), ${LESSON_AUDIO_FILES}`, (columns) => supabase
+  const { data, error } = await withLessonSlugSelect(`${LESSON_CARD_COLUMNS}, series(id, name, hebrew_name), category:categories(id, hebrew_name), ${LESSON_AUDIO_FILES}`, (columns) => supabase
     .from('lessons')
     .select(columns)
     .eq('is_published', true)
@@ -99,7 +99,7 @@ export async function getLessonsByCategory(supabase: SupabaseClient, categoryId:
 
   const categoryIds = [categoryId, ...(children || []).map(c => c.id)];
 
-  const { data, error } = await withLessonSlugSelect(`${LESSON_CARD_COLUMNS}, series(name, hebrew_name), category:categories(id, hebrew_name), ${LESSON_AUDIO_FILES}`, (columns) => supabase
+  const { data, error } = await withLessonSlugSelect(`${LESSON_CARD_COLUMNS}, series(id, name, hebrew_name), category:categories(id, hebrew_name), ${LESSON_AUDIO_FILES}`, (columns) => supabase
     .from('lessons')
     .select(columns)
     .eq('is_published', true)

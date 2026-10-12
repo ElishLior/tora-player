@@ -97,6 +97,7 @@ function createLessonTrack(
     audioUrlFallback: normalizeAudioUrl(lesson.audio_url_fallback) || undefined,
     duration: asset.duration || (partCount === 1 ? lesson.duration : 0),
     seriesName: lesson.series?.hebrew_name || lesson.series?.name || undefined,
+    seriesId: lesson.series?.id || undefined,
     date: lesson.date,
     description: lesson.description || lesson.summary || undefined,
     originalName: asset.originalName || asset.title,

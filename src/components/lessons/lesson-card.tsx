@@ -16,7 +16,7 @@ import { useHydrated } from '@/hooks/use-hydrated';
 import { getLessonPartSeconds, getLessonTracks } from '@/lib/lesson-tracks';
 import { getListenedFraction } from '@/lib/lesson-progress';
 import { playLesson } from '@/lib/play-lesson';
-import { LessonDateLink, LessonTagLink } from './lesson-browse-links';
+import { LessonDateLink, LessonTagList } from './lesson-browse-links';
 import { PartDurations } from './part-durations';
 import type { LessonWithRelations } from '@/types/database';
 
@@ -178,15 +178,7 @@ export function LessonCard({ lesson, showProgress, selectable, selected, onToggl
           ) : (
             <div>
               <LessonDateLink date={lesson.date} hebrewDate={lesson.hebrew_date} />
-              {(lesson.tags?.length ?? 0) > 0 && (
-                <ul className="mt-1 flex flex-wrap gap-1.5">
-                  {lesson.tags.map((tag) => (
-                    <li key={tag} className="max-w-full">
-                      <LessonTagLink tag={tag} />
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <LessonTagList tags={lesson.tags} />
             </div>
           )}
         </div>
@@ -261,7 +253,7 @@ export function LessonCard({ lesson, showProgress, selectable, selected, onToggl
   }
 
   return (
-    <div className="group relative block rounded-lg p-3 transition-all hover:bg-[hsl(var(--surface-highlight))]">
+    <div className="group relative block rounded-lg p-3 transition-all hover:bg-[hsl(var(--surface-highlight))] has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-primary/50">
       {cardContent}
     </div>
   );

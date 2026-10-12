@@ -113,30 +113,6 @@ export default async function HomePage({ params }: Props) {
 
       {latestLesson && <LatestLessonHero title={t('latestLesson')} lesson={latestLesson} />}
 
-      {/* Shorts */}
-      {recentShorts.length > 0 && (
-        <section>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="flex items-center gap-2 text-lg font-bold">
-              <Scissors className="h-4 w-4 text-rose-400" />
-              {tShorts('title')}
-            </h2>
-            <Link
-              href="/shorts"
-              className="flex items-center gap-0.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {tShorts('showAll')}
-              <ChevronLeft className="h-3.5 w-3.5" />
-            </Link>
-          </div>
-          <LessonCardList>
-            {recentShorts.map((lesson) => (
-              <LessonCard key={lesson.id} lesson={lesson} />
-            ))}
-          </LessonCardList>
-        </section>
-      )}
-
       {/* Recent Lessons */}
       {(olderLessons.length > 0 || !latestLesson) && (
         <section>
@@ -173,6 +149,30 @@ export default async function HomePage({ params }: Props) {
               }
             />
           )}
+        </section>
+      )}
+
+      {/* Shorts */}
+      {recentShorts.length > 0 && (
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="flex items-center gap-2 text-lg font-bold">
+              <Scissors className="h-4 w-4 text-rose-400" />
+              {tShorts('title')}
+            </h2>
+            <Link
+              href="/shorts"
+              className="flex items-center gap-0.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {tShorts('showAll')}
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+          <LessonCardList>
+            {recentShorts.map((lesson) => (
+              <LessonCard key={lesson.id} lesson={lesson} />
+            ))}
+          </LessonCardList>
         </section>
       )}
 
