@@ -87,7 +87,7 @@ export function HomeIntro({ className }: { className?: string }) {
   // Device-only state: applied after hydration so the server HTML matches.
   useEffect(() => {
     if (!hydrated) return;
-    const start = homeIntroStart(readStored());
+    const start = homeIntroStart(readStored(), window.matchMedia('(min-width: 1024px)').matches);
     if (start.write) writeStored(start.write);
     setOpen(start.open);
   }, [hydrated]);

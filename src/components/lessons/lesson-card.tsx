@@ -44,7 +44,7 @@ const LIFT =
 const TITLE_HOVER =
   'lg:[@media(hover:hover)]:group-hover/lesson:text-primary lg:[@media(hover:hover)]:group-hover/lesson:underline';
 const PLAY_HOVER =
-  'lg:[@media(hover:hover)]:group-hover/lesson:bg-primary lg:[@media(hover:hover)]:group-hover/lesson:text-primary-foreground';
+  'lg:[@media(hover:hover)]:group-hover/lesson:bg-primary lg:[@media(hover:hover)]:group-hover/lesson:text-[hsl(0_0%_7%)]';
 
 /**
  * The one lesson row used by every list (lessons, categories, tags, search,

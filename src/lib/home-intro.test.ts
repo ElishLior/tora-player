@@ -4,6 +4,7 @@ import { homeIntroChoice, homeIntroStart } from './home-intro';
 describe('homeIntroStart', () => {
   it('opens on the first visit and remembers that it was seen', () => {
     expect(homeIntroStart(null)).toEqual({ open: true, write: 'seen' });
+    expect(homeIntroStart(null, true)).toEqual({ open: false, write: 'seen' });
   });
 
   it('stays collapsed on later visits unless the listener opened it', () => {

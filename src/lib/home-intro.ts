@@ -14,8 +14,9 @@ export interface HomeIntroStart {
   write: string | null;
 }
 
-export function homeIntroStart(stored: string | null): HomeIntroStart {
-  if (stored === null) return { open: true, write: 'seen' };
+export function homeIntroStart(stored: string | null, desktop = false): HomeIntroStart {
+  // First visit: open on phones; on desktop the one line + lesson-page tip, so the latest lesson stays above the fold.
+  if (stored === null) return { open: !desktop, write: 'seen' };
   return { open: stored === 'open', write: null };
 }
 
