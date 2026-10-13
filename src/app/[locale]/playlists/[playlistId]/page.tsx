@@ -1,6 +1,6 @@
 import { cache } from 'react';
 import type { Metadata } from 'next';
-import { setRequestLocale } from 'next-intl/server';
+import { setRequestLocale, getTranslations } from 'next-intl/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { getPlaylistWithLessons } from '@/lib/supabase/queries';
 import { notFound } from 'next/navigation';
@@ -8,11 +8,14 @@ import { LessonCard } from '@/components/lessons/lesson-card';
 import { LessonCardList } from '@/components/lessons/lesson-card-list';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PlayLessonsButtons } from '@/components/lessons/play-lessons-buttons';
+import { CollectionHeader } from '@/components/shared/collection-header';
+import { CoverTile } from '@/components/lessons/reading-cover';
 import { Link } from '@/i18n/routing';
 import { ArrowRight, BookOpen } from 'lucide-react';
 import type { LessonWithRelations } from '@/types/database';
 import { SITE_TAGLINE, playlistPath } from '@/config/site';
 import { pageAlternates, truncateText } from '@/lib/seo';
+import { readingHue } from '@/lib/lesson-display';
 
 type Props = { params: Promise<{ locale: string; playlistId: string }> };
 
@@ -43,26 +46,36 @@ export default async function PlaylistDetailPage({ params }: Props) {
   if (!playlist) notFound();
 
   const items = (playlist as { playlist_lessons?: { lesson: LessonWithRelations }[] }).playlist_lessons || [];
+  const tDesign = await getTranslations('pagesDesign');
+  const tCommon = await getTranslations('common');
+  const name = playlist.hebrew_name || playlist.name;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Link href="/playlists" className="rounded-full p-2 transition-colors hover:bg-muted">
-          <ArrowRight className="h-5 w-5" />
-        </Link>
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold" dir="rtl">
-            {playlist.hebrew_name || playlist.name}
-          </h1>
-          {playlist.description && (
-            <p className="mt-1 text-muted-foreground" dir="rtl">
-              {playlist.description}
-            </p>
-          )}
-        </div>
-      </div>
-
-      {items.length > 0 && <PlayLessonsButtons lessons={items.map((item) => item.lesson).filter(Boolean)} />}
+      <CollectionHeader
+        hue={readingHue(playlist.id)}
+        eyebrow={tDesign('eyebrow.playlist')}
+        title={name}
+        description={playlist.description}
+        cover={
+          <CoverTile
+            text={name}
+            hue={readingHue(playlist.id)}
+            className="h-28 w-28 sm:h-36 sm:w-36"
+            textClassName="line-clamp-3 text-lg"
+          />
+        }
+        back={
+          <Link
+            href="/playlists"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-full px-3 text-[13px] font-bold text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+          >
+            <ArrowRight aria-hidden="true" className="h-4 w-4 ltr:rotate-180" />
+            {tCommon('playlists')}
+          </Link>
+        }
+        actions={items.length > 0 && <PlayLessonsButtons lessons={items.map((item) => item.lesson).filter(Boolean)} />}
+      />
 
       {items.length > 0 ? (
         // Same rows as every list (one column, two and three on wide panes); the gap matches the old space-y-3 on phones.
@@ -77,7 +90,7 @@ export default async function PlaylistDetailPage({ params }: Props) {
           ))}
         </LessonCardList>
       ) : (
-        <EmptyState icon={BookOpen} title={locale === 'he' ? 'רשימה ריקה' : 'Empty playlist'} />
+        <EmptyState icon={BookOpen} title={tDesign('playlists.emptyPlaylist')} />
       )}
     </div>
   );

@@ -990,5 +990,34 @@
     "errorTitle": "We could not load the lessons",
     "errorHint": "Check your connection and try again.",
     "retry": "Try again"
+  },
+  "pagesDesign": {
+    "search": {
+      "title": "Search",
+      "placeholder": "Search lessons...",
+      "hint": "Type to search lessons, topics and tags",
+      "noResults": "No results found",
+      "noResultsFor": "No lessons found for \"{query}\""
+    },
+    "playlists": {
+      "emptyPlaylist": "Empty playlist"
+    },
+    "series": {
+      "emptyLessons": "No lessons in this series"
+    },
+    "bookmarks": {
+      "hint": "Tap the bookmark button in the player to save important moments",
+      "lessonFallback": "Lesson"
+    },
+    "offline": {
+      "savedLessons": "Saved lessons"
+    },
+    "eyebrow": {
+      "playlist": "Playlist",
+      "series": "Series",
+      "category": "Category"
+    },
+    "lessonCount": "{count, plural, =0 {No lessons} =1 {One lesson} other {# lessons}}",
+    "subcategories": "Subcategories"
   }
 }

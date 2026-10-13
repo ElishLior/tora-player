@@ -3,17 +3,9 @@ import { ChevronLeft } from 'lucide-react';
 import { Link } from '@/i18n/routing';
 import { SHORTS_CATEGORY_ID } from '@/lib/upload-drafts';
 import { categoryLabel, categoryLessonTotal } from '@/lib/category-tree';
+import { categoryDotClass } from '@/lib/category-display';
 import { HomeSectionHeader } from '@/components/home/home-section-header';
 import type { CategoryWithChildren } from '@/types/database';
-
-/** Each category icon's dot colour (the same palette the category pages use). */
-const DOT_CLASS: Record<string, string> = {
-  BookOpen: 'bg-primary',
-  Wrench: 'bg-blue-400',
-  Sparkles: 'bg-purple-400',
-  Music: 'bg-amber-400',
-  Scissors: 'bg-rose-400',
-};
 
 interface CategoriesSectionProps {
   categories: CategoryWithChildren[];
@@ -33,7 +25,7 @@ export async function CategoriesSection({ categories, counts }: CategoriesSectio
         {categories.map((category) => {
           // The lesson count covers the whole branch, subcategories included.
           const total = categoryLessonTotal(categories, counts, category.id);
-          const dot = DOT_CLASS[category.icon || ''] ?? 'bg-muted-foreground';
+          const dot = categoryDotClass(category.icon);
           return (
             <li key={category.id}>
               <Link
@@ -43,7 +35,10 @@ export async function CategoriesSection({ categories, counts }: CategoriesSectio
                 <span aria-hidden="true" className={`h-2.5 w-2.5 flex-shrink-0 rounded-full ${dot}`} />
                 <span className="min-w-0 flex-1 truncate">{categoryLabel(category, locale)}</span>
                 {total > 0 && <span className="text-[13px] tabular-nums text-muted-foreground">{total}</span>}
-                <ChevronLeft aria-hidden="true" className="h-4 w-4 flex-shrink-0 text-muted-foreground ltr:rotate-180" />
+                <ChevronLeft
+                  aria-hidden="true"
+                  className="h-4 w-4 flex-shrink-0 text-muted-foreground ltr:rotate-180"
+                />
               </Link>
             </li>
           );

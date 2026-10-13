@@ -4,8 +4,14 @@ import { getCachedAllSeries } from '@/lib/supabase/anon';
 import { Link } from '@/i18n/routing';
 import { EmptyState } from '@/components/shared/empty-state';
 import { ListLoadError } from '@/components/shared/list-load-error';
+import { PageHeader } from '@/components/shared/page-header';
+import { CardGrid } from '@/components/shared/card-grid';
+import { CollectionCard } from '@/components/shared/collection-card';
+import { CoverTile } from '@/components/lessons/reading-cover';
 import { ChevronLeft, Library, Plus, Scissors } from 'lucide-react';
 import { isAdmin } from '@/lib/auth/admin';
+import { embeddedCount } from '@/lib/embedded-count';
+import { readingHue } from '@/lib/lesson-display';
 import type { Series } from '@/types/database';
 
 type Props = { params: Promise<{ locale: string }> };
@@ -16,9 +22,10 @@ export default async function SeriesPage({ params }: Props) {
   const t = await getTranslations('series');
   const tShorts = await getTranslations('shorts');
   const tCommon = await getTranslations('common');
+  const tDesign = await getTranslations('pagesDesign');
   const admin = await isAdmin();
 
-  let series: Series[] = [];
+  let series: (Series & { lessons?: unknown })[] = [];
   let failed = false;
   if (isSupabaseConfigured()) {
     try {
@@ -31,49 +38,61 @@ export default async function SeriesPage({ params }: Props) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">{t('title')}</h1>
-        {admin && (
-          <Link
-            href="/lessons/upload"
-            className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            <Plus className="h-4 w-4" />
-            <span>{tCommon('add')}</span>
-          </Link>
-        )}
-      </div>
+      <PageHeader
+        title={t('title')}
+        actions={
+          admin && (
+            <Link
+              href="/lessons/upload"
+              className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+            >
+              <Plus className="h-4 w-4" />
+              <span>{tCommon('add')}</span>
+            </Link>
+          )
+        }
+      />
 
       <Link
         href="/shorts"
-        className="flex items-center gap-3 rounded-xl bg-[hsl(var(--surface-elevated))] p-4 transition-colors hover:bg-[hsl(var(--surface-highlight))]"
+        className="flex items-center gap-3 rounded-2xl bg-[hsl(var(--surface-elevated))] p-3 transition-colors duration-150 hover:bg-[hsl(var(--surface-highlight))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 motion-reduce:transition-none lg:[@media(hover:hover)]:hover:bg-[hsl(var(--surface-highlight))]"
       >
-        <Scissors className="h-5 w-5 text-rose-400" />
-        <span className="flex-1 text-sm font-semibold">{tShorts('title')}</span>
-        <ChevronLeft className="h-4 w-4 text-muted-foreground ltr:rotate-180 rtl:rotate-0" />
+        <span
+          aria-hidden="true"
+          className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-rose-400/15 text-rose-400"
+        >
+          <Scissors className="h-5 w-5" />
+        </span>
+        <span className="flex-1 text-base font-bold">{tShorts('title')}</span>
+        <ChevronLeft aria-hidden="true" className="h-5 w-5 text-muted-foreground ltr:rotate-180" />
       </Link>
 
       {failed ? (
         <ListLoadError />
       ) : series.length > 0 ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {series.map((s) => (
-            <Link
-              key={s.id}
-              href={`/series/${s.id}`}
-              className="rounded-xl border bg-card p-5 transition-all hover:border-primary/30 hover:shadow-md"
-            >
-              <h3 className="text-lg font-semibold" dir="rtl">
-                {s.hebrew_name || s.name}
-              </h3>
-              {s.description && (
-                <p className="mt-1 line-clamp-2 text-sm text-muted-foreground" dir="rtl">
-                  {s.description}
-                </p>
-              )}
-            </Link>
-          ))}
-        </div>
+        <CardGrid variant="tiles">
+          {series.map((s) => {
+            const name = s.hebrew_name || s.name;
+            const count = embeddedCount(s, 'lessons');
+            return (
+              <CollectionCard
+                key={s.id}
+                href={`/series/${s.id}`}
+                title={name}
+                description={s.description}
+                meta={count === null ? null : tDesign('lessonCount', { count })}
+                cover={
+                  <CoverTile
+                    text={name}
+                    hue={readingHue(s.id)}
+                    className="aspect-[16/9] w-full"
+                    textClassName="line-clamp-2 text-xl"
+                  />
+                }
+              />
+            );
+          })}
+        </CardGrid>
       ) : (
         <EmptyState icon={Library} title={t('noSeries')} />
       )}

@@ -4,19 +4,23 @@ import { cache } from 'react';
 import type { Metadata } from 'next';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { isSupabaseConfigured } from '@/lib/supabase/server';
-import { getCachedCategoriesTree, getCachedCategoryLessons } from '@/lib/supabase/anon';
+import { getCachedCategoriesTree, getCachedCategoryLessonCounts, getCachedCategoryLessons } from '@/lib/supabase/anon';
 import { PlayCategoryButton } from '@/components/lessons/play-category-button';
 import { LessonCard } from '@/components/lessons/lesson-card';
 import { LessonCardList } from '@/components/lessons/lesson-card-list';
 import { EmptyState } from '@/components/shared/empty-state';
 import { ListLoadError } from '@/components/shared/list-load-error';
+import { CollectionHeader } from '@/components/shared/collection-header';
+import { CoverTile } from '@/components/lessons/reading-cover';
+import { CategoryTiles } from '@/components/categories/category-tiles';
 import { Link } from '@/i18n/routing';
-import { BookOpen, ChevronLeft, FolderOpen } from 'lucide-react';
+import { BookOpen, ChevronLeft } from 'lucide-react';
 import { notFound } from 'next/navigation';
 import { JsonLd } from '@/components/seo/json-ld';
 import { DEFAULT_LOCALE, SITE_NAME, SITE_TAGLINE, categoryPath } from '@/config/site';
 import { breadcrumbJsonLd, pageAlternates, truncateText } from '@/lib/seo';
 import { categoryAncestors, categoryLabel, childrenOf, descendantIds, findCategory } from '@/lib/category-tree';
+import { readingHue } from '@/lib/lesson-display';
 import type { CategoryWithChildren } from '@/types/database';
 
 type Props = {
@@ -48,50 +52,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-/**
- * Subcategories as links, each with its own subcategories nested below (up to three levels).
- * The top level is a tile grid from lg (two columns, three from xl), so a wide page is not a
- * stack of full-width bars; phones keep the list.
- */
-function SubcategoryLinks({
-  nodes,
-  locale,
-  topLevel = false,
-}: {
-  nodes: CategoryWithChildren[];
-  locale: string;
-  topLevel?: boolean;
-}) {
-  return (
-    <div className={topLevel ? 'space-y-1 lg:grid lg:grid-cols-2 lg:gap-3 xl:grid-cols-3' : 'space-y-1'}>
-      {nodes.map((node) => (
-        <div key={node.id} className="space-y-0.5">
-          <Link
-            href={`/categories/${node.id}`}
-            className="flex items-center gap-3 rounded-lg bg-[hsl(var(--surface-elevated))] p-3 transition-colors hover:bg-[hsl(var(--surface-highlight))] focus-visible:ring-2 focus-visible:ring-primary/60 motion-reduce:transition-none lg:rounded-xl lg:p-4"
-          >
-            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md bg-primary/10">
-              <FolderOpen className="h-4 w-4 text-primary" />
-            </div>
-            <span className="flex-1 text-sm font-medium">{categoryLabel(node, locale)}</span>
-            <ChevronLeft className="h-4 w-4 text-muted-foreground" />
-          </Link>
-          {node.children.length > 0 && (
-            <div className="ms-6">
-              <SubcategoryLinks nodes={node.children} locale={locale} />
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export default async function CategoryDetailPage({ params }: Props) {
   const { locale, categoryId } = await params;
   setRequestLocale(locale);
-
-  const isRTL = locale === 'he';
 
   if (!isSupabaseConfigured()) return notFound();
 
@@ -121,15 +84,21 @@ export default async function CategoryDetailPage({ params }: Props) {
     lessonsFailed = true;
   }
 
+  // Counts for the subcategory tiles (cached). A failed count read shows no numbers, not an error.
+  const counts =
+    subcategories.length > 0 ? await getCachedCategoryLessonCounts().catch(() => ({}) as Record<string, number>) : {};
+
   // The continuous-play session starts from the first lessons of the list above (no second read),
   // so the tap can play synchronously. Snapshot is taken after the cached read: its rows predate it.
   const scopeIds = descendantIds(tree, categoryId);
   const snapshotAt = new Date().toISOString();
 
   const tCategories = await getTranslations({ locale: DEFAULT_LOCALE, namespace: 'categories' });
+  const t = await getTranslations('categories');
+  const tDesign = await getTranslations('pagesDesign');
 
   return (
-    <div className="animate-fade-in space-y-5">
+    <div className="animate-fade-in space-y-6">
       <JsonLd
         data={breadcrumbJsonLd([
           { name: SITE_NAME.he, pathname: '/' },
@@ -141,36 +110,67 @@ export default async function CategoryDetailPage({ params }: Props) {
           { name: categoryLabel(category, DEFAULT_LOCALE), pathname: categoryPath(category.id) },
         ])}
       />
-      {/* Breadcrumb */}
-      <nav className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-        <Link href="/categories" className="transition-colors hover:text-foreground">
-          {isRTL ? 'קטגוריות' : 'Categories'}
-        </Link>
-        {ancestors.map((ancestor) => (
-          <span key={ancestor.id} className="flex items-center gap-1.5">
-            <ChevronLeft className="h-3 w-3" />
-            <Link href={`/categories/${ancestor.id}`} className="transition-colors hover:text-foreground">
-              {categoryLabel(ancestor, locale)}
+
+      <CollectionHeader
+        hue={readingHue(category.id)}
+        eyebrow={tDesign('eyebrow.category')}
+        title={name}
+        description={category.description}
+        cover={
+          <CoverTile
+            text={name}
+            hue={readingHue(category.id)}
+            className="h-28 w-28 sm:h-36 sm:w-36"
+            textClassName="line-clamp-3 text-lg"
+          />
+        }
+        back={
+          /* Breadcrumb */
+          <nav className="flex flex-wrap items-center gap-1.5 text-[13px] text-muted-foreground">
+            <Link
+              href="/categories"
+              className="rounded transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+            >
+              {t('title')}
             </Link>
-          </span>
-        ))}
-        <ChevronLeft className="h-3 w-3" />
-        <span className="font-medium text-foreground">{name}</span>
-      </nav>
-
-      {/* Header: title and description, with the continuous-play action at the inline end on desktop. */}
-      <div className="lg:flex lg:items-start lg:justify-between lg:gap-6">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-bold">{name}</h1>
-          {category.description && <p className="mt-1 text-sm text-muted-foreground">{category.description}</p>}
-        </div>
-        <div className="mt-3 lg:mt-0 lg:flex-shrink-0">
+            {ancestors.map((ancestor) => (
+              <span key={ancestor.id} className="flex items-center gap-1.5">
+                <ChevronLeft aria-hidden="true" className="h-3.5 w-3.5 ltr:rotate-180" />
+                <Link
+                  href={`/categories/${ancestor.id}`}
+                  className="rounded transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                >
+                  {categoryLabel(ancestor, locale)}
+                </Link>
+              </span>
+            ))}
+            <ChevronLeft aria-hidden="true" className="h-3.5 w-3.5 ltr:rotate-180" />
+            <span className="font-medium text-foreground" aria-current="page">
+              {name}
+            </span>
+          </nav>
+        }
+        actions={
           <PlayCategoryButton categoryId={category.id} scopeIds={scopeIds} snapshotAt={snapshotAt} rows={lessons} />
-        </div>
-      </div>
+        }
+      />
 
-      {/* Subcategories, and theirs (if this category has any) */}
-      {subcategories.length > 0 && <SubcategoryLinks nodes={subcategories} locale={locale} topLevel />}
+      {/* Subcategories as tiles, with their counts, and theirs inside each tile */}
+      {subcategories.length > 0 && (
+        <section aria-labelledby="subcategories-title" className="space-y-3">
+          <h2 id="subcategories-title" className="text-lg font-bold">
+            {tDesign('subcategories')}
+          </h2>
+          <CategoryTiles
+            nodes={subcategories}
+            tree={tree}
+            counts={counts}
+            locale={locale}
+            emptyLabel={t('emptyCategory')}
+            leading="folder"
+          />
+        </section>
+      )}
 
       {/* Lessons */}
       {lessonsFailed ? (
@@ -182,10 +182,7 @@ export default async function CategoryDetailPage({ params }: Props) {
           ))}
         </LessonCardList>
       ) : subcategories.length === 0 ? (
-        <EmptyState
-          icon={BookOpen}
-          title={isRTL ? 'אין שיעורים בקטגוריה זו עדיין' : 'No lessons in this category yet'}
-        />
+        <EmptyState icon={BookOpen} title={t('noLessonsInCategory')} />
       ) : null}
     </div>
   );

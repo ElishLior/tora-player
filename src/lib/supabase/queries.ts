@@ -123,9 +123,10 @@ export async function getCategoryLessonCounts(supabase: SupabaseClient): Promise
 // ==================== SERIES ====================
 
 export async function getAllSeries(supabase: SupabaseClient) {
+  // `lessons(count)`: the series' lessons the client can see (published only, for the anon client); one FK (lessons.series_id).
   const { data, error } = await supabase
     .from('series')
-    .select('*')
+    .select('*, lessons(count)')
     .order('name');
 
   if (error) throw error;

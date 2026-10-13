@@ -7,22 +7,44 @@ import { useState } from 'react';
 import { Clock, Pencil, Play, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { BookmarkDialog, getTagInfo, useBookmarkSavedNotice } from '@/components/bookmarks/bookmark-dialog';
+import { CardGrid } from '@/components/shared/card-grid';
+import { CoverTile, readingCoverOf } from '@/components/lessons/reading-cover';
 import { Link } from '@/i18n/routing';
 import { lessonMomentPath } from '@/lib/lesson-tracks';
+import { readingHue } from '@/lib/lesson-display';
 import { formatDuration } from '@/lib/utils';
 import type { LocalBookmark } from '@/stores/bookmarks-store';
 import { useBookmarksStore } from '@/stores/bookmarks-store';
 
+/** Tag pill colours: one per bookmark tag (important, review, quote, else). */
+function tagPillClass(value: string): string {
+  if (value === 'important') return 'bg-red-500/15 text-red-400';
+  if (value === 'review') return 'bg-amber-500/15 text-amber-400';
+  if (value === 'quote') return 'bg-blue-500/15 text-blue-400';
+  return 'bg-purple-500/15 text-purple-400';
+}
+
 /**
- * Bookmarks grouped by lesson (most recent lesson first), each linking into
- * the lesson at its position (`?t=`). Editing opens the bookmark dialog in
- * edit mode (it never plays the lesson). Deleting asks for a second tap.
+ * Bookmarks grouped by lesson (most recent lesson first). Each lesson is a card with its
+ * cover and title (linking to the lesson), and its bookmarks as rows: a time chip that
+ * opens the lesson at that moment (`?t=`), the tag, the note and the date. Editing opens
+ * the bookmark dialog in edit mode (it never plays the lesson). Deleting asks for a second
+ * tap. Groups sit in the rows grid, so a wide pane shows two or three side by side.
  */
-export function BookmarkGroups({ bookmarks, locale, lessons }: { bookmarks: LocalBookmark[]; locale: string; lessons?: Record<string, LessonWithRelations> | null }) {
+export function BookmarkGroups({
+  bookmarks,
+  locale,
+  lessons,
+}: {
+  bookmarks: LocalBookmark[];
+  locale: string;
+  lessons?: Record<string, LessonWithRelations> | null;
+}) {
   const removeBookmark = useBookmarksStore((s) => s.removeBookmark);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [editing, setEditing] = useState<LocalBookmark | null>(null);
   const te = useTranslations('bookmarkEdit');
+  const tDesign = useTranslations('pagesDesign');
   const saved = useBookmarkSavedNotice();
   const isRTL = locale === 'he';
 
@@ -49,99 +71,115 @@ export function BookmarkGroups({ bookmarks, locale, lessons }: { bookmarks: Loca
   };
 
   return (
-    <div className="space-y-6">
-      {sortedGroups.map(([lessonId, lessonBookmarks]) => {
-        const sorted = [...lessonBookmarks].sort((a, b) => a.position - b.position);
-        const lessonTitle = lessonBookmarks.find((bm) => bm.lessonTitle)?.lessonTitle;
+    <div className="space-y-4">
+      <CardGrid variant="rows" className="gap-y-3">
+        {sortedGroups.map(([lessonId, lessonBookmarks]) => {
+          const sorted = [...lessonBookmarks].sort((a, b) => a.position - b.position);
+          const lesson = lessons?.[lessonId];
+          const storedTitle = lessonBookmarks.find((bm) => bm.lessonTitle)?.lessonTitle;
+          const lessonTitle = storedTitle || (lesson && (lesson.hebrew_title || lesson.title));
+          const title = lessonTitle || tDesign('bookmarks.lessonFallback');
+          const cover = lesson ? readingCoverOf(lesson) : { text: '', hue: readingHue(lessonId) };
 
-        return (
-          <div key={lessonId} className="space-y-2">
-            <Link
-              href={lessonPath(lessons?.[lessonId] ?? lessonId)}
-              className="text-sm font-bold text-primary hover:underline truncate block"
-              dir="auto"
+          return (
+            <section
+              key={lessonId}
+              aria-label={title}
+              className="flex min-w-0 flex-col gap-2 rounded-2xl bg-[hsl(var(--surface-elevated))] p-3 sm:p-4"
             >
-              {lessonTitle || `${isRTL ? 'שיעור' : 'Lesson'} - ${lessonId.slice(0, 8)}...`}
-            </Link>
-
-            <div className="space-y-1">
-              {sorted.map((bm) => {
-                const tagInfo = getTagInfo(bm.tag);
-                const isConfirming = confirmDelete === bm.id;
-
-                return (
-                  <div
-                    key={bm.id}
-                    className="flex items-start gap-3 rounded-xl bg-[hsl(var(--surface-elevated))] p-3 group"
-                  >
+              <header className="flex items-center gap-3">
+                <CoverTile text={cover.text} hue={cover.hue} className="h-12 w-12" textClassName="text-sm" />
+                <div className="min-w-0 flex-1">
+                  <h3 className="min-w-0">
                     <Link
-                      href={lessonMomentPath(lessons?.[bm.lessonId] ?? bm.lessonId, bm.position, bm.audioFileId)}
-                      className="flex items-center gap-1.5 text-primary hover:text-primary/80 flex-shrink-0 mt-0.5"
+                      href={lessonPath(lesson ?? lessonId)}
+                      dir="auto"
+                      className="line-clamp-2 rounded text-[15px] font-bold leading-snug text-foreground transition-colors hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
                     >
-                      <Play className="h-3.5 w-3.5 fill-current" />
-                      <bdi dir="ltr" className="text-xs font-mono font-bold">
-                        {formatDuration(Math.round(bm.position))}
-                      </bdi>
+                      {title}
                     </Link>
+                  </h3>
+                  {lesson && (
+                    <p className="truncate text-[13px] text-muted-foreground" dir="auto">
+                      {lesson.hebrew_date || lesson.date}
+                    </p>
+                  )}
+                </div>
+              </header>
 
-                    <div className="flex-1 min-w-0 space-y-1">
-                      {tagInfo && (
-                        <span
-                          className={`inline-block text-[10px] font-medium px-2 py-0.5 rounded-full ${
-                            tagInfo.value === 'important'
-                              ? 'bg-red-500/15 text-red-400'
-                              : tagInfo.value === 'review'
-                                ? 'bg-amber-500/15 text-amber-400'
-                                : tagInfo.value === 'quote'
-                                  ? 'bg-blue-500/15 text-blue-400'
-                                  : 'bg-purple-500/15 text-purple-400'
-                          }`}
-                        >
-                          {isRTL ? tagInfo.label : tagInfo.labelEn}
-                        </span>
-                      )}
-                      {bm.note && (
-                        <p className="text-sm text-foreground leading-relaxed" dir="auto">
-                          {bm.note}
+              <ul className="space-y-1">
+                {sorted.map((bm) => {
+                  const tagInfo = getTagInfo(bm.tag);
+                  const isConfirming = confirmDelete === bm.id;
+                  const time = formatDuration(Math.round(bm.position));
+
+                  return (
+                    <li
+                      key={bm.id}
+                      className="group flex items-start gap-2 rounded-xl p-1.5 transition-colors duration-150 hover:bg-[hsl(var(--surface-highlight))] motion-reduce:transition-none"
+                    >
+                      <Link
+                        href={lessonMomentPath(lessons?.[bm.lessonId] ?? bm.lessonId, bm.position, bm.audioFileId)}
+                        className="inline-flex min-h-11 flex-shrink-0 items-center gap-1.5 rounded-full bg-primary/15 px-3 text-primary transition-colors hover:bg-primary/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                      >
+                        <Play aria-hidden="true" className="h-3.5 w-3.5 fill-current" />
+                        <bdi dir="ltr" className="font-mono text-[13px] font-bold tabular-nums">
+                          {time}
+                        </bdi>
+                      </Link>
+
+                      <div className="min-w-0 flex-1 space-y-1 py-1">
+                        {tagInfo && (
+                          <span
+                            className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${tagPillClass(tagInfo.value)}`}
+                          >
+                            {isRTL ? tagInfo.label : tagInfo.labelEn}
+                          </span>
+                        )}
+                        {bm.note && (
+                          <p className="text-sm leading-relaxed text-foreground" dir="auto">
+                            {bm.note}
+                          </p>
+                        )}
+                        <p className="flex items-center gap-1 text-[13px] text-muted-foreground">
+                          <Clock aria-hidden="true" className="h-3.5 w-3.5" />
+                          {new Date(bm.createdAt).toLocaleDateString(isRTL ? 'he-IL' : 'en-US')}
                         </p>
-                      )}
-                      <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                        <Clock className="h-3 w-3" />
-                        {new Date(bm.createdAt).toLocaleDateString(isRTL ? 'he-IL' : 'en-US')}
                       </div>
-                    </div>
 
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        // Focus the button first so focus returns here when the dialog closes (Safari does not focus on tap).
-                        e.currentTarget.focus();
-                        setEditing(bm);
-                      }}
-                      className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 group-hover:opacity-100 motion-reduce:transition-none [@media(hover:hover)]:opacity-0"
-                      aria-label={te('editBookmark', { time: formatDuration(Math.round(bm.position)) })}
-                    >
-                      <Pencil className="h-4 w-4" aria-hidden />
-                    </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          // Focus the button first so focus returns here when the dialog closes (Safari does not focus on tap).
+                          e.currentTarget.focus();
+                          setEditing(bm);
+                        }}
+                        className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 group-hover:opacity-100 motion-reduce:transition-none [@media(hover:hover)]:opacity-0"
+                        aria-label={te('editBookmark', { time })}
+                      >
+                        <Pencil className="h-4 w-4" aria-hidden />
+                      </button>
 
-                    <button
-                      onClick={() => handleDelete(bm.id)}
-                      className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 motion-reduce:transition-none ${
-                        isConfirming
-                          ? 'bg-red-500/15 text-red-400'
-                          : 'text-muted-foreground hover:bg-red-500/10 hover:text-red-400 focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:hover)]:opacity-0'
-                      }`}
-                      aria-label={isRTL ? 'מחק' : 'Delete'}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(bm.id)}
+                        className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 motion-reduce:transition-none ${
+                          isConfirming
+                            ? 'bg-red-500/15 text-red-400'
+                            : 'text-muted-foreground hover:bg-red-500/10 hover:text-red-400 focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:hover)]:opacity-0'
+                        }`}
+                        aria-label={isRTL ? 'מחק' : 'Delete'}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          );
+        })}
+      </CardGrid>
       <div role="status" aria-live="polite">
         {saved.text && <p className="text-[13px] font-medium text-emerald-300">{saved.text}</p>}
       </div>

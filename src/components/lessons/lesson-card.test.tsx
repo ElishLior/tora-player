@@ -153,3 +153,33 @@ describe('LessonCard row (desktop affordances)', () => {
     expect(html).toContain('lg:[@media(hover:hover)]:group-hover/lesson:bg-primary');
   });
 });
+
+describe('LessonCard short variant (the shorts page row)', () => {
+  const short = {
+    ...lesson,
+    id: 'short-1',
+    slug: 'short-1',
+    audio_files: lesson.audio_files?.slice(0, 1),
+  } as unknown as LessonWithRelations;
+
+  it('shows the rose accent tile, the date link and one length (never chips)', () => {
+    const html = renderToStaticMarkup(<LessonCard lesson={short} variant="short" />);
+    expect(html).toContain('bg-rose-400/15');
+    expect(html).toContain('data-lesson-date="2026-10-12"');
+    expect(html).toContain('82 דק׳');
+    expect(html).not.toContain('--pc');
+  });
+
+  it('keeps the title as the one stretched link, inside a positioned row', () => {
+    const html = renderToStaticMarkup(<LessonCard lesson={short} variant="short" />);
+    const titleLink = '<a href="/lessons/short-1"';
+    expect(html).toContain(titleLink);
+    const chain = openElementsAt(html, titleLink);
+    const rowIndex = chain.map((element) => element.name).lastIndexOf('article');
+    expect(rowIndex).toBeGreaterThan(-1);
+    for (const element of chain.slice(rowIndex + 1)) {
+      const utilities = element.classes.map((c) => c.split(':').pop() ?? '');
+      expect(utilities.filter((u) => CLIPPING_UTILITY.test(u))).toEqual([]);
+    }
+  });
+});
