@@ -103,3 +103,11 @@ Building blocks to compose before writing new code. Each has a small interface, 
 | `useMediaQuery` | `src/hooks/use-media-query.ts` | `(query)` → boolean, false during SSR | Mounting device-width-only UI after hydration. |
 | `useDeployedVersion` / `fetchDeployedVersion` / `buildsDiffer` | `src/hooks/use-deployed-version.ts`, `src/lib/app-update.ts`, `src/lib/app-version.ts` | bounded, no-store, silent on failure | Showing the live version next to the running one. |
 | Bookmarks cross-tab sync | `src/stores/bookmarks-store.ts` | `startBookmarksCrossTabSync(target)`, `rehydrateBookmarksOnStorageEvent(key)` | Keeping open tabs in step after an edit. |
+| `LessonRow` / `DateTile` | `src/components/lessons/lesson-row.tsx` | slots: tile, title, meta, parts, tags, progress, actions, footer | The row shell under `LessonCard` (and its `variant="short"`). Build a new row kind by filling slots, not by copying markup. |
+| `CardGrid` | `src/components/shared/card-grid.tsx` | `variant`: rows / tiles / cards | Pane-width grids for every list (`LessonCardList` delegates to it). |
+| `CollectionCard` / `CollectionHeader` | `src/components/shared/` | href, title, description, meta, cover · hue, cover, eyebrow, title, description, actions, back | Playlist and series tiles and their detail headers. |
+| `PageHeader` / `SearchField` | `src/components/shared/` | title, icon, subtitle, actions · input props | The header band and search box of list pages. |
+| `EmptyState` | `src/components/shared/empty-state.tsx` | icon, title, description, action, tone `neutral \| rose \| muted`, compact | Every empty or failed state (muted for failed reads). |
+| `CoverTile` | `src/components/lessons/reading-cover.tsx` | text, hue | A gradient cover with a word on it (`ReadingCover` uses it). |
+| `CategoryTiles` / `categoryDotClass` | `src/components/categories/category-tiles.tsx`, `src/lib/category-display.ts` | nodes, tree, counts, locale · icon → dot class | The categories index and category colour dots. |
+| `SavedLessonRow` | `src/components/offline/saved-lesson-row.tsx` | offline lesson meta | Downloads rows (works offline, no network reads). |

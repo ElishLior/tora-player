@@ -24,6 +24,14 @@ Migrations 023, 024 and 025 applied in production on October 13, 2026, before th
   - Failed catalog reads show an error with a retry button instead of an empty list.
   - "קטגוריות" is in the menu.
   - On phones, the mini player sits above the tab bar, and the latest lesson shows its cover, part count and series.
+- Every page in the 1.2 design (owner, October 13):
+  - Shorts are rows with a rose tile, in the same grid as lessons, on the shorts page and on home.
+  - Playlists and series get cover tiles and a header band.
+  - Bookmarks are grouped by lesson, and downloads use the same rows as lessons.
+  - /me shows its sections in two columns on desktop.
+  - Categories are tiles with colored dots and counts.
+  - Tags and search use the new design, with clear empty and no-results states.
+  - Every page uses one empty-state design.
 - Fixes from the requirements audit:
   - Pause cancels a pending retry. A blocked autoplay offers "המשך ניגון" in the mini player and the desktop bar.
   - The desktop bar links the series and the date.
