@@ -3,8 +3,12 @@
  * which makes the browser install a fresh worker (and fresh caches) instead of
  * keeping the previous deploy's precache forever.
  */
-export function getServiceWorkerUrl(buildId: string | undefined = process.env.NEXT_PUBLIC_BUILD_ID): string {
-  return `/sw.js?v=${encodeURIComponent(buildId || 'dev')}`;
+export function getServiceWorkerUrl(
+  buildId: string | undefined = process.env.NEXT_PUBLIC_BUILD_ID,
+  development: boolean = process.env.NODE_ENV === 'development',
+): string {
+  // `dev=1`: the dev server's chunk URLs are not content-hashed, so that worker caches nothing.
+  return `/sw.js?v=${encodeURIComponent(buildId || 'dev')}${development ? '&dev=1' : ''}`;
 }
 
 async function register(): Promise<void> {

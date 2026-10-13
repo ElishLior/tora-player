@@ -21,7 +21,9 @@ process.env.NEXT_PUBLIC_BUILD_ID = buildId;
 const appVersion = (JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8')) as { version: string }).version;
 
 const nextConfig: NextConfig = {
-  allowedDevOrigins: ['127.0.0.1', 'localhost'],
+  // Phones and other computers on the home network open the dev server by its LAN address;
+  // without these, Next blocks their /_next/* requests and the page never hydrates.
+  allowedDevOrigins: ['127.0.0.1', 'localhost', '192.168.*.*', '10.*.*.*', '*.local'],
   env: {
     NEXT_PUBLIC_BUILD_ID: buildId,
     NEXT_PUBLIC_APP_VERSION: appVersion,

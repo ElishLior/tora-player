@@ -39,6 +39,7 @@ Migrations 023, 024 and 025 applied in production on October 13, 2026, before th
   - Categories are tiles with colored dots and counts.
   - Tags and search use the new design, with clear empty and no-results states.
   - Every page uses one empty-state design.
+- The home intro ("כל מה שאפשר לעשות כאן") is one closed row on every visit and opens only when tapped (owner, October 13).
 - Fixes from the requirements audit:
   - Pause cancels a pending retry. A blocked autoplay offers "המשך ניגון" in the mini player and the desktop bar.
   - The desktop bar links the series and the date.

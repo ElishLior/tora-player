@@ -7,7 +7,11 @@
 // a deploy (a long lesson playing) still loads that build's hashed chunks.
 importScripts('/sw-push.js');
 
-const BUILD_ID = new URL(self.location.href).searchParams.get('v') || 'dev';
+const SW_PARAMS = new URL(self.location.href).searchParams;
+const BUILD_ID = SW_PARAMS.get('v') || 'dev';
+// Registered by `next dev` (src/lib/register-sw.ts): dev chunk URLs are not
+// content-hashed, so this worker caches nothing and clears what an earlier one kept.
+const DEV = SW_PARAMS.get('dev') === '1' || BUILD_ID === 'dev';
 const CACHE_PREFIX = 'tora-player-';
 const STATIC_CACHE = `${CACHE_PREFIX}${BUILD_ID}-static`;
 const PAGES_CACHE = `${CACHE_PREFIX}${BUILD_ID}-pages`;
@@ -63,6 +67,10 @@ async function precacheOfflineShell(locale) {
 self.addEventListener('install', (event) => {
   event.waitUntil(
     (async () => {
+      if (DEV) {
+        await self.skipWaiting();
+        return;
+      }
       // The default locale's shell is required: if it can't be cached the
       // install fails and the previous worker keeps serving.
       await precacheOfflineShell(DEFAULT_LOCALE);
@@ -82,6 +90,12 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
+      if (DEV) {
+        const stale = (await caches.keys()).filter((name) => name.startsWith(CACHE_PREFIX));
+        await Promise.all(stale.map((name) => caches.delete(name)));
+        await self.clients.claim();
+        return;
+      }
       const now = Date.now();
       const names = await caches.keys();
       // Stamp every other build as retired now (if not already) and keep the
@@ -192,7 +206,7 @@ self.addEventListener('fetch', (event) => {
   // Cross-origin (Supabase, R2, ...) is never intercepted or cached.
   if (url.origin !== self.location.origin) return;
   // In local development the worker stays out of the way.
-  if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') return;
+  if (DEV || url.hostname === 'localhost' || url.hostname === '127.0.0.1') return;
   // API routes (audio/image streams with Range, auth, data) go straight to the network.
   if (url.pathname.startsWith('/api/')) return;
 

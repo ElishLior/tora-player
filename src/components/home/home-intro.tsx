@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   Bell,
@@ -19,8 +19,6 @@ import {
 } from 'lucide-react';
 import { usePushNotifications } from '@/components/notifications/use-push-notifications';
 import { PlatformShareIcon } from '@/components/shared/platform-share-icon';
-import { useHydrated } from '@/hooks/use-hydrated';
-import { HOME_INTRO_STORAGE_KEY, homeIntroChoice, homeIntroStart } from '@/lib/home-intro';
 import { cn } from '@/lib/utils';
 
 /** Inline icon inside a sentence: the same glyph the real button shows. */
@@ -57,46 +55,15 @@ const ITEMS = [
   { key: 'share', hue: 210, icons: [] },
 ] as const;
 
-function readStored(): string | null {
-  try {
-    return localStorage.getItem(HOME_INTRO_STORAGE_KEY);
-  } catch {
-    return null;
-  }
-}
-
-function writeStored(value: string) {
-  try {
-    localStorage.setItem(HOME_INTRO_STORAGE_KEY, value);
-  } catch {
-    // Private mode or full storage: the intro simply opens again next time.
-  }
-}
-
 /**
  * "כל מה שאפשר לעשות כאן": the feature intro at the top of the home page.
- * Collapsed it is one line plus the lesson-page tip; expanded it lists every
- * feature in a grid, each with the app's own icon. Starts collapsed on the
- * server and on later visits, open on the first visit, then remembers the choice.
+ * Collapsed it is one line; expanded it lists every feature in a grid, each
+ * with the app's own icon, plus the lesson-page tip. It always loads collapsed
+ * and opens only when the listener taps it (owner, October 13, 2026).
  */
 export function HomeIntro({ className }: { className?: string }) {
   const t = useTranslations('homeIntro');
-  const hydrated = useHydrated();
   const [open, setOpen] = useState(false);
-
-  // Device-only state: applied after hydration so the server HTML matches.
-  useEffect(() => {
-    if (!hydrated) return;
-    const start = homeIntroStart(readStored(), window.matchMedia('(min-width: 1024px)').matches);
-    if (start.write) writeStored(start.write);
-    setOpen(start.open);
-  }, [hydrated]);
-
-  const toggle = () => {
-    const next = !open;
-    setOpen(next);
-    writeStored(homeIntroChoice(next));
-  };
 
   const lessonPageTip = (
     <div className="from-primary/14 grid grid-cols-[auto_1fr] items-start gap-3 rounded-xl border border-primary/30 bg-gradient-to-r to-primary/5 p-3 text-[13px] leading-relaxed text-foreground/80">
@@ -111,13 +78,13 @@ export function HomeIntro({ className }: { className?: string }) {
     <section
       aria-labelledby="home-intro-title"
       className={cn(
-        'rounded-2xl border border-border/60 bg-[linear-gradient(180deg,hsl(0_0%_12%),hsl(0_0%_10%))] px-3 pb-3 pt-1',
+        'rounded-2xl border border-border/60 bg-[linear-gradient(180deg,hsl(0_0%_12%),hsl(0_0%_10%))] px-3 py-1',
         className,
       )}
     >
       <button
         type="button"
-        onClick={toggle}
+        onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
         aria-controls="home-intro-body"
         className="flex min-h-12 w-full items-center gap-3 rounded-xl text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
@@ -142,7 +109,7 @@ export function HomeIntro({ className }: { className?: string }) {
         </span>
       </button>
 
-      <div id="home-intro-body" hidden={!open} className={cn('grid gap-3 pt-2', !open && 'hidden')}>
+      <div id="home-intro-body" hidden={!open} className={cn('grid gap-3 pb-2 pt-2', !open && 'hidden')}>
         <p className="text-sm leading-relaxed text-foreground/75">{t('lead')}</p>
         {/* Two tinted cards per row on every screen (concept B). */}
         <ul className="grid grid-cols-2 gap-2">
@@ -166,9 +133,6 @@ export function HomeIntro({ className }: { className?: string }) {
           <li className="col-span-2">{lessonPageTip}</li>
         </ul>
       </div>
-
-      {/* Collapsed: the lesson-page tip stays visible on its own. */}
-      {!open && <div className="pt-1">{lessonPageTip}</div>}
     </section>
   );
 }
