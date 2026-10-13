@@ -115,18 +115,21 @@ test.describe('music app player behavior', () => {
 
     await expect(page.locator('button button, button [role="button"]')).toHaveCount(0);
     await expect(page.locator('header').getByRole('button', { name: 'מתנגן כעת' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'סימניה' })).toBeVisible();
+    // Bookmark is offered by the desktop bar and the now-playing panel (one session, two surfaces).
+    await expect(page.getByRole('button', { name: 'סימניה' }).first()).toBeVisible();
     await expect(page.getByRole('button', { name: 'שדר' })).toBeVisible();
 
     await page.locator('header').getByRole('button', { name: 'מתנגן כעת' }).click();
+    // The expanded player is a dialog; the desktop now-playing panel repeats some actions outside it.
+    const full = page.getByRole('dialog');
 
-    await expect(page.getByRole('button', { name: 'פתח שיעור' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'סימניה' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'סימון קטע' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'מצב נהיגה' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'שמירה אופליין' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'הורדת קובץ למכשיר' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'שדר' })).toBeVisible();
+    await expect(full.getByRole('button', { name: 'פתח שיעור' })).toBeVisible();
+    await expect(full.getByRole('button', { name: 'סימניה' })).toBeVisible();
+    await expect(full.getByRole('button', { name: 'סימון קטע' })).toBeVisible();
+    await expect(full.getByRole('button', { name: 'מצב נהיגה' })).toBeVisible();
+    await expect(full.getByRole('button', { name: 'שמירה אופליין' })).toBeVisible();
+    await expect(full.getByRole('link', { name: 'הורדת קובץ למכשיר' })).toBeVisible();
+    await expect(full.getByRole('button', { name: 'שדר' })).toBeVisible();
     await expect(page.getByText('שתף קטע')).toHaveCount(0);
   });
 

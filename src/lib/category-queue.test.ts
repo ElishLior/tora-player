@@ -251,7 +251,8 @@ describe('loadCategoryQueueSegment', () => {
 
     expect(query.table).toBe('lessons');
     expect(query.calls.eq).toEqual([['is_published', true]]);
-    expect(query.calls.in).toEqual([['category_id', [UUID_A, UUID_B]]]);
+    // Membership mode: a lesson is in scope when any of its categories is (migration 026).
+    expect(query.calls.in).toEqual([['category_scope.category_id', [UUID_A, UUID_B]]]);
     expect(query.calls.lte).toEqual([['created_at', SNAPSHOT]]);
     expect(query.calls.order).toEqual([
       ['date', { ascending: false }],

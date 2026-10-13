@@ -4,6 +4,9 @@ Versions follow `MAJOR.MINOR.PATCH`. The version in `package.json` is the releas
 
 ## 1.2.0 — in progress
 
+Migrations 023, 024 and 025 applied in production on October 13, 2026, before the deploy (checked read-only; a stale `move_category` call returns `CAT01` through PostgREST).
+
+
 - Continuous category playback: "ניגון רציף של הקטגוריה" on a category page plays the category and all its subcategories in one session. Order: date, then upload time. The queue is frozen when it starts, so new uploads don't reshuffle it. Multipart lessons finish before the next lesson, more lessons load ahead in segments of 25, and unavailable lessons are skipped with a notice (at most 3 in a row). It ends with a "category finished" notice, with no repeat or shuffle. A restored session never autoplays. A source error skips a lesson only after one retry. While the next lesson loads, the player shows loading and Play keeps waiting (only Pause cancels). Skipped, stopped and finished notices show on the mini player and the desktop bar. The saved queue keeps 50 tracks behind the current one.
 - Image download: the lesson image viewer has a "הורדת התמונה" button that saves the full-size original, named after the lesson and the image number. On iPhone home-screen apps it opens the image, and Share → Save Image saves it.
 - Bookmarks can be edited (note and tag) on /bookmarks, /me and the lesson page, keeping the same bookmark. A bookmark changed on another device is not overwritten (needs migration 024).
@@ -12,6 +15,40 @@ Versions follow `MAJOR.MINOR.PATCH`. The version in `package.json` is the releas
   - A proper bottom bar from 1024px: transport, timeline with times, speed, volume (from 1280px), bookmark, share, cast, up next.
   - The home side panel (from 1360px) is a full player. With nothing loaded it shows the last-played lesson with a "continue" button, and it never autoplays.
   - The duplicate "המשך האזנה" strip is hidden where the panel shows.
+- Wide desktop (owner feedback, October 13):
+  - The app is a three-pane layout: the side menu, a fluid centre and the now-playing panel. The panel is on every page from 1280px.
+  - The latest lesson is the first box on home, with its reading cover and part count. The panel shows the latest lesson when nothing has been played yet.
+  - Lesson lists spread to 2–4 columns with the screen width. Shorts and categories sit side by side.
+  - Hovering a lesson lifts the row, highlights the title, turns the play button green and shows an arrow.
+  - The lesson page has two columns: the player and parts, beside a column with the description, category and images.
+  - Failed catalog reads show an error with a retry button instead of an empty list.
+  - "קטגוריות" is in the menu.
+  - On phones, the mini player sits above the tab bar, and the latest lesson shows its cover, part count and series.
+- A lesson can belong to several categories at any level (owner, October 13):
+  - The admin ticks them in a checkbox tree. The first one is the lesson's primary category, and another can be made primary.
+  - Category pages, category playback and the category filter include a lesson when any of its categories matches. Counts count each lesson once per branch.
+  - The lesson page links all its categories.
+  - The bulk bar can set, add or remove a category on many lessons at once.
+  - Shorts, feeds and notifications use the primary category.
+  - Migrations 026 and 027 were applied on October 13. Applying 026 briefly broke the live 1.1.4 site; the cause was a foreign key that made the lessons→categories embeds ambiguous. 027 removed the key and replaced it with a delete trigger.
+- Every page in the 1.2 design (owner, October 13):
+  - Shorts are rows with a rose tile, in the same grid as lessons, on the shorts page and on home.
+  - Playlists and series get cover tiles and a header band.
+  - Bookmarks are grouped by lesson, and downloads use the same rows as lessons.
+  - /me shows its sections in two columns on desktop.
+  - Categories are tiles with colored dots and counts.
+  - Tags and search use the new design, with clear empty and no-results states.
+  - Every page uses one empty-state design.
+- The home intro is now "טיפים ועדכונים" (owner, October 13): a closed row on every visit that shows one tip at a time with its icon. Only the arrow opens it and shows all of them. Admins set how often the tip changes (or keep one fixed) at /admin/settings ("הגדרות תצוגה"; default every 7 seconds). Migration 028 was applied on October 13.
+- Fixes from the requirements audit:
+  - Pause cancels a pending retry. A blocked autoplay offers "המשך ניגון" in the mini player and the desktop bar.
+  - The desktop bar links the series and the date.
+  - Bookmarks stay in sync across open tabs.
+  - Renaming a category refuses to overwrite another admin's newer edit.
+  - English category names are loaded everywhere.
+  - /me and the admin dashboard show the running and the live version.
+  - The lesson page shows its category as a link.
+  - The image viewer's download button resets per image, and the viewer's labels are translated.
 - One lesson row everywhere: categories, /lessons, tags, search, series and playlists all use the home page's row (date tile, part chips, tags, progress, play button). List play buttons play in place.
 - Version 1.2.0:
   - The version is shown on /me and on the admin dashboard, and `/api/health` reports the real version.

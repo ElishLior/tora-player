@@ -18,4 +18,7 @@ export const LESSON_CARD_COLUMNS =
  * A lesson's category, embedded in list rows: enough for categoryLabel() (both
  * names). The name is read here, so a card's category badge can show English.
  */
-export const LESSON_CATEGORY = 'category:categories(id, hebrew_name, name)';
+// The FK hint names the primary-category relationship: lesson_categories (migration 026) is a second
+// path from lessons to categories, and an unhinted `categories(...)` embed becomes ambiguous (PGRST201)
+// if that table ever gets a foreign key to categories.
+export const LESSON_CATEGORY = 'category:categories!lessons_category_id_fkey(id, hebrew_name, name)';

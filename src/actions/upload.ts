@@ -4,6 +4,9 @@ import { insertLessonWithSlug } from '@/lib/supabase/create-lesson-slug';
 import { revalidateCatalog } from '@/lib/supabase/anon';
 import { AdminRequiredError, requireAdmin } from '@/lib/auth/admin';
 import { createAdminSupabaseClient } from '@/lib/supabase/admin';
+import { getCategoriesTree } from '@/lib/supabase/queries';
+import { writeLessonCategories } from '@/lib/supabase/lesson-category-writes';
+import { normalizeCategorySelection } from '@/lib/lesson-categories';
 import { notifyNewLesson, notifyNewLessons } from '@/lib/notifications/notify';
 import type { NotifyMode } from '@/lib/notifications/batch-rules';
 import { normalizeTags } from '@/lib/tags';
@@ -43,7 +46,8 @@ export async function createDraftLesson(fields: DraftLessonFields): Promise<Acti
   const denied = await authorize();
   if (denied) return { error: denied };
 
-  const parsed = createLessonSchema.safeParse({ ...fields, source_type: 'upload' });
+  const { category_ids: categoryIds, ...lessonFields } = fields;
+  const parsed = createLessonSchema.safeParse({ ...lessonFields, source_type: 'upload' });
   if (!parsed.success) {
     return { error: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ') };
   }
@@ -54,7 +58,21 @@ export async function createDraftLesson(fields: DraftLessonFields): Promise<Acti
     { date: parsed.data.date, parsha: parsed.data.parsha, isShort: parsed.data.lesson_type === SHORT_LESSON_TYPE || parsed.data.category_id === SHORTS_CATEGORY_ID },
   );
   if (error) return { error: error.message };
-  return { data: { id: data.id as string } };
+  const id = data.id as string;
+  if (categoryIds && categoryIds.length > 1) await saveDraftCategories(id, categoryIds);
+  return { data: { id } };
+}
+
+/**
+ * The extra categories of a new draft lesson (migration 026). Best effort: the lesson
+ * already exists, so a failure must not fail the draft (a retry would make a second lesson).
+ * The primary is already saved with the row, and the editor can fix the rest.
+ */
+async function saveDraftCategories(lessonId: string, categoryIds: string[]): Promise<void> {
+  const supabase = createAdminSupabaseClient();
+  const tree = await getCategoriesTree(supabase);
+  const written = await writeLessonCategories(supabase, lessonId, normalizeCategorySelection(categoryIds, tree));
+  if ('error' in written) console.error('Upload: could not save the lesson categories', written.error);
 }
 
 /**

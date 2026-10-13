@@ -174,7 +174,7 @@
     "allLessons": "All lessons"
   },
   "homeIntro": {
-    "title": "Everything you can do here",
+    "title": "Tips and updates",
     "lead": "Tora Player is built to be easy to learn from anywhere. To open a lesson and see all of it, tap the lesson's title. Here is what you have:",
     "more": "{count} more",
     "hide": "Hide",
@@ -271,6 +271,7 @@
       "failed": "Playback stopped. Tap play to try again."
     },
     "previousTrack": "Previous",
+    "continueBlocked": "Tap to continue",
     "nextTrack": "Next",
     "upNextEmpty": "Nothing else in the queue",
     "showAllUpNext": "Show full queue ({count})",
@@ -518,7 +519,8 @@
     "library": "My library",
     "sidebarLabel": "Side menu",
     "searchPlaceholder": "Search lessons…",
-    "browse": "Browse"
+    "browse": "Browse",
+    "categories": "Categories"
   },
   "auth": {
     "adminArea": "Admin area",
@@ -801,6 +803,13 @@
     "close": "Close",
     "enabled": "Notifications are on"
   },
+  "lessonPage": {
+    "category": "Category",
+    "edit": "Edit",
+    "lightboxClose": "Close",
+    "lightboxPrevious": "Previous image",
+    "lightboxNext": "Next image"
+  },
   "categoryAdmin": {
     "title": "Manage categories",
     "topLevelCount": "{count, plural, =0 {No top-level categories} one {One top-level category} other {# top-level categories}}",
@@ -861,6 +870,31 @@
     "errNotAdmin": "You do not have permission for this action",
     "errFailed": "Could not save the change. Try again."
   },
+  "lessonCategories": {
+    "legend": "Categories",
+    "pickerHint": "Tick a category or subcategory. The lesson appears in every category you tick. The first one is the primary.",
+    "search": "Search categories",
+    "noMatches": "No matching categories",
+    "selectedLabel": "Selected categories",
+    "noneSelected": "No category selected",
+    "primary": "Primary",
+    "makePrimary": "Make primary",
+    "makePrimaryFor": "Make {name} the primary category",
+    "remove": "Remove",
+    "removeFor": "Remove {name}",
+    "migrationNeeded": "Saving several categories for a lesson needs migration 026. Only the primary category was saved.",
+    "saveFailed": "Could not save the categories. Try again.",
+    "bulkMode": "Action",
+    "bulkSet": "Set (replaces all categories)",
+    "bulkAdd": "Add category",
+    "bulkRemove": "Remove category",
+    "bulkCategory": "Category",
+    "bulkNeedCategory": "Choose a category",
+    "bulkDone": "{count} lessons updated",
+    "errNotAdmin": "You are not allowed to do this",
+    "errInvalid": "The request is not valid",
+    "errFailed": "Could not save. Try again."
+  },
   "diagnostics": {
     "title": "Playback log",
     "intro": "A device check tool. While it is on, the player records which events arrived from headphones, the lock screen and the system. The log stays on this device and is never sent anywhere.",
@@ -898,7 +932,9 @@
     "refresh": "Refresh",
     "later": "Later",
     "recovery": "The new version did not load. Close the tab and open the site again.",
-    "versionLabel": "Version {version} · {build}"
+    "versionLabel": "Version {version} · {build}",
+    "runningAndDeployed": "Running: {running} · Live: {deployed}",
+    "versionDiffers": "(differs from the live site)"
   },
   "releaseAnnouncement": {
     "title": "Release announcement",
@@ -971,5 +1007,63 @@
     "resume": "Continue listening",
     "nothingPlayedTitle": "No lesson played yet",
     "nothingPlayedHint": "A lesson you start listening to will appear here."
+  },
+  "desktopShell": {
+    "partsCount": "{count, plural, =1 {1 part} =2 {2 parts} other {# parts}}",
+    "notifyTitle": "New lesson posted?",
+    "notifyBody": "Get an alert the moment a new lesson goes up.",
+    "errorTitle": "We could not load the lessons",
+    "errorHint": "Check your connection and try again.",
+    "retry": "Try again"
+  },
+  "pagesDesign": {
+    "search": {
+      "title": "Search",
+      "placeholder": "Search lessons...",
+      "hint": "Type to search lessons, topics and tags",
+      "noResults": "No results found",
+      "noResultsFor": "No lessons found for \"{query}\""
+    },
+    "playlists": {
+      "emptyPlaylist": "Empty playlist"
+    },
+    "series": {
+      "emptyLessons": "No lessons in this series"
+    },
+    "bookmarks": {
+      "hint": "Tap the bookmark button in the player to save important moments",
+      "lessonFallback": "Lesson"
+    },
+    "offline": {
+      "savedLessons": "Saved lessons"
+    },
+    "eyebrow": {
+      "playlist": "Playlist",
+      "series": "Series",
+      "category": "Category"
+    },
+    "lessonCount": "{count, plural, =0 {No lessons} =1 {One lesson} other {# lessons}}",
+    "subcategories": "Subcategories"
+  },
+  "adminSettings": {
+    "title": "Display settings",
+    "cardDescription": "How fast the home page's tips change",
+    "back": "Back to the dashboard",
+    "save": "Save",
+    "saved": "Saved. The home page will use the new pace.",
+    "schemaMissing": "Settings aren't available yet: migration 028 must be applied to the database.",
+    "tips": {
+      "title": "Tips and updates",
+      "description": "The box on the home page shows one tip at a time and changes it on its own. Choose how often here.",
+      "label": "Change the tip every",
+      "seconds": "{count} seconds",
+      "off": "Don't change (one fixed tip)"
+    },
+    "errors": {
+      "unauthorized": "Not authorized. Sign in again as an admin.",
+      "invalid": "That value isn't valid.",
+      "schema_missing": "Migration 028 must be applied before saving.",
+      "failed": "Saving failed. Try again."
+    }
   }
 }

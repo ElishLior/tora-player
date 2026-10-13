@@ -7,7 +7,7 @@ import { LessonCardList } from '@/components/lessons/lesson-card-list';
 import { LessonCardSkeleton } from '@/components/lessons/lesson-card-skeleton';
 import { useInfiniteScroll } from '@/hooks/use-infinite-scroll';
 import { getLessonsPaginated } from '@/actions/lessons-paginated';
-import { bulkUpdateLessonCategory } from '@/actions/lessons';
+import { bulkChangeLessonCategories, type BulkCategoryMode } from '@/actions/lesson-categories';
 import { CategoryPicker } from '@/components/categories/category-picker';
 import {
   canAutoLoadMore,
@@ -78,6 +78,7 @@ export function LessonsClient({
   searchLessons,
 }: LessonsClientProps) {
   const tTags = useTranslations('tagBrowse');
+  const tCategories = useTranslations('lessonCategories');
   const isSearchMode = !!searchLessons;
 
   // Infinite scroll state (normal mode only)
@@ -134,6 +135,7 @@ export function LessonsClient({
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
+  const [bulkMode, setBulkMode] = useState<BulkCategoryMode>('set');
   const [bulkLoading, setBulkLoading] = useState(false);
   const [bulkError, setBulkError] = useState<string | null>(null);
   const [bulkSuccess, setBulkSuccess] = useState<string | null>(null);
@@ -161,6 +163,7 @@ export function LessonsClient({
     setSelectionMode(false);
     setSelectedIds(new Set());
     setSelectedCategoryId('');
+    setBulkMode('set');
     setBulkError(null);
     setBulkSuccess(null);
   }, []);
@@ -168,11 +171,10 @@ export function LessonsClient({
   const handleBulkSave = useCallback(async () => {
     if (selectedIds.size === 0) return;
 
-    const categoryId = selectedCategoryId === '' ? null : selectedCategoryId === '__clear__' ? null : selectedCategoryId;
-
-    // If no category selected and not clearing
-    if (selectedCategoryId === '') {
-      setBulkError(locale === 'he' ? 'בחר קטגוריה' : 'Select a category');
+    // "__clear__" is the "no category" option: only "set" can clear.
+    const categoryId = selectedCategoryId === '__clear__' ? null : selectedCategoryId || null;
+    if (selectedCategoryId === '' || (categoryId === null && bulkMode !== 'set')) {
+      setBulkError(tCategories('bulkNeedCategory'));
       return;
     }
 
@@ -180,46 +182,31 @@ export function LessonsClient({
     setBulkError(null);
     setBulkSuccess(null);
 
-    const result = await bulkUpdateLessonCategory(
-      Array.from(selectedIds),
-      categoryId
-    );
+    const result = await bulkChangeLessonCategories(Array.from(selectedIds), bulkMode, categoryId);
 
     setBulkLoading(false);
 
-    if (result.error) {
-      setBulkError(result.error);
-    } else {
-      const count = selectedIds.size;
-      setBulkSuccess(
-        locale === 'he'
-          ? `${count} שיעורים עודכנו בהצלחה`
-          : `${count} lessons updated successfully`
-      );
-
-      // Update local lesson data to reflect the change
-      const newCategory = categoryId
-        ? (categories?.find((c) => c.id === categoryId) ?? null)
-        : null;
-
-      if (isSearchMode) {
-        // search mode — can't update easily, rely on revalidation
-      } else {
-        setLessons((prev) =>
-          prev.map((l) =>
-            selectedIds.has(l.id)
-              ? { ...l, category_id: categoryId, category: newCategory }
-              : l
-          )
-        );
-      }
-
-      // Clear selection after short delay so user sees the success message
-      setTimeout(() => {
-        exitSelectionMode();
-      }, 1500);
+    if ('error' in result) {
+      setBulkError(tCategories('errFailed'));
+      return;
     }
-  }, [selectedIds, selectedCategoryId, locale, categories, isSearchMode, exitSelectionMode]);
+
+    setBulkSuccess(tCategories('bulkDone', { count: selectedIds.size }));
+
+    // "set" replaces the categories, so the cards show the new primary at once. Add and remove
+    // change memberships the list does not hold, so they show after the revalidation.
+    if (bulkMode === 'set' && !isSearchMode) {
+      const newCategory = categoryId ? (categories?.find((c) => c.id === categoryId) ?? null) : null;
+      setLessons((prev) =>
+        prev.map((l) => (selectedIds.has(l.id) ? { ...l, category_id: categoryId, category: newCategory } : l)),
+      );
+    }
+
+    // Clear selection after short delay so user sees the success message
+    setTimeout(() => {
+      exitSelectionMode();
+    }, 1500);
+  }, [selectedIds, selectedCategoryId, bulkMode, isSearchMode, categories, exitSelectionMode, tCategories]);
 
   const groups = groupByDate(allLessons, locale);
 
@@ -351,7 +338,22 @@ export function LessonsClient({
       {/* Floating action bar */}
       {selectionMode && selectedIds.size > 0 && (
         <div className="fixed bottom-20 inset-x-0 z-50 flex justify-center px-4" dir="rtl">
-          <div className="bg-[hsl(var(--surface-elevated))] border border-[hsl(var(--border))] rounded-2xl shadow-2xl px-4 py-3 flex items-center gap-3 max-w-md w-full">
+          <div className="bg-[hsl(var(--surface-elevated))] border border-[hsl(var(--border))] rounded-2xl shadow-2xl px-4 py-3 flex flex-wrap items-center gap-3 max-w-md w-full">
+            {/* What to do with the chosen category */}
+            <select
+              value={bulkMode}
+              onChange={(e) => {
+                setBulkMode(e.target.value as BulkCategoryMode);
+                setBulkError(null);
+              }}
+              aria-label={tCategories('bulkMode')}
+              className="shrink-0 rounded-lg border border-[hsl(var(--border))] bg-background px-2 py-2 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+            >
+              <option value="set">{tCategories('bulkSet')}</option>
+              <option value="add">{tCategories('bulkAdd')}</option>
+              <option value="remove">{tCategories('bulkRemove')}</option>
+            </select>
+
             {/* Category picker */}
             <CategoryPicker
               value={selectedCategoryId}

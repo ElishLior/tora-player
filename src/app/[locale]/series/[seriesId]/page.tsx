@@ -10,12 +10,15 @@ import { LessonCard } from '@/components/lessons/lesson-card';
 import { LessonCardList } from '@/components/lessons/lesson-card-list';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PlayLessonsButtons } from '@/components/lessons/play-lessons-buttons';
+import { CollectionHeader } from '@/components/shared/collection-header';
+import { CoverTile } from '@/components/lessons/reading-cover';
 import { Link } from '@/i18n/routing';
 import { ArrowRight, BookOpen } from 'lucide-react';
 import type { LessonWithRelations } from '@/types/database';
 import { JsonLd } from '@/components/seo/json-ld';
 import { DEFAULT_LOCALE, SITE_NAME, SITE_TAGLINE, seriesFeedPath, seriesPath } from '@/config/site';
 import { breadcrumbJsonLd, pageAlternates, seriesJsonLd, truncateText } from '@/lib/seo';
+import { readingHue } from '@/lib/lesson-display';
 
 type Props = { params: Promise<{ locale: string; seriesId: string }> };
 
@@ -42,10 +45,7 @@ export default async function SeriesDetailPage({ params }: Props) {
 
   let series, lessons;
   try {
-    [series, lessons] = await Promise.all([
-      loadSeries(seriesId),
-      getCachedSeriesLessons(seriesId),
-    ]);
+    [series, lessons] = await Promise.all([loadSeries(seriesId), getCachedSeriesLessons(seriesId)]);
   } catch {
     notFound();
   }
@@ -53,6 +53,8 @@ export default async function SeriesDetailPage({ params }: Props) {
   if (!series) notFound();
 
   const tCommon = await getTranslations({ locale: DEFAULT_LOCALE, namespace: 'common' });
+  const tDesign = await getTranslations('pagesDesign');
+  const name = series.hebrew_name || series.name;
 
   const seriesLessons = lessons.map((lesson) => ({ ...lesson, series }) as LessonWithRelations);
 
@@ -64,24 +66,37 @@ export default async function SeriesDetailPage({ params }: Props) {
           breadcrumbJsonLd([
             { name: SITE_NAME.he, pathname: '/' },
             { name: tCommon('series'), pathname: '/series' },
-            { name: series.hebrew_name || series.name, pathname: seriesPath(series.id) },
+            { name, pathname: seriesPath(series.id) },
           ]),
         ]}
       />
-      <div className="flex items-center gap-3">
-        <Link href="/series" className="rounded-full p-2 hover:bg-muted transition-colors">
-          <ArrowRight className="h-5 w-5" />
-        </Link>
-        <div>
-          <h1 className="text-2xl font-bold" dir="rtl">{series.hebrew_name || series.name}</h1>
-          {series.description && (
-            <p className="text-muted-foreground mt-1" dir="rtl">{series.description}</p>
-          )}
-        </div>
-      </div>
-
-      {/* The rows carry no series; attach it so the player shows and links the series name. */}
-      {lessons.length > 0 && <PlayLessonsButtons lessons={seriesLessons} continueSeries />}
+      <CollectionHeader
+        hue={readingHue(series.id)}
+        eyebrow={tDesign('eyebrow.series')}
+        title={name}
+        description={series.description}
+        cover={
+          <CoverTile
+            text={name}
+            hue={readingHue(series.id)}
+            className="h-28 w-28 sm:h-36 sm:w-36"
+            textClassName="line-clamp-3 text-lg"
+          />
+        }
+        back={
+          <Link
+            href="/series"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-full px-3 text-[13px] font-bold text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+          >
+            <ArrowRight aria-hidden="true" className="h-4 w-4 ltr:rotate-180" />
+            {tCommon('series')}
+          </Link>
+        }
+        actions={
+          /* The rows carry no series; attach it so the player shows and links the series name. */
+          lessons.length > 0 && <PlayLessonsButtons lessons={seriesLessons} continueSeries />
+        }
+      />
 
       {lessons.length > 0 ? (
         <LessonCardList>
@@ -90,7 +105,7 @@ export default async function SeriesDetailPage({ params }: Props) {
           ))}
         </LessonCardList>
       ) : (
-        <EmptyState icon={BookOpen} title={locale === 'he' ? 'אין שיעורים בסדרה' : 'No lessons in this series'} />
+        <EmptyState icon={BookOpen} title={tDesign('series.emptyLessons')} />
       )}
     </div>
   );

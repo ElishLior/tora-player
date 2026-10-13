@@ -84,10 +84,12 @@ function fakeAdmin(categories: Category[], rpc: (name: string, args: Record<stri
         kind: 'select',
       };
       let filterId: string | undefined;
+      let filterUpdatedAt: string | undefined;
       const builder = {
         select: () => builder,
         order: () => builder,
         single: () => builder,
+        maybeSingle: () => builder,
         update: (changes: Record<string, unknown>) => {
           op = { kind: 'update', changes };
           return builder;
@@ -98,13 +100,21 @@ function fakeAdmin(categories: Category[], rpc: (name: string, args: Record<stri
         },
         eq: (column: string, value: unknown) => {
           if (column === 'id') filterId = String(value);
+          if (column === 'updated_at') filterUpdatedAt = String(value);
           return builder;
         },
         then(resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) {
           let result: { data: unknown; error: DbError };
           if (op.kind === 'update') {
-            writes.push({ id: filterId, changes: op.changes });
-            result = { data: null, error: null };
+            // Like PostgREST: the update matches no row when the version filter differs.
+            const current = categories.find((c) => c.id === filterId);
+            const matches = current !== undefined && (filterUpdatedAt === undefined || current.updated_at === filterUpdatedAt);
+            if (matches) {
+              writes.push({ id: filterId, changes: op.changes });
+              result = { data: { ...current, ...op.changes }, error: null };
+            } else {
+              result = { data: null, error: null };
+            }
           } else if (op.kind === 'insert') {
             inserts.push(op.payload);
             result = { data: { id: 'new-id', ...op.payload }, error: null };
@@ -314,7 +324,7 @@ describe('updateCategory', () => {
     const fake = fakeAdmin(rows());
     useAdmin(fake);
 
-    await updateCategory(WORK, form({ hebrew_name: 'עבודה' }));
+    await updateCategory(WORK, form({ hebrew_name: 'עבודה' }), UPDATED);
     expect(fake.writes).toEqual([{ id: WORK, changes: { hebrew_name: 'עבודה' } }]);
   });
 
@@ -322,7 +332,7 @@ describe('updateCategory', () => {
     const fake = fakeAdmin(rows());
     useAdmin(fake);
 
-    await updateCategory(WORK, form({ hebrew_name: 'דרכי עבודה', name: '' }));
+    await updateCategory(WORK, form({ hebrew_name: 'דרכי עבודה', name: '' }), UPDATED);
     expect(fake.writes).toEqual([{ id: WORK, changes: { hebrew_name: 'דרכי עבודה', name: '' } }]);
   });
 
@@ -330,8 +340,8 @@ describe('updateCategory', () => {
     const fake = fakeAdmin(rows());
     useAdmin(fake);
 
-    const result = await updateCategory(ETZ_YEAR, form({ hebrew_name: 'שנה א', parent_id: WORK }));
-    expect('error' in result && result.error.parent_id).toEqual([
+    const result = await updateCategory(ETZ_YEAR, form({ hebrew_name: 'שנה א', parent_id: WORK }), UPDATED);
+    expect('error' in result && typeof result.error === 'object' && result.error.parent_id).toEqual([
       'כדי להעביר קטגוריה לאב אחר, השתמשו באפשרות "העברה אל…"',
     ]);
     expect(fake.writes).toEqual([]);
@@ -341,8 +351,28 @@ describe('updateCategory', () => {
     const fake = fakeAdmin(rows());
     useAdmin(fake);
 
-    const result = await updateCategory(ETZ_YEAR, form({ hebrew_name: 'שנה א', parent_id: ETZ }));
+    const result = await updateCategory(ETZ_YEAR, form({ hebrew_name: 'שנה א', parent_id: ETZ }), UPDATED);
     expect('data' in result).toBe(true);
+  });
+
+  it('writes only the version the admin read, and refuses a save over a newer one with stale', async () => {
+    const fake = fakeAdmin(rows());
+    useAdmin(fake);
+
+    const result = await updateCategory(WORK, form({ hebrew_name: 'עבודה' }), '2026-09-01T10:00:00+00:00');
+
+    expect(result).toEqual({ error: 'stale' });
+    expect(fake.writes).toEqual([]);
+  });
+
+  it('returns the saved row when the version matches', async () => {
+    const fake = fakeAdmin(rows());
+    useAdmin(fake);
+
+    const result = await updateCategory(WORK, form({ hebrew_name: 'עבודה' }), UPDATED);
+
+    expect(result).toMatchObject({ data: { id: WORK, hebrew_name: 'עבודה' } });
+    expect(fake.writes).toHaveLength(1);
   });
 });
 

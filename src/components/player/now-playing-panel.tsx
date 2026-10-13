@@ -2,22 +2,27 @@
 
 import { useId, useMemo, useRef, useState } from 'react';
 import { AudioLines, Bookmark, Play } from 'lucide-react';
+import { ReadingCover } from '@/components/lessons/reading-cover';
 import { useTranslations } from 'next-intl';
 import { BookmarkDialog } from '@/components/bookmarks/bookmark-dialog';
 import { LessonDateLink, LessonSeriesLink } from '@/components/lessons/lesson-browse-links';
+import { PartDurations } from '@/components/lessons/part-durations';
 import { lessonPath } from '@/config/site';
 import { useHydrated } from '@/hooks/use-hydrated';
 import { useLessonsByIds } from '@/hooks/use-lessons-by-ids';
+import { useMediaQuery } from '@/hooks/use-media-query';
 import { Link } from '@/i18n/routing';
+import { SHELL_PANE_SURFACE, SHELL_PANE_TOP, shellPaneHeight } from '@/lib/desktop-shell';
 import { pickLastPlayed } from '@/lib/last-played';
 import { getListenedFraction, getResumePoint } from '@/lib/lesson-progress';
-import { getLessonTracks } from '@/lib/lesson-tracks';
+import { getLessonPartSeconds, getLessonTracks } from '@/lib/lesson-tracks';
 import { parshaLabel } from '@/lib/parsha-label';
 import { playLesson } from '@/lib/play-lesson';
 import { getTrackLessonId } from '@/lib/player-track-actions';
 import { cn } from '@/lib/utils';
+import type { LessonWithRelations } from '@/types/database';
 import { useAudioStore, type AudioTrack } from '@/stores/audio-store';
-import { useProgressStore } from '@/stores/progress-store';
+import { useProgressStore, type LocalProgress } from '@/stores/progress-store';
 import { PlayerShareButton } from './player-share-button';
 import { SpeedControl } from './speed-control';
 import { PlaybackTimeline, TransportControls, VolumeControl } from './transport-controls';
@@ -27,45 +32,70 @@ import { UpNextList } from './up-next-list';
 /** How many upcoming items the panel lists before "show all" opens the sheet. */
 const UP_NEXT_PREVIEW = 5;
 
+/** The panel is a shell pane from xl (1280px) on every page; below that the bottom player and the feed carry playback. */
+const WIDE = '(min-width: 1280px)';
+
 const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary';
 const skeletonBlock = 'animate-pulse rounded bg-[hsl(var(--surface-highlight))] motion-reduce:animate-none';
 
+interface NowPlayingPanelProps {
+  className?: string;
+  /**
+   * The latest published lesson (read once in the locale layout). Shown when nothing
+   * is loaded and nothing was ever played on this device, so the panel is never empty.
+   */
+  fallbackLesson?: LessonWithRelations | null;
+}
+
 /**
- * Desktop side column (from 1360px on the home page). Always present there:
+ * The now-playing pane at the inline end of the desktop shell (xl and up, on every
+ * page). Its content, in order:
  * - a track is loaded: the same session as the bottom desktop bar (store actions,
  *   the transport block, the up-next list);
- * - nothing loaded: the last-played lesson with its saved place and a Play button
- *   that resumes it (a user action, never autoplay), or an empty state.
+ * - nothing loaded, something played before: the last-played lesson with its saved
+ *   place and a Play button that resumes it (a user action, never autoplay);
+ * - otherwise the latest published lesson ("השיעור האחרון") with its part chips;
+ * - only when there are no lessons at all: an empty state.
  *
- * Playback changes only through the store and the controller actions. Sticky
- * inside its column; `className` may override the defaults.
+ * Playback changes only through the store and the controller actions. The pane is
+ * sticky and scrolls its own content (see desktop-shell.ts for the geometry).
  */
-export function NowPlayingPanel({ className }: { className?: string }) {
+export function NowPlayingPanel({ className, fallbackLesson = null }: NowPlayingPanelProps) {
   const t = useTranslations('player');
   const tDesktop = useTranslations('desktopPlayer');
   const hydrated = useHydrated();
+  const wide = useMediaQuery(WIDE);
+  const hasTrack = useAudioStore((s) => s.currentTrack !== null);
 
   // Device-only state (the loaded track, saved progress) renders after hydration, so the server HTML matches.
+  // Below xl the pane is not displayed, so it does not fetch lessons there either.
   return (
     <aside
       aria-label={tDesktop('panelLabel')}
       data-now-playing-panel
       className={cn(
-        'sticky top-16 flex max-h-[calc(100dvh-11rem-env(safe-area-inset-bottom))] flex-col gap-4 overflow-y-auto overscroll-contain rounded-2xl bg-[hsl(var(--surface-elevated))] p-4',
+        'hidden self-start overflow-y-auto overscroll-contain xl:sticky xl:flex xl:w-80 xl:flex-col xl:gap-4 xl:p-4 min-[1800px]:w-[360px]',
+        SHELL_PANE_TOP,
+        SHELL_PANE_SURFACE,
+        shellPaneHeight(hasTrack, 'sticky'),
         className,
       )}
     >
-      {hydrated ? <PanelBody /> : <PanelSkeleton label={t('nowPlaying')} />}
+      {hydrated && wide ? <PanelBody fallbackLesson={fallbackLesson} /> : <PanelSkeleton label={t('nowPlaying')} />}
     </aside>
   );
 }
 
-function PanelBody() {
+function PanelBody({ fallbackLesson }: { fallbackLesson: LessonWithRelations | null }) {
   const track = useAudioStore((s) => s.currentTrack);
-  return track ? <LoadedPanel track={track} /> : <LastPlayedPanel />;
+  return track ? <LoadedPanel track={track} /> : <LastPlayedPanel fallbackLesson={fallbackLesson} />;
 }
 
-function Artwork({ url }: { url?: string | null }) {
+function Artwork({ url, lesson }: { url?: string | null; lesson?: LessonWithRelations | null }) {
+  // No picture: the lesson's reading cover, like the home hero; the generic mark only without lesson data.
+  if (!url && lesson) {
+    return <ReadingCover lesson={lesson} className="aspect-[16/10] w-full rounded-xl" textClassName="text-5xl" />;
+  }
   return (
     <div className="relative flex aspect-[16/10] w-full items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-primary/30 to-primary/10">
       {url ? (
@@ -111,7 +141,7 @@ function LoadedPanel({ track }: { track: AudioTrack }) {
 
   return (
     <>
-      <Artwork url={track.artworkUrl} />
+      <Artwork url={track.artworkUrl} lesson={lesson} />
 
       <div className="space-y-1">
         <h2 className="text-lg font-bold leading-snug" dir="auto">
@@ -200,31 +230,51 @@ function LoadedPanel({ track }: { track: AudioTrack }) {
   );
 }
 
-/** Nothing loaded: the most recent lesson that is not heard to the end, resumed by the button (never on its own). */
-function LastPlayedPanel() {
-  const t = useTranslations('player');
+/**
+ * Nothing loaded. The last-played lesson (not heard to the end, else the most recent)
+ * with its saved place; when nothing was played on this device, or its lesson is gone,
+ * the latest published lesson. Both resume only on a button press, never on their own.
+ */
+function LastPlayedPanel({ fallbackLesson }: { fallbackLesson: LessonWithRelations | null }) {
   const tDesktop = useTranslations('desktopPlayer');
   const progressMap = useProgressStore((s) => s.progressMap);
   const entry = useMemo(() => pickLastPlayed(progressMap), [progressMap]);
   const lessonId = entry?.lessonId ?? '';
   const { lessons, settled } = useLessonsByIds(lessonId ? [lessonId] : []);
-  const lesson = lessonId ? lessons.get(lessonId) : undefined;
+  const playedLesson = lessonId ? lessons.get(lessonId) : undefined;
 
-  if (!entry) return <EmptyPanel />;
-  if (!lesson) return settled ? <EmptyPanel /> : <PanelSkeleton label={tDesktop('lastPlayed')} />;
+  if (entry && !playedLesson && !settled) return <PanelSkeleton label={tDesktop('lastPlayed')} />;
 
-  const tracks = getLessonTracks(lesson);
-  const point = getResumePoint(tracks, entry);
-  const percent = entry.completed ? 100 : Math.round(getListenedFraction(tracks, entry) * 100);
+  if (entry && playedLesson) return <LessonPanelView lesson={playedLesson} played={entry} />;
+  if (fallbackLesson) return <LessonPanelView lesson={fallbackLesson} />;
+  return <EmptyPanel />;
+}
+
+/**
+ * One lesson in the panel: artwork, title, date, reading and part, then its parts as
+ * chips and a Play button. With `played` (the device's saved place) it shows the
+ * last-played heading, progress and a resume button; without it the latest lesson.
+ */
+function LessonPanelView({ lesson, played }: { lesson: LessonWithRelations; played?: LocalProgress }) {
+  const t = useTranslations('player');
+  const tDesktop = useTranslations('desktopPlayer');
+  const tHome = useTranslations('home');
+  const tracks = useMemo(() => getLessonTracks(lesson), [lesson]);
+  const partSeconds = useMemo(() => getLessonPartSeconds(lesson), [lesson]);
+  const resume = played ? getResumePoint(tracks, played) : null;
+  const percent = played ? (played.completed ? 100 : Math.round(getListenedFraction(tracks, played) * 100)) : 0;
   const reading = lesson.parsha ? parshaLabel(lesson.parsha) : null;
-  const partLabel = tracks.length > 1 ? t('partOf', { number: point.index + 1, count: tracks.length }) : null;
+  const partLabel =
+    resume && tracks.length > 1 ? t('partOf', { number: resume.index + 1, count: tracks.length }) : null;
   const detail = [reading, partLabel].filter(Boolean).join(' · ');
   const name = lesson.hebrew_title || lesson.title;
 
   return (
     <>
-      <p className="text-[13px] font-semibold text-primary">{tDesktop('lastPlayed')}</p>
-      <Artwork />
+      <p className="text-[13px] font-semibold text-primary">
+        {played ? tDesktop('lastPlayed') : tHome('latestLesson')}
+      </p>
+      <Artwork lesson={lesson} />
 
       <div className="space-y-1">
         <h2 className="text-lg font-bold leading-snug" dir="auto">
@@ -241,6 +291,13 @@ function LastPlayedPanel() {
           </p>
         )}
       </div>
+
+      {/* Each chip starts its own part (the saved place is only for the resume button). */}
+      <PartDurations
+        variant="chips"
+        seconds={partSeconds}
+        onPlayPart={(index) => playLesson(tracks, { startPart: index })}
+      />
 
       {percent > 0 && (
         <span
@@ -265,7 +322,7 @@ function LastPlayedPanel() {
         )}
       >
         <Play aria-hidden="true" className="h-4 w-4 translate-x-[6%] fill-current" />
-        {tDesktop('resume')}
+        {played ? tDesktop('resume') : t('play')}
       </button>
     </>
   );

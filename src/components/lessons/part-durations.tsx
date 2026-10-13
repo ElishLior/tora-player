@@ -135,7 +135,7 @@ export function PartDurations({ seconds, className, variant = 'text', onPlayPart
             const style = { '--pc': partColor(index) } as React.CSSProperties;
             if (!onPlayPart) {
               return (
-                <span key={index} style={style} className={cn(chipBase, 'min-h-7 px-2 text-xs sm:px-2.5 sm:text-[13px]')}>
+                <span key={index} style={style} className={cn(chipBase, 'min-h-7 px-2 text-xs sm:px-2.5 sm:text-[13px] lg:px-2 lg:text-[13px]')}>
                   <i aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-[hsl(var(--pc))]" />
                   <bdi>{item}</bdi>
                 </span>

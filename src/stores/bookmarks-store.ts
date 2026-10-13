@@ -66,6 +66,7 @@ interface BookmarksState {
   hasBookmark: (lessonId: string) => boolean;
 }
 
+const BOOKMARKS_STORAGE_KEY = 'tora-bookmarks';
 const SYNC_FAILED = 'sync_failed' as const;
 const CHANGED_ELSEWHERE = 'changed_elsewhere' as const;
 const SAVE_FAILED = 'save_failed' as const;
@@ -166,11 +167,33 @@ export const useBookmarksStore = create<BookmarksState>()(
       hasBookmark: (lessonId) => get().bookmarks.some((b) => b.lessonId === lessonId),
     }),
     {
-      name: 'tora-bookmarks',
+      name: BOOKMARKS_STORAGE_KEY,
       partialize: (state) => ({ bookmarks: state.bookmarks, pendingDeletes: state.pendingDeletes }),
     },
   ),
 );
+
+/**
+ * Another tab saved the bookmarks (its `storage` event): reload them from storage so every open
+ * tab shows the same list. The whole list is replaced, so an edit or delete never duplicates a bookmark.
+ * Returns whether the event was for the bookmarks.
+ */
+export function rehydrateBookmarksOnStorageEvent(key: string | null): boolean {
+  if (key !== BOOKMARKS_STORAGE_KEY) return false;
+  void useBookmarksStore.persist.rehydrate();
+  return true;
+}
+
+/** Keeps every open tab on one bookmarks list. Returns the cleanup. */
+export function startBookmarksCrossTabSync(target: Pick<Window, 'addEventListener' | 'removeEventListener'>) {
+  const onStorage = (event: StorageEvent) => {
+    rehydrateBookmarksOnStorageEvent(event.key);
+  };
+  target.addEventListener('storage', onStorage);
+  return () => target.removeEventListener('storage', onStorage);
+}
+
+if (typeof window !== 'undefined') startBookmarksCrossTabSync(window);
 
 function setServerUpdatedAt(id: string, updatedAt: string) {
   useBookmarksStore.setState((state) => ({

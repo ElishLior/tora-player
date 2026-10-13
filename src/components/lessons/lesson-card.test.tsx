@@ -90,3 +90,96 @@ describe('LessonCard (the shared lesson row)', () => {
     expect(html).toContain('יום שני - א׳ חשון');
   });
 });
+
+const VOID_TAGS = new Set([
+  'area',
+  'base',
+  'br',
+  'col',
+  'embed',
+  'hr',
+  'img',
+  'input',
+  'link',
+  'meta',
+  'source',
+  'track',
+  'wbr',
+]);
+/** Utilities that would make an element between the title link and the row a containing block, or clip it. */
+const CLIPPING_UTILITY =
+  /^(relative|absolute|sticky|fixed|transform|filter|contain|overflow-hidden|translate-|scale-|-translate-)/;
+
+/**
+ * The open elements (outermost first) around the first match of `needle`, from a
+ * static-markup tag walk. Enough for our own server-rendered markup (void tags skipped).
+ */
+function openElementsAt(html: string, needle: string): { name: string; classes: string[] }[] {
+  const at = html.indexOf(needle);
+  const stack: { name: string; classes: string[] }[] = [];
+  const tagPattern = /<(\/?)([a-zA-Z][a-zA-Z0-9]*)([^>]*?)(\/?)>/g;
+  let match: RegExpExecArray | null;
+  while ((match = tagPattern.exec(html)) && match.index < at) {
+    const [, closing, name, attributes, selfClosing] = match;
+    if (closing) {
+      stack.pop();
+    } else if (!selfClosing && !VOID_TAGS.has(name)) {
+      const classValue = /class="([^"]*)"/.exec(attributes)?.[1] ?? '';
+      stack.push({ name, classes: classValue.split(' ').filter(Boolean) });
+    }
+  }
+  return stack;
+}
+
+describe('LessonCard row (desktop affordances)', () => {
+  it('lets the title link cover the whole row: the row is the only positioned ancestor', () => {
+    const html = renderToStaticMarkup(<LessonCard lesson={lesson} />);
+    const titleLink = '<a href="/lessons/yom-sheni-12-10-2026"';
+    expect(html).toContain(titleLink);
+    const chain = openElementsAt(html, titleLink);
+    const rowIndex = chain.map((element) => element.name).lastIndexOf('article');
+    expect(rowIndex).toBeGreaterThan(-1);
+    expect(chain[rowIndex].classes.map((c) => c.split(':').pop())).toContain('relative');
+    for (const element of chain.slice(rowIndex + 1)) {
+      const utilities = element.classes.map((c) => c.split(':').pop() ?? '');
+      expect(utilities.filter((u) => CLIPPING_UTILITY.test(u))).toEqual([]);
+    }
+  });
+
+  it('gives desktop hover affordances only behind pointer hover and lg and up', () => {
+    const html = renderToStaticMarkup(<LessonCard lesson={lesson} />);
+    expect(html).toContain('group/lesson');
+    expect(html).toContain('lg:[@media(hover:hover)]:group-hover/lesson:text-primary');
+    expect(html).toContain('lg:[@media(hover:hover)]:group-hover/lesson:bg-primary');
+  });
+});
+
+describe('LessonCard short variant (the shorts page row)', () => {
+  const short = {
+    ...lesson,
+    id: 'short-1',
+    slug: 'short-1',
+    audio_files: lesson.audio_files?.slice(0, 1),
+  } as unknown as LessonWithRelations;
+
+  it('shows the rose accent tile, the date link and one length (never chips)', () => {
+    const html = renderToStaticMarkup(<LessonCard lesson={short} variant="short" />);
+    expect(html).toContain('bg-rose-400/15');
+    expect(html).toContain('data-lesson-date="2026-10-12"');
+    expect(html).toContain('82 דק׳');
+    expect(html).not.toContain('--pc');
+  });
+
+  it('keeps the title as the one stretched link, inside a positioned row', () => {
+    const html = renderToStaticMarkup(<LessonCard lesson={short} variant="short" />);
+    const titleLink = '<a href="/lessons/short-1"';
+    expect(html).toContain(titleLink);
+    const chain = openElementsAt(html, titleLink);
+    const rowIndex = chain.map((element) => element.name).lastIndexOf('article');
+    expect(rowIndex).toBeGreaterThan(-1);
+    for (const element of chain.slice(rowIndex + 1)) {
+      const utilities = element.classes.map((c) => c.split(':').pop() ?? '');
+      expect(utilities.filter((u) => CLIPPING_UTILITY.test(u))).toEqual([]);
+    }
+  });
+});

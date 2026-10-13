@@ -174,7 +174,7 @@
     "allLessons": "לכל השיעורים"
   },
   "homeIntro": {
-    "title": "כל מה שאפשר לעשות כאן",
+    "title": "טיפים ועדכונים",
     "lead": "נגן תורה נבנה כדי שיהיה נוח ללמוד בכל מקום. כדי לפתוח שיעור ולראות אותו במלואו, לחצו על שם השיעור. הנה מה שעומד לרשותכם:",
     "more": "עוד {count}",
     "hide": "הסתרה",
@@ -271,6 +271,7 @@
       "failed": "ההשמעה נעצרה. הקש על נגן כדי לנסות שוב."
     },
     "previousTrack": "הקודם",
+    "continueBlocked": "המשך ניגון",
     "nextTrack": "הבא",
     "upNextEmpty": "אין עוד שיעורים בתור",
     "showAllUpNext": "הצגת כל התור ({count})",
@@ -518,7 +519,8 @@
     "library": "הספרייה שלי",
     "sidebarLabel": "תפריט צד",
     "searchPlaceholder": "חיפוש שיעורים…",
-    "browse": "עיון"
+    "browse": "עיון",
+    "categories": "קטגוריות"
   },
   "auth": {
     "adminArea": "אזור ניהול",
@@ -801,6 +803,13 @@
     "close": "סגירה",
     "enabled": "ההתראות הופעלו"
   },
+  "lessonPage": {
+    "category": "קטגוריה",
+    "edit": "עריכה",
+    "lightboxClose": "סגירה",
+    "lightboxPrevious": "התמונה הקודמת",
+    "lightboxNext": "התמונה הבאה"
+  },
   "categoryAdmin": {
     "title": "ניהול קטגוריות",
     "topLevelCount": "{count, plural, =0 {אין קטגוריות ראשיות} one {קטגוריה ראשית אחת} other {# קטגוריות ראשיות}}",
@@ -861,6 +870,31 @@
     "errNotAdmin": "אין הרשאה לביצוע הפעולה",
     "errFailed": "לא ניתן לשמור את השינוי. נסו שוב."
   },
+  "lessonCategories": {
+    "legend": "קטגוריות",
+    "pickerHint": "סמנו קטגוריה או תת-קטגוריה. השיעור יופיע בכל הקטגוריות שסימנתם. הראשונה היא הראשית.",
+    "search": "חיפוש קטגוריה",
+    "noMatches": "אין קטגוריות תואמות",
+    "selectedLabel": "קטגוריות שנבחרו",
+    "noneSelected": "לא נבחרה קטגוריה",
+    "primary": "ראשית",
+    "makePrimary": "קבעו כראשית",
+    "makePrimaryFor": "קבעו את {name} כקטגוריה הראשית",
+    "remove": "הסרה",
+    "removeFor": "הסירו את {name}",
+    "migrationNeeded": "שמירת כמה קטגוריות לשיעור דורשת הרצת מיגרציה 026. נשמרה רק הקטגוריה הראשית.",
+    "saveFailed": "לא ניתן לשמור את הקטגוריות. נסו שוב.",
+    "bulkMode": "פעולה",
+    "bulkSet": "קביעה (מחליפה את כל הקטגוריות)",
+    "bulkAdd": "הוספת קטגוריה",
+    "bulkRemove": "הסרת קטגוריה",
+    "bulkCategory": "קטגוריה",
+    "bulkNeedCategory": "בחרו קטגוריה",
+    "bulkDone": "{count} שיעורים עודכנו",
+    "errNotAdmin": "אין הרשאה לביצוע הפעולה",
+    "errInvalid": "הבקשה אינה תקינה",
+    "errFailed": "לא ניתן לשמור. נסו שוב."
+  },
   "diagnostics": {
     "title": "יומן נגינה",
     "intro": "כלי בדיקה למכשיר. כשהוא פועל, הנגן רושם אילו אירועים הגיעו מהאוזניות, ממסך הנעילה ומהמערכת. היומן נשמר רק במכשיר הזה ואינו נשלח לשום מקום.",
@@ -898,7 +932,9 @@
     "refresh": "רענון",
     "later": "אחר כך",
     "recovery": "לא נטענה הגרסה החדשה. סגרו את הלשונית ופתחו את האתר מחדש.",
-    "versionLabel": "גרסה {version} · {build}"
+    "versionLabel": "גרסה {version} · {build}",
+    "runningAndDeployed": "פועלת: {running} · באתר: {deployed}",
+    "versionDiffers": "(שונה מהאתר)"
   },
   "releaseAnnouncement": {
     "title": "הודעת גרסה",
@@ -971,5 +1007,63 @@
     "resume": "המשך האזנה",
     "nothingPlayedTitle": "עוד לא הושמע שיעור",
     "nothingPlayedHint": "שיעור שתתחילו להאזין לו יופיע כאן."
+  },
+  "desktopShell": {
+    "partsCount": "{count, plural, =1 {חלק אחד} =2 {2 חלקים} other {# חלקים}}",
+    "notifyTitle": "שיעור חדש עלה?",
+    "notifyBody": "קבלו התראה ברגע שעולה שיעור.",
+    "errorTitle": "לא הצלחנו לטעון את השיעורים",
+    "errorHint": "בדקו את החיבור ונסו שוב.",
+    "retry": "נסו שוב"
+  },
+  "pagesDesign": {
+    "search": {
+      "title": "חיפוש",
+      "placeholder": "חיפוש שיעורים...",
+      "hint": "הקלידו כדי לחפש שיעורים, נושאים ותגיות",
+      "noResults": "לא נמצאו תוצאות",
+      "noResultsFor": "לא נמצאו שיעורים עבור \"{query}\""
+    },
+    "playlists": {
+      "emptyPlaylist": "רשימה ריקה"
+    },
+    "series": {
+      "emptyLessons": "אין שיעורים בסדרה"
+    },
+    "bookmarks": {
+      "hint": "לחצו על כפתור הסימניה בנגן כדי לשמור רגעים חשובים",
+      "lessonFallback": "שיעור"
+    },
+    "offline": {
+      "savedLessons": "שיעורים שמורים"
+    },
+    "eyebrow": {
+      "playlist": "רשימת השמעה",
+      "series": "סדרה",
+      "category": "קטגוריה"
+    },
+    "lessonCount": "{count, plural, =0 {אין שיעורים} =1 {שיעור אחד} other {# שיעורים}}",
+    "subcategories": "תת־קטגוריות"
+  },
+  "adminSettings": {
+    "title": "הגדרות תצוגה",
+    "cardDescription": "קצב החלפת הטיפים בעמוד הראשי",
+    "back": "חזרה ללוח הבקרה",
+    "save": "שמירה",
+    "saved": "נשמר. העמוד הראשי יציג את הקצב החדש.",
+    "schemaMissing": "ההגדרות עדיין לא זמינות: צריך להחיל את מיגרציה 028 על מסד הנתונים.",
+    "tips": {
+      "title": "טיפים ועדכונים",
+      "description": "התיבה בעמוד הראשי מציגה טיפ אחד בכל פעם ומחליפה אותו לבד. כאן בוחרים כל כמה זמן.",
+      "label": "החלפת טיפ כל",
+      "seconds": "{count} שניות",
+      "off": "בלי החלפה (טיפ אחד קבוע)"
+    },
+    "errors": {
+      "unauthorized": "אין הרשאה. התחברו שוב כמנהלים.",
+      "invalid": "הערך לא תקין.",
+      "schema_missing": "צריך להחיל את מיגרציה 028 לפני השמירה.",
+      "failed": "השמירה נכשלה. נסו שוב."
+    }
   }
 }

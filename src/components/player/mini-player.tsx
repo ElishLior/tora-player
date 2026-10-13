@@ -13,6 +13,7 @@ import { getTrackLessonId } from '@/lib/player-track-actions';
 import { PlayPauseIcon } from './player-controls';
 import { CastStatusMessage } from './cast-status';
 import { PlayerShareButton } from './player-share-button';
+import { ResumeBlockedButton } from './resume-blocked-button';
 import { DesktopPlayerBar } from './desktop-player-bar';
 
 export function MiniPlayer() {
@@ -32,8 +33,8 @@ export function MiniPlayer() {
 
   return (
     <>
-      {/* Phones and tablets. From lg the desktop bar (DesktopPlayerBar) replaces it. */}
-      <div className="fixed bottom-0 inset-x-0 z-50 safe-area-bottom lg:hidden">
+      {/* Phones and tablets: sits directly above the bottom tab bar (BottomNav is 3.5rem tall). From lg the desktop bar (DesktopPlayerBar) replaces it. */}
+      <div className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-50 lg:hidden">
         {/* Thin progress bar -- Spotify style; fills from the inline start */}
         <div className="h-[2px] bg-[hsl(0,0%,24%)]">
           <div className="h-full bg-primary transition-[width] duration-200" style={{ width: `${progress}%` }} />
@@ -77,6 +78,8 @@ export function MiniPlayer() {
             <p role="status" className="sr-only">
               {playbackIssue ? t(`issue.${playbackIssue}`) : (queueNoticeText ?? '')}
             </p>
+
+            <ResumeBlockedButton />
 
             <PlayerShareButton compact />
 

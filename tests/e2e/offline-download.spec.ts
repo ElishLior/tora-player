@@ -136,7 +136,8 @@ test.describe('offline downloads', () => {
     await expect(page.getByRole('menuitemradio', { name: he.player.sleepEndOfPart })).toBeVisible();
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'הבא בתור (1)' }).click();
-    await expect(page.getByRole('button', { name: /שיעור בדיקה אופליין.*חלק מהשיעור/ })).toBeVisible();
+    // The desktop now-playing panel lists the queue too; check the Up next sheet itself.
+    await expect(page.getByRole('dialog').getByRole('button', { name: /שיעור בדיקה אופליין.*חלק מהשיעור/ })).toBeVisible();
   });
 
   test('saving a lesson offline also permits a separate device-file download', async ({ page }) => {
@@ -161,6 +162,6 @@ test.describe('offline downloads', () => {
     expect(download.suggestedFilename()).toMatch(/\.(mp3|m4a|aac|mp4|ogg|opus|wav|flac|webm)$/i);
 
     await page.goto(`${BASE_URL}/he/offline`);
-    await expect(page.getByText(lessonTitle, { exact: true })).toBeVisible();
+    await expect(page.getByRole('main').getByText(lessonTitle, { exact: true })).toBeVisible();
   });
 });

@@ -1,7 +1,7 @@
 -- =============================================================================
 -- Categories: three levels, atomic moves and reorders (v1.2, owner spec 4).
 --
--- WRITTEN, NOT APPLIED. Unverified against a live database.
+-- Applied to production on October 13, 2026.
 --
 -- 1. Helpers: category_depth, category_subtree_height, category_chain_contains.
 -- 2. categories_guard_tree(): BEFORE INSERT / UPDATE OF parent_id trigger. It

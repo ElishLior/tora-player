@@ -8,6 +8,9 @@ import { requireServerSupabaseClient } from '@/lib/supabase/server';
 import { getCategoriesTree } from '@/lib/supabase/queries';
 import { createCategorySchema, updateCategorySchema } from '@/lib/validators';
 import { isAdmin } from '@/lib/auth/admin';
+import { isMissingLessonCategories } from '@/lib/supabase/lesson-route';
+import { promoteOrphanedPrimaries } from '@/lib/supabase/lesson-category-writes';
+import { lessonsLeftWithoutCategory } from '@/lib/lesson-categories';
 import {
   buildCategoryTree,
   containsProtectedCategory,
@@ -112,14 +115,27 @@ export async function countCategoryLessons(id: string): Promise<{ count: number 
     const tree = await getCategoriesTree(supabase);
     const ids = descendantIds(tree, id);
 
-    // Counts drafts too. The public RPC counts published lessons only.
-    const { count, error } = await supabase
+    // Counts drafts too (the public RPC counts published lessons only). A lesson is
+    // lost when every one of its categories is in the branch. Before migration 026
+    // only the primary category is known, so it decides.
+    const scoped = await supabase
       .from('lessons')
-      .select('id', { count: 'exact', head: true })
-      .in('category_id', ids);
+      .select('id, memberships:lesson_categories(category_id), scope:lesson_categories!inner(category_id)')
+      .in('scope.category_id', ids);
+    if (scoped.error && isMissingLessonCategories(scoped.error)) {
+      const { count, error } = await supabase
+        .from('lessons')
+        .select('id', { count: 'exact', head: true })
+        .in('category_id', ids);
+      if (error) return { error: error.message };
+      return { count: count ?? 0 };
+    }
+    if (scoped.error) return { error: scoped.error.message };
 
-    if (error) return { error: error.message };
-    return { count: count ?? 0 };
+    const lessons = ((scoped.data ?? []) as { memberships: { category_id: string }[] }[]).map((row) => ({
+      categoryIds: row.memberships.map((membership) => membership.category_id),
+    }));
+    return { count: lessonsLeftWithoutCategory(lessons, ids) };
   } catch {
     return { error: 'לא ניתן לספור את השיעורים של הקטגוריה' };
   }
@@ -183,12 +199,14 @@ export async function createCategory(formData: FormData): Promise<{ data: Catego
 /**
  * Renames and edits a category. Only the fields the form sent are written, so
  * changing the Hebrew name never touches the English one, and the reverse holds too.
- * The parent is not changed here (see moveCategory).
+ * The parent is not changed here (see moveCategory). `expectedUpdatedAt` is the
+ * category's updated_at as the admin read it; a changed category is refused ('stale').
  */
 export async function updateCategory(
   id: string,
   formData: FormData,
-): Promise<{ data: Category } | { error: CategoryFieldErrors }> {
+  expectedUpdatedAt: string,
+): Promise<{ data: Category } | { error: CategoryFieldErrors | 'stale' }> {
   if (!(await isAdmin())) {
     return { error: { _form: [NOT_ADMIN] } };
   }
@@ -215,11 +233,19 @@ export async function updateCategory(
       return { error: { parent_id: [PARENT_CHANGE_ERROR] } };
     }
 
-    const { data, error } = await supabase.from('categories').update(parsed.data).eq('id', id).select().single();
+    // The write only applies to the version the admin read: 0 rows means someone else changed it since.
+    const { data, error } = await supabase
+      .from('categories')
+      .update(parsed.data)
+      .eq('id', id)
+      .eq('updated_at', expectedUpdatedAt)
+      .select()
+      .maybeSingle();
 
     if (error) {
       return { error: { _form: [`לא ניתן לשמור את הקטגוריה (${error.message})`] } };
     }
+    if (!data) return { error: 'stale' };
 
     revalidateCatalog();
     return { data: data as Category };
@@ -358,44 +384,13 @@ export async function deleteCategory(id: string): Promise<{ success: true } | { 
       return { error: `לא ניתן למחוק את הקטגוריה (${error.message})` };
     }
 
+    // Lessons whose primary was in the branch now have none; each takes its next category (migration 026).
+    const promotion = await promoteOrphanedPrimaries(supabase);
+    if ('error' in promotion) console.error('Category delete: could not promote lesson primaries', promotion.error);
+
     revalidateCatalog();
     return { success: true };
   } catch {
     return { error: 'לא ניתן למחוק את הקטגוריה' };
-  }
-}
-
-// ==================== LESSON CATEGORY ====================
-
-/** Sets one lesson's category from the lesson page or the lesson editor. `null` clears it. */
-export async function updateLessonCategory(
-  lessonId: string,
-  categoryId: string | null,
-): Promise<{ categoryId: string | null } | { error: string }> {
-  if (!(await isAdmin())) {
-    return { error: NOT_ADMIN };
-  }
-
-  try {
-    const supabase = createAdminSupabaseClient();
-
-    if (categoryId) {
-      const { data, error } = await supabase.from('categories').select('id').eq('id', categoryId).maybeSingle();
-      if (error) return { error: 'לא ניתן לבדוק את הקטגוריה' };
-      if (!data) return { error: 'הקטגוריה לא נמצאה' };
-    }
-
-    const { error } = await supabase
-      .from('lessons')
-      .update({ category_id: categoryId })
-      .eq('id', lessonId)
-      .select('id')
-      .single();
-    if (error) return { error: 'לא ניתן לעדכן את הקטגוריה של השיעור' };
-
-    revalidateCatalog();
-    return { categoryId };
-  } catch {
-    return { error: 'לא ניתן לעדכן את הקטגוריה של השיעור' };
   }
 }

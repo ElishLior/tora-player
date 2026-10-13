@@ -7,13 +7,14 @@ import {
   getAllSeries,
   getCategoriesTree,
   getCategoryById,
-  getCategoryLessonCounts,
+  getCategoryLessonTotals,
   getLessonsByCategory,
   getLessonsBySeries,
   getRecentLessons,
   getSeriesById,
 } from './queries';
 import { getShortLessons } from './shorts';
+import { readAppSettings } from './app-settings';
 import { partTypeOptions } from '@/lib/part-types';
 import { descendantIds } from '@/lib/category-tree';
 import { CATEGORY_LIST_LIMIT } from '@/lib/category-queue';
@@ -54,6 +55,13 @@ export function revalidateCatalog() {
 // Cached public catalog reads (5 minutes, or until revalidateCatalog()).
 // Arguments are part of each cache key.
 
+/** Public display settings (app_settings, migration 028); defaults before it is applied. */
+export const getCachedAppSettings = unstable_cache(
+  async () => (await readAppSettings(createAnonSupabaseClient())).settings,
+  ['app-settings'],
+  CATALOG_CACHE,
+);
+
 export const getCachedRecentLessons = unstable_cache(
   (limit: number) => getRecentLessons(createAnonSupabaseClient(), limit),
   ['catalog', 'recent-lessons'],
@@ -84,9 +92,10 @@ export const getCachedCategoryById = unstable_cache(
   CATALOG_CACHE,
 );
 
-export const getCachedCategoryLessonCounts = unstable_cache(
-  () => getCategoryLessonCounts(createAnonSupabaseClient()),
-  ['catalog', 'category-lesson-counts'],
+/** Subtree totals per category (each lesson once). A new cache key, so old direct counts are never read as totals. */
+export const getCachedCategoryLessonTotals = unstable_cache(
+  () => getCategoryLessonTotals(createAnonSupabaseClient()),
+  ['catalog', 'category-lesson-totals'],
   CATALOG_CACHE,
 );
 
