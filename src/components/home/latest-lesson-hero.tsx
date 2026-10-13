@@ -11,8 +11,8 @@ import { useIsDownloaded } from '@/hooks/use-offline';
 import { getResumePoint } from '@/lib/lesson-progress';
 import { getLessonPartSeconds, getLessonTracks } from '@/lib/lesson-tracks';
 import { playLesson } from '@/lib/play-lesson';
-import { hebrewDayMonth, readingHue } from '@/lib/lesson-display';
 import { parshaLabel } from '@/lib/parsha-label';
+import { ReadingCover } from '@/components/lessons/reading-cover';
 import { cn, formatDuration } from '@/lib/utils';
 import { saveAudioFilesOffline } from '@/lib/offline-storage';
 import { handleDeviceDownloadClick } from '@/lib/device-download';
@@ -75,9 +75,6 @@ export function LatestLessonHero({ eyebrow, lesson, className }: LatestLessonHer
   const isNew = hydrated && !saved && isNewSince(lesson.created_at, previousVisitAt);
   const offlineSaved = isOffline || savedNow;
   const reading = lesson.parsha ? parshaLabel(lesson.parsha) : null;
-  const hue = readingHue(lesson.parsha || lesson.id);
-  // The cover shows the reading's name, or the day when the lesson has no reading.
-  const coverText = reading ?? hebrewDayMonth(lesson.hebrew_date)?.day ?? lesson.date.slice(8, 10);
   const playLabel =
     isCurrent || !hasResume
       ? t('play')
@@ -243,20 +240,11 @@ export function LatestLessonHero({ eyebrow, lesson, className }: LatestLessonHer
         </div>
 
         {/* The reading cover (concept B): decorative, the title link covers it. Left of the text in Hebrew. */}
-        <span
-          aria-hidden="true"
-          className="grid h-24 w-24 flex-shrink-0 place-items-center overflow-hidden rounded-2xl p-2 shadow-[0_18px_40px_-18px_rgba(0,0,0,0.7)] lg:h-56 lg:w-56 xl:h-60 xl:w-60"
-          style={{
-            background: `linear-gradient(150deg, hsl(${hue} 45% 34%), hsl(${hue} 30% 14%))`,
-          }}
-        >
-          <b
-            className="line-clamp-3 text-center text-[34px] font-extrabold leading-tight lg:text-[56px]"
-            style={{ color: `hsl(${hue} 75% 84%)` }}
-          >
-            {coverText}
-          </b>
-        </span>
+        <ReadingCover
+          lesson={lesson}
+          className="h-24 w-24 lg:h-56 lg:w-56 xl:h-60 xl:w-60"
+          textClassName="text-[34px] lg:text-[56px]"
+        />
       </div>
     </section>
   );

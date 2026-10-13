@@ -2,6 +2,7 @@
 
 import { useId, useMemo, useRef, useState } from 'react';
 import { AudioLines, Bookmark, Play } from 'lucide-react';
+import { ReadingCover } from '@/components/lessons/reading-cover';
 import { useTranslations } from 'next-intl';
 import { BookmarkDialog } from '@/components/bookmarks/bookmark-dialog';
 import { LessonDateLink, LessonSeriesLink } from '@/components/lessons/lesson-browse-links';
@@ -90,7 +91,11 @@ function PanelBody({ fallbackLesson }: { fallbackLesson: LessonWithRelations | n
   return track ? <LoadedPanel track={track} /> : <LastPlayedPanel fallbackLesson={fallbackLesson} />;
 }
 
-function Artwork({ url }: { url?: string | null }) {
+function Artwork({ url, lesson }: { url?: string | null; lesson?: LessonWithRelations | null }) {
+  // No picture: the lesson's reading cover, like the home hero; the generic mark only without lesson data.
+  if (!url && lesson) {
+    return <ReadingCover lesson={lesson} className="aspect-[16/10] w-full rounded-xl" textClassName="text-5xl" />;
+  }
   return (
     <div className="relative flex aspect-[16/10] w-full items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-primary/30 to-primary/10">
       {url ? (
@@ -136,7 +141,7 @@ function LoadedPanel({ track }: { track: AudioTrack }) {
 
   return (
     <>
-      <Artwork url={track.artworkUrl} />
+      <Artwork url={track.artworkUrl} lesson={lesson} />
 
       <div className="space-y-1">
         <h2 className="text-lg font-bold leading-snug" dir="auto">
@@ -269,7 +274,7 @@ function LessonPanelView({ lesson, played }: { lesson: LessonWithRelations; play
       <p className="text-[13px] font-semibold text-primary">
         {played ? tDesktop('lastPlayed') : tHome('latestLesson')}
       </p>
-      <Artwork />
+      <Artwork lesson={lesson} />
 
       <div className="space-y-1">
         <h2 className="text-lg font-bold leading-snug" dir="auto">
