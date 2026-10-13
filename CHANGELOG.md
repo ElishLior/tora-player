@@ -39,7 +39,7 @@ Migrations 023, 024 and 025 applied in production on October 13, 2026, before th
   - Categories are tiles with colored dots and counts.
   - Tags and search use the new design, with clear empty and no-results states.
   - Every page uses one empty-state design.
-- The home intro is now "טיפים ועדכונים" (owner, October 13): a closed row on every visit that shows one tip at a time with its icon. Only the arrow opens it and shows all of them. Admins set how often the tip changes (or keep one fixed) at /admin/settings ("הגדרות תצוגה", needs migration 028; default every 7 seconds).
+- The home intro is now "טיפים ועדכונים" (owner, October 13): a closed row on every visit that shows one tip at a time with its icon. Only the arrow opens it and shows all of them. Admins set how often the tip changes (or keep one fixed) at /admin/settings ("הגדרות תצוגה"; default every 7 seconds). Migration 028 was applied on October 13.
 - Fixes from the requirements audit:
   - Pause cancels a pending retry. A blocked autoplay offers "המשך ניגון" in the mini player and the desktop bar.
   - The desktop bar links the series and the date.
