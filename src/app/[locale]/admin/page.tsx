@@ -16,6 +16,7 @@ export default function AdminDashboardPage() {
   const tStats = useTranslations('adminStats');
   const tUsers = useTranslations('adminUsers');
   const tSettings = useTranslations('adminSettings');
+  const tLessons = useTranslations('adminLessons');
   const tCommon = useTranslations('common');
 
   const insightLinks = [
@@ -31,10 +32,10 @@ export default function AdminDashboardPage() {
       description: isRTL ? 'העלאת שיעור חדש עם קבצי שמע ותמונות' : 'Upload a new lesson with audio files and images',
     },
     {
-      href: `/${locale}`,
+      href: `/${locale}/admin/lessons`,
       icon: BookOpen,
-      label: isRTL ? 'שיעורים' : 'Lessons',
-      description: isRTL ? 'צפייה ועריכת שיעורים קיימים' : 'View and edit existing lessons',
+      label: tLessons('title'),
+      description: tLessons('cardDescription'),
     },
     {
       href: `/${locale}/series`,

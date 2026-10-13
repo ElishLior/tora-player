@@ -40,7 +40,7 @@ import { BookmarkChips, BookmarkMarkers } from '@/components/bookmarks/lesson-bo
 import { NoteImageStrip } from '@/components/notes/note-image-strip';
 import { handleCastClick } from '@/lib/cast-utils';
 import { buildAudioDownloadFilename, getAudioDownloadUrl } from '@/lib/audio-download';
-import type { LessonWithRelations, LessonImage, CategoryWithChildren } from '@/types/database';
+import type { LessonWithRelations, LessonImage } from '@/types/database';
 import { normalizeAudioUrl } from '@/lib/audio-url';
 import { getLessonAudioAssets, getLessonTracks, getSortedAudioFiles, isMomentInPart, type LessonAudioAsset } from '@/lib/lesson-tracks';
 import { getResumePoint } from '@/lib/lesson-progress';
@@ -58,12 +58,7 @@ import { prepareNoteImage } from '@/lib/note-image-resize';
 import { useBookmarksStore, type LocalBookmark } from '@/stores/bookmarks-store';
 import { useNotesStore, type LocalNote } from '@/stores/notes-store';
 import { submitSnippet } from '@/actions/snippets';
-import { updateLessonTags } from '@/actions/lessons';
-import { setLessonCategories } from '@/actions/lesson-categories';
-import { TagInput } from '@/components/tags/tag-input';
-import { CategoryPicker } from '@/components/categories/category-picker';
 import { LessonTagLink } from '@/components/lessons/lesson-browse-links';
-import { normalizeTags } from '@/lib/tags';
 import { getImageStreamUrl } from '@/lib/image-keys';
 import { sortLessonImages } from '@/lib/image-download';
 import { ImageDownloadButton } from '@/components/lessons/image-download-button';
@@ -1550,216 +1545,25 @@ function ImageLightbox({
 }
 
 interface LessonTagsProps {
-  lessonId: string;
   tags: string[];
-  admin: boolean;
-  /** Admins only: the lesson's categories (primary first) and the category tree for its inline picker. */
-  categoryIds?: string[];
-  categories?: CategoryWithChildren[];
-}
-
-interface LessonCategoryEditorProps {
-  lessonId: string;
-  categoryIds: string[];
-  categories: CategoryWithChildren[];
 }
 
 /**
- * Admin control for the lesson's categories (several, any level; the first is
- * primary). The picker stays enabled while saving, so keyboard focus is kept.
- * Saves run one at a time: a change made during a save is sent next, and only
- * the newest answer is shown. A failed save rolls back to the last confirmed selection.
+ * Topic tags under the lesson title; each opens its tag page. Display only:
+ * admins edit tags and categories on the lesson's edit page (owner, October 13, 2026:
+ * no editing controls on the regular pages).
  */
-function LessonCategoryEditor({ lessonId, categoryIds, categories }: LessonCategoryEditorProps) {
-  const t = useTranslations('lessonCategories');
-  const [values, setValues] = useState(categoryIds);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  /** The last selection the server confirmed. */
-  const confirmed = useRef(categoryIds);
-  /** The newest selection the admin asked for that has not been sent yet. */
-  const pending = useRef<string[] | null>(null);
-  const running = useRef(false);
-
-  useEffect(() => {
-    if (!error) return;
-    const timer = setTimeout(() => setError(null), 4000);
-    return () => clearTimeout(timer);
-  }, [error]);
-
-  const drain = async () => {
-    running.current = true;
-    setSaving(true);
-    try {
-      while (pending.current) {
-        const next = pending.current;
-        pending.current = null;
-        const result = await setLessonCategories(lessonId, next);
-        if ('error' in result) {
-          pending.current = null;
-          setValues(confirmed.current);
-          setError(t('saveFailed'));
-          break;
-        }
-        confirmed.current = result.categoryIds;
-        // Show the server's answer only once nothing newer is waiting.
-        if (pending.current === null) setValues(result.categoryIds);
-        setNotice(!result.membershipsSaved && result.categoryIds.length > 1 ? t('migrationNeeded') : null);
-      }
-    } catch {
-      pending.current = null;
-      setValues(confirmed.current);
-      setError(t('saveFailed'));
-    } finally {
-      running.current = false;
-      setSaving(false);
-    }
-  };
-
-  const change = (next: string[]) => {
-    setValues(next);
-    setError(null);
-    pending.current = next;
-    if (!running.current) void drain();
-  };
-
-  return (
-    <div className="space-y-2" aria-busy={saving || undefined}>
-      <p className="text-xs font-medium text-muted-foreground">{t('legend')}</p>
-      <CategoryPicker
-        id={`lesson-categories-${lessonId}`}
-        multiple
-        values={values}
-        onValuesChange={change}
-        categories={categories}
-        aria-label={t('legend')}
-      />
-      {saving && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" aria-hidden="true" />}
-      {notice && (
-        <p role="status" className="text-xs font-medium text-muted-foreground">
-          {notice}
-        </p>
-      )}
-      {error && (
-        <p role="alert" className="text-xs font-medium text-red-400">
-          {error}
-        </p>
-      )}
-    </div>
-  );
-}
-
-/**
- * Topic tags under the lesson title; each opens its tag page. Admins edit them
- * inline: the new tags show immediately and roll back if saving fails. The
- * admin category picker sits under the tags.
- */
-export function LessonTags({ lessonId, tags: initialTags, admin, categoryIds, categories }: LessonTagsProps) {
+export function LessonTags({ tags }: LessonTagsProps) {
   const t = useTranslations('tagBrowse');
-  const [tags, setTags] = useState(initialTags);
-  const [draft, setDraft] = useState<string[] | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!error) return;
-    const timer = setTimeout(() => setError(null), 4000);
-    return () => clearTimeout(timer);
-  }, [error]);
-
-  if (!admin && tags.length === 0) return null;
-
-  const save = async () => {
-    if (!draft) return;
-    const previous = tags;
-    const next = normalizeTags(draft);
-    setTags(next);
-    setDraft(null);
-    setSaving(true);
-    try {
-      const result = await updateLessonTags(lessonId, next);
-      if ('error' in result) throw new Error(result.error);
-      setTags(result.tags);
-    } catch {
-      setTags(previous);
-      setError(t('saveFailed'));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (draft) {
-    return (
-      <div className="space-y-2">
-        <TagInput value={draft} onChange={setDraft} label={t('lessonTags')} />
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={save}
-            className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90"
-          >
-            <Check className="h-3.5 w-3.5" />
-            {t('save')}
-          </button>
-          <button
-            type="button"
-            onClick={() => setDraft(null)}
-            className="rounded-full bg-[hsl(var(--surface-elevated))] px-4 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
-          >
-            {t('cancel')}
-          </button>
-        </div>
-      </div>
-    );
-  }
+  if (tags.length === 0) return null;
 
   return (
-    <>
-      <ul className="flex flex-wrap items-center gap-1.5" aria-label={t('lessonTags')}>
-        {tags.map((tag) => (
-          <li key={tag} className="max-w-full">
-            <LessonTagLink tag={tag} />
-          </li>
-        ))}
-        {admin && (
-          <li>
-            <button
-              type="button"
-              onClick={() => setDraft(tags)}
-              disabled={saving}
-              className="inline-flex min-h-7 items-center gap-1 rounded-full border border-dashed border-border px-2.5 py-0.5 text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-60"
-            >
-              {saving ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : tags.length > 0 ? (
-                <Pencil className="h-3 w-3" />
-              ) : (
-                <Plus className="h-3 w-3" />
-              )}
-              {saving ? t('saving') : tags.length > 0 ? t('editTags') : t('addTags')}
-            </button>
-          </li>
-        )}
-      </ul>
-      {admin && categories && (
-        <LessonCategoryEditor
-          key={lessonId}
-          lessonId={lessonId}
-          categoryIds={categoryIds ?? []}
-          categories={categories}
-        />
-      )}
-      {error && (
-        <div className="fixed inset-x-0 bottom-24 z-50 flex justify-center px-4">
-          <p
-            role="alert"
-            className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm font-medium text-red-400 shadow-lg backdrop-blur"
-          >
-            {error}
-          </p>
-        </div>
-      )}
-    </>
+    <ul className="flex flex-wrap items-center gap-1.5" aria-label={t('lessonTags')}>
+      {tags.map((tag) => (
+        <li key={tag} className="max-w-full">
+          <LessonTagLink tag={tag} />
+        </li>
+      ))}
+    </ul>
   );
 }

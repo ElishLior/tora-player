@@ -1065,5 +1065,11 @@
       "schema_missing": "Migration 028 must be applied before saving.",
       "failed": "Saving failed. Try again."
     }
+  },
+  "adminLessons": {
+    "title": "Lessons",
+    "subtitle": "Assign categories to several lessons at once. To edit one lesson, open it and tap the pencil.",
+    "back": "Back to the dashboard",
+    "cardDescription": "Assign categories to lessons and edit them"
   }
 }

@@ -34,7 +34,8 @@ interface LessonsClientProps {
   dateFilter?: string;
   /** Show a "play all" button that queues the loaded lessons (tag pages). */
   showPlayAll?: boolean;
-  admin?: boolean;
+  /** The admin bulk bar (set/add/remove a category on many lessons). Only /admin/lessons turns it on. */
+  bulkCategoryEdit?: boolean;
   categories?: Category[];
   searchLessons?: LessonWithRelations[];
 }
@@ -73,7 +74,7 @@ export function LessonsClient({
   tagFilter,
   dateFilter,
   showPlayAll,
-  admin,
+  bulkCategoryEdit,
   categories,
   searchLessons,
 }: LessonsClientProps) {
@@ -229,8 +230,8 @@ export function LessonsClient({
         </button>
       )}
 
-      {/* Bulk edit toggle button (admin only) */}
-      {admin && !selectionMode && (
+      {/* Bulk edit toggle button (admin page only) */}
+      {bulkCategoryEdit && !selectionMode && (
         <button
           onClick={() => setSelectionMode(true)}
           className="flex items-center gap-1.5 rounded-full bg-[hsl(var(--surface-elevated))] px-3.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--surface-highlight))] transition-colors mb-3"

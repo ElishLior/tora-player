@@ -44,16 +44,9 @@ const loadLesson = cache(async (lessonId: string) => {
     const route = await resolveLessonRoute(client, lessonId);
     if (route.kind === 'not-found') return null;
     const lesson = await getLessonById(client, route.lessonId);
-    // Every category of the lesson (migration 026). A missing table (null) falls back to the primary.
-    // A failed read is kept apart: the admin editor would otherwise save over the hidden categories.
-    let memberships: string[] | null = null;
-    let membershipsReadFailed = false;
-    try {
-      memberships = await readLessonCategoryIds(client, route.lessonId);
-    } catch {
-      membershipsReadFailed = true;
-    }
-    return { route, lesson, categoryIds: categorySelectionFor(memberships, lesson.category_id), membershipsReadFailed };
+    // Every category of the lesson (migration 026). A missing table or failed read falls back to the primary.
+    const memberships = await readLessonCategoryIds(client, route.lessonId).catch(() => null);
+    return { route, lesson, categoryIds: categorySelectionFor(memberships, lesson.category_id) };
   } catch {
     return null;
   }
@@ -95,15 +88,14 @@ export default async function LessonDetailPage({ params, searchParams }: Props) 
 
   const loaded = await loadLesson(lessonId);
   if (!loaded) notFound();
-  const { lesson, route, categoryIds, membershipsReadFailed } = loaded;
+  const { lesson, route, categoryIds } = loaded;
   if (route.kind === 'redirect') {
     permanentRedirect(lessonRedirectUrl(route.pathname, isSiteLocale(locale) ? locale : 'he', await searchParams));
   }
 
   const admin = await isAdmin();
-  // The tree names the lesson's categories and feeds the admin picker. A failed read shows the primary category only.
+  // The tree names the lesson's categories. A failed read shows the primary category only.
   const tree = await getCachedCategoriesTree().catch(() => []);
-  const categories = admin && !membershipsReadFailed ? tree : undefined;
   const named = categoryIds
     .map((id) => findCategory(tree, id))
     .filter((category) => category !== undefined);
@@ -261,13 +253,7 @@ export default async function LessonDetailPage({ params, searchParams }: Props) 
           <h1 className="text-xl font-bold xl:text-2xl" dir="auto">
             {lesson.hebrew_title || lesson.title}
           </h1>
-          <LessonTags
-            lessonId={lesson.id}
-            tags={lesson.tags ?? []}
-            admin={admin}
-            categoryIds={categoryIds}
-            categories={categories}
-          />
+          <LessonTags tags={lesson.tags ?? []} />
           {lesson.series && (
             <Link
               href={seriesPath(lesson.series.id)}
