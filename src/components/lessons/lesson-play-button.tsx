@@ -22,6 +22,8 @@ interface LessonPlayButtonProps {
   pauseLabel: string;
   className?: string;
   iconClassName?: string;
+  /** Starts playback instead of playing this lesson alone (shorts queue the list from this row). */
+  onStart?: () => void;
 }
 
 /**
@@ -29,16 +31,24 @@ interface LessonPlayButtonProps {
  * the loaded lesson, otherwise starts it where the listener left it. Put it
  * beside a stretched lesson link, never inside it.
  */
-export function LessonPlayButton({ lessonId, tracks, playLabel, pauseLabel, className, iconClassName }: LessonPlayButtonProps) {
+export function LessonPlayButton({
+  lessonId,
+  tracks,
+  playLabel,
+  pauseLabel,
+  className,
+  iconClassName,
+  onStart,
+}: LessonPlayButtonProps) {
   const { isCurrent, transport, playing } = useLessonPlayback(lessonId);
   return (
     <button
       type="button"
-      onClick={() => (isCurrent ? togglePlay() : playLesson(tracks))}
+      onClick={() => (isCurrent ? togglePlay() : onStart ? onStart() : playLesson(tracks))}
       disabled={tracks.length === 0}
       aria-label={playing ? pauseLabel : playLabel}
       className={cn(
-        'relative z-10 flex flex-shrink-0 items-center justify-center rounded-full transition-[transform,background-color,color] duration-150 ease-out hover:scale-105 motion-reduce:transition-none motion-reduce:hover:scale-100 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60',
+        'relative z-10 flex flex-shrink-0 items-center justify-center rounded-full transition-[transform,background-color,color] duration-150 ease-out hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:opacity-40 motion-reduce:transition-none motion-reduce:hover:scale-100',
         className,
       )}
     >

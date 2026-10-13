@@ -11,6 +11,7 @@ import { loadInitialLessonList } from '@/lib/supabase/lesson-list';
 import { tagFromSegment, tagPath } from '@/lib/tag-links';
 import { isAdmin } from '@/lib/auth/admin';
 import { EmptyState } from '@/components/shared/empty-state';
+import { PageHeader } from '@/components/shared/page-header';
 import { LessonsClient } from '../../lessons/lessons-client';
 import { SITE_TAGLINE, isSiteLocale } from '@/config/site';
 import { pageAlternates, truncateText } from '@/lib/seo';
@@ -52,21 +53,19 @@ export default async function TagPage({ params }: Props) {
 
   return (
     <div className="animate-fade-in space-y-5">
-      <div className="flex items-center gap-2">
-        <Link
-          href="/tags"
-          aria-label={t('allTags')}
-          className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-[hsl(var(--surface-highlight))] hover:text-foreground"
-        >
-          <ArrowRight className="h-5 w-5 ltr:rotate-180" />
-        </Link>
-        <div className="min-w-0">
-          <h1 className="truncate text-2xl font-bold text-primary">
-            <bdi>#{tag}</bdi>
-          </h1>
-          {count !== undefined && <p className="text-xs text-muted-foreground">{t('lessonCount', { count })}</p>}
-        </div>
-      </div>
+      <PageHeader
+        title={<bdi className="text-primary">#{tag}</bdi>}
+        subtitle={count !== undefined ? t('lessonCount', { count }) : undefined}
+        leading={
+          <Link
+            href="/tags"
+            aria-label={t('allTags')}
+            className="mt-0.5 rounded-full p-2 text-muted-foreground transition-colors hover:bg-[hsl(var(--surface-highlight))] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+          >
+            <ArrowRight className="h-5 w-5 ltr:rotate-180" />
+          </Link>
+        }
+      />
 
       <Link
         href="/lessons"

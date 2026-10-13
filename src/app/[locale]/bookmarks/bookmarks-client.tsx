@@ -1,8 +1,15 @@
 'use client';
 
+import { useMemo } from 'react';
 import { Bookmark } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { useBookmarksStore } from '@/stores/bookmarks-store';
 import { BookmarkGroups } from '@/components/bookmarks/bookmark-groups';
+import { EmptyState } from '@/components/shared/empty-state';
+import { PageHeader } from '@/components/shared/page-header';
+import { useLessonsByIds } from '@/hooks/use-lessons-by-ids';
+import { useHydrated } from '@/hooks/use-hydrated';
+import type { LessonWithRelations } from '@/types/database';
 
 interface BookmarksPageClientProps {
   locale: string;
@@ -10,30 +17,27 @@ interface BookmarksPageClientProps {
 
 export function BookmarksPageClient({ locale }: BookmarksPageClientProps) {
   const bookmarks = useBookmarksStore((s) => s.bookmarks);
-  const isRTL = locale === 'he';
+  const hydrated = useHydrated();
+  const t = useTranslations('bookmarks');
+  const tDesign = useTranslations('pagesDesign');
+
+  // The lessons' covers and links come from the published catalog. Offline (or if the read
+  // fails) the groups still show, with the title each bookmark stored.
+  const lessonIds = useMemo(() => [...new Set(bookmarks.map((bm) => bm.lessonId))].sort(), [bookmarks]);
+  const { lessons } = useLessonsByIds(lessonIds, hydrated);
+  const lessonsById = useMemo(
+    () => (lessons.size > 0 ? (Object.fromEntries(lessons) as Record<string, LessonWithRelations>) : null),
+    [lessons],
+  );
 
   return (
-    <div className="space-y-6" dir={isRTL ? 'rtl' : 'ltr'}>
-      <h1 className="text-2xl font-bold">
-        {isRTL ? 'סימניות' : 'Bookmarks'}
-      </h1>
+    <div className="space-y-6" dir={locale === 'he' ? 'rtl' : 'ltr'}>
+      <PageHeader icon={Bookmark} iconClassName="text-primary" title={t('title')} />
 
       {bookmarks.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="rounded-full bg-[hsl(var(--surface-elevated))] p-5 mb-4">
-            <Bookmark className="h-8 w-8 text-muted-foreground" />
-          </div>
-          <h3 className="text-lg font-bold mb-1">
-            {isRTL ? 'אין סימניות עדיין' : 'No bookmarks yet'}
-          </h3>
-          <p className="text-sm text-muted-foreground max-w-sm">
-            {isRTL
-              ? 'לחץ על כפתור הסימניה בנגן כדי לשמור רגעים חשובים'
-              : 'Tap the bookmark button in the player to save important moments'}
-          </p>
-        </div>
+        <EmptyState icon={Bookmark} title={t('noBookmarks')} description={tDesign('bookmarks.hint')} />
       ) : (
-        <BookmarkGroups bookmarks={bookmarks} locale={locale} />
+        <BookmarkGroups bookmarks={bookmarks} locale={locale} lessons={lessonsById} />
       )}
     </div>
   );

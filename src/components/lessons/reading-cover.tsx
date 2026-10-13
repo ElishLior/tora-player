@@ -19,19 +19,21 @@ export function readingCoverOf(lesson: ReadingCoverLesson): { text: string; hue:
 }
 
 /**
- * The lesson's cover (concept B): its reading name on a gradient in the reading's hue,
- * the same colour family as the row date tiles. Decorative; size it with `className`.
+ * A cover tile: a text on a gradient in one hue (the reading's colour family, the same as
+ * the row date tiles). Used for a lesson's cover, a playlist, a series or a category. Decorative
+ * (the link that names it sits beside it); size it with `className`.
  */
-export function ReadingCover({
-  lesson,
+export function CoverTile({
+  text,
+  hue,
   className,
   textClassName,
 }: {
-  lesson: ReadingCoverLesson;
+  text: string;
+  hue: number;
   className?: string;
   textClassName?: string;
 }) {
-  const { text, hue } = readingCoverOf(lesson);
   return (
     <span
       aria-hidden="true"
@@ -49,4 +51,18 @@ export function ReadingCover({
       </b>
     </span>
   );
+}
+
+/** A lesson's cover (concept B): its reading name on its reading's gradient. */
+export function ReadingCover({
+  lesson,
+  className,
+  textClassName,
+}: {
+  lesson: ReadingCoverLesson;
+  className?: string;
+  textClassName?: string;
+}) {
+  const { text, hue } = readingCoverOf(lesson);
+  return <CoverTile text={text} hue={hue} className={className} textClassName={textClassName} />;
 }

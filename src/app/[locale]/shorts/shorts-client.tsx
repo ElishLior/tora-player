@@ -1,16 +1,16 @@
 'use client';
 
-import { lessonPath } from '@/config/site';
-
 import { useMemo, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
-import { AlertTriangle, Pause, Play, Scissors, Search } from 'lucide-react';
+import { AlertTriangle, Play, Scissors } from 'lucide-react';
 import { Link } from '@/i18n/routing';
 import { EmptyState } from '@/components/shared/empty-state';
-import { LessonDateLink, LessonTagList } from '@/components/lessons/lesson-browse-links';
-import { PartDurations } from '@/components/lessons/part-durations';
-import { getLessonPartSeconds, getLessonTracks } from '@/lib/lesson-tracks';
+import { PageHeader } from '@/components/shared/page-header';
+import { SearchField } from '@/components/shared/search-field';
+import { CardGrid } from '@/components/shared/card-grid';
+import { LessonCard } from '@/components/lessons/lesson-card';
 import { playLessons } from '@/lib/play-lesson';
+import { getLessonTracks } from '@/lib/lesson-tracks';
 import { tagPath } from '@/lib/tag-links';
 import { categoryLabel } from '@/lib/category-tree';
 import { useAudioStore } from '@/stores/audio-store';
@@ -49,6 +49,10 @@ function topicOf(lesson: LessonWithRelations, topics: Category[]): string {
   return topics.some((tp) => tp.id === lesson.category_id) ? lesson.category_id! : GENERAL;
 }
 
+/** A filter chip (topic or tag group): the same shape as the /lessons filters. */
+const CHIP =
+  'whitespace-nowrap rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60';
+
 export default function ShortsClient({ lessons, topics, loadFailed, initialTag }: ShortsClientProps) {
   const t = useTranslations('shorts');
   const tLessons = useTranslations('lessons');
@@ -59,16 +63,13 @@ export default function ShortsClient({ lessons, topics, loadFailed, initialTag }
   const tagTabs = useMemo(() => countTags(lessons), [lessons]);
   const [groupBy, setGroupBy] = useState<GroupBy>(tagTabs.length > 0 ? 'tag' : 'category');
   const currentTrack = useAudioStore((s) => s.currentTrack);
-  const isPlaying = useAudioStore((s) => s.isPlaying);
   const togglePlay = useAudioStore((s) => s.togglePlay);
   const locale = useLocale();
 
   // Topics that actually have lessons, in category order, "general" last.
   const topicTabs = useMemo(() => {
     const used = new Set(lessons.map((l) => topicOf(l, topics)));
-    const tabs = topics
-      .filter((tp) => used.has(tp.id))
-      .map((tp) => ({ id: tp.id, label: categoryLabel(tp, locale) }));
+    const tabs = topics.filter((tp) => used.has(tp.id)).map((tp) => ({ id: tp.id, label: categoryLabel(tp, locale) }));
     if (used.has(GENERAL)) tabs.push({ id: GENERAL, label: t('general') });
     return tabs;
   }, [lessons, topics, t, locale]);
@@ -93,6 +94,7 @@ export default function ShortsClient({ lessons, topics, loadFailed, initialTag }
   );
   const playable = visible.filter((lesson) => lesson.audio_url || lesson.audio_files?.length);
 
+  // A row's play button queues the visible playable shorts from that row on.
   const playFrom = (lesson: LessonWithRelations) => {
     if (currentTrack?.id === lesson.id) {
       togglePlay();
@@ -125,87 +127,28 @@ export default function ShortsClient({ lessons, topics, loadFailed, initialTag }
     if (untagged.length > 0) groups.push({ id: UNTAGGED, label: tTags('untagged'), lessons: untagged });
   }
 
-  const renderRow = (lesson: LessonWithRelations) => {
-    const isCurrent = currentTrack?.id === lesson.id;
-    const topicLabel = topicTabs.find((tab) => tab.id === topicOf(lesson, topics))?.label;
-    const partSeconds = getLessonPartSeconds(lesson);
-    return (
-      <li
-        key={lesson.id}
-        className="relative flex items-center gap-3 rounded-lg p-2.5 transition-colors hover:bg-[hsl(var(--surface-highlight))] has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-primary/50"
-      >
-        {/* Play and metadata links are siblings of the stretched lesson link, never nested. */}
-        <button
-          type="button"
-          onClick={() => playFrom(lesson)}
-          disabled={!lesson.audio_url}
-          aria-label={isCurrent && isPlaying ? t('pause') : t('play')}
-          className={`relative z-10 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-30 ${
-            isCurrent
-              ? 'bg-primary text-primary-foreground'
-              : 'bg-[hsl(var(--surface-elevated))] text-foreground hover:bg-primary hover:text-primary-foreground'
-          }`}
-        >
-          {isCurrent && isPlaying ? <Pause className="h-4 w-4" /> : <Play className="ms-0.5 h-4 w-4" />}
-        </button>
-        <div className="min-w-0 flex-1">
-          <Link href={lessonPath(lesson)} className="block min-w-0 before:absolute before:inset-0 before:content-['']">
-            <p className={`truncate text-sm font-semibold ${isCurrent ? 'text-primary' : ''}`} dir="auto">
-              {lesson.hebrew_title || lesson.title}
-            </p>
-          </Link>
-          <div className="flex min-w-0 items-baseline gap-1 text-xs text-muted-foreground">
-            {topicLabel && topicTabs.length > 1 && <span className="flex-shrink-0 text-primary/80">{topicLabel} · </span>}
-            <span className="flex-shrink-0">
-              <LessonDateLink date={lesson.date} hebrewDate={lesson.hebrew_date} />
-            </span>
-            {partSeconds.some((seconds) => seconds > 0) && (
-              <span aria-hidden="true" className="flex-shrink-0">
-                ·
-              </span>
-            )}
-            <PartDurations seconds={partSeconds} className="flex-1" />
-          </div>
-          <LessonTagList tags={lesson.tags} />
-        </div>
-      </li>
-    );
-  };
-
   return (
-    <div className="animate-fade-in space-y-5">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold">
-            <Scissors className="h-5 w-5 text-rose-400" />
-            {t('title')}
-          </h1>
-          <p className="text-xs text-muted-foreground">
-            {t('subtitle')} · {t('count', { count: lessons.length })}
-          </p>
-        </div>
-        {playable.length > 0 && (
-          <button
-            type="button"
-            onClick={() => playLessons(playable.map(getLessonTracks))}
-            className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90"
-          >
-            <Play className="h-4 w-4" />
-            {t('playAll')}
-          </button>
-        )}
-      </div>
+    <div className="animate-fade-in space-y-6">
+      <PageHeader
+        icon={Scissors}
+        iconClassName="text-rose-400"
+        title={t('title')}
+        subtitle={`${t('subtitle')} · ${t('count', { count: lessons.length })}`}
+        actions={
+          playable.length > 0 && (
+            <button
+              type="button"
+              onClick={() => playLessons(playable.map(getLessonTracks))}
+              className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+            >
+              <Play className="h-4 w-4 fill-current" />
+              {t('playAll')}
+            </button>
+          )
+        }
+      />
 
-      <div className="relative">
-        <Search className="absolute start-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <input
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={t('searchPlaceholder')}
-          className="w-full rounded-full border-0 bg-[hsl(var(--surface-elevated))] py-2.5 pe-4 ps-10 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
-        />
-      </div>
+      <SearchField value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('searchPlaceholder')} />
 
       {topicTabs.length > 1 && (
         <div className="flex flex-wrap gap-2">
@@ -214,10 +157,11 @@ export default function ShortsClient({ lessons, topics, loadFailed, initialTag }
               key={tab.id ?? 'all'}
               type="button"
               onClick={() => setTopic(tab.id)}
-              className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors ${
+              aria-pressed={topic === tab.id}
+              className={`${CHIP} ${
                 topic === tab.id
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-[hsl(var(--surface-elevated))] text-muted-foreground hover:text-foreground'
+                  ? 'border-primary bg-primary text-primary-foreground'
+                  : 'border-transparent bg-[hsl(var(--surface-elevated))] text-muted-foreground hover:text-foreground'
               }`}
             >
               {tab.label}
@@ -240,7 +184,7 @@ export default function ShortsClient({ lessons, topics, loadFailed, initialTag }
                     type="button"
                     onClick={() => setTag(active ? null : tg)}
                     aria-pressed={active}
-                    className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                    className={`${CHIP} ${
                       active
                         ? 'border-primary bg-primary text-primary-foreground'
                         : 'border-primary/30 text-primary hover:bg-primary/10'
@@ -256,7 +200,7 @@ export default function ShortsClient({ lessons, topics, loadFailed, initialTag }
       )}
 
       {browsingAll && canGroupByCategory && canGroupByTag && visible.length > 0 && (
-        <div role="group" aria-label={tTags('groupBy')} className="flex items-center gap-1 text-xs">
+        <div role="group" aria-label={tTags('groupBy')} className="flex items-center gap-1 text-[13px]">
           <span className="text-muted-foreground">{tTags('groupBy')}:</span>
           {(['tag', 'category'] as const).map((mode) => (
             <button
@@ -264,7 +208,7 @@ export default function ShortsClient({ lessons, topics, loadFailed, initialTag }
               type="button"
               onClick={() => setGroupBy(mode)}
               aria-pressed={activeGroupBy === mode}
-              className={`rounded-full px-2.5 py-1 transition-colors ${
+              className={`rounded-full px-2.5 py-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 ${
                 activeGroupBy === mode
                   ? 'bg-[hsl(var(--surface-highlight))] font-bold text-foreground'
                   : 'text-muted-foreground hover:text-foreground'
@@ -283,23 +227,33 @@ export default function ShortsClient({ lessons, topics, loadFailed, initialTag }
           description={tLessons('loadErrorDescription')}
         />
       ) : visible.length === 0 ? (
-        <EmptyState icon={Scissors} title={lessons.length === 0 ? t('empty') : t('noResults')} />
+        <EmptyState tone="rose" icon={Scissors} title={lessons.length === 0 ? t('empty') : t('noResults')} />
       ) : (
         groups.map((group) => (
-          <section key={group.id} className="space-y-1">
+          <section key={group.id} className="space-y-2">
             {group.tag ? (
-              <h2 className="px-1 text-sm font-bold">
+              <h2 className="flex items-baseline gap-2 px-1 text-sm font-bold">
                 <Link
                   href={tagPath(group.tag)}
                   className="inline-flex min-h-7 max-w-full items-center rounded text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                 >
                   <bdi>{group.label}</bdi>
                 </Link>
+                <span aria-hidden="true" className="h-px flex-1 self-center bg-border/70" />
               </h2>
             ) : (
-              group.label && <h2 className="px-1 text-sm font-bold text-muted-foreground">{group.label}</h2>
+              group.label && (
+                <h2 className="flex items-baseline gap-2 px-1 text-sm font-bold text-muted-foreground">
+                  {group.label}
+                  <span aria-hidden="true" className="h-px flex-1 self-center bg-border/70" />
+                </h2>
+              )
             )}
-            <ul className="space-y-0.5">{group.lessons.map(renderRow)}</ul>
+            <CardGrid variant="rows">
+              {group.lessons.map((lesson) => (
+                <LessonCard key={lesson.id} lesson={lesson} variant="short" onStart={() => playFrom(lesson)} />
+              ))}
+            </CardGrid>
           </section>
         ))
       )}
