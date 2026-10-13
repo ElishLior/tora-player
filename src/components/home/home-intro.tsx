@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   Bell,
@@ -55,15 +55,30 @@ const ITEMS = [
   { key: 'share', hue: 210, icons: [] },
 ] as const;
 
+/** The collapsed row's rotating line: the lesson-page tip first, then every feature. */
+const TIPS = ['lessonPage', ...ITEMS.map((item) => `items.${item.key}` as const)] as const;
+const TIP_INTERVAL_MS = 7000;
+
 /**
- * "כל מה שאפשר לעשות כאן": the feature intro at the top of the home page.
- * Collapsed it is one line; expanded it lists every feature in a grid, each
- * with the app's own icon, plus the lesson-page tip. It always loads collapsed
- * and opens only when the listener taps it (owner, October 13, 2026).
+ * "טיפים ועדכונים": the tips box at the top of the home page. It always loads
+ * collapsed (owner, October 13, 2026): one row whose second line shows one tip
+ * at a time, changing every few seconds (paused on hover, focus, a hidden tab
+ * and reduced motion). A tap opens every feature in a grid, each with the
+ * app's own icon, plus the lesson-page tip.
  */
 export function HomeIntro({ className }: { className?: string }) {
   const t = useTranslations('homeIntro');
   const [open, setOpen] = useState(false);
+  const [tip, setTip] = useState(0);
+  const [held, setHeld] = useState(false);
+
+  useEffect(() => {
+    if (open || held || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const timer = window.setInterval(() => {
+      if (!document.hidden) setTip((index) => (index + 1) % TIPS.length);
+    }, TIP_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [open, held]);
 
   const lessonPageTip = (
     <div className="from-primary/14 grid grid-cols-[auto_1fr] items-start gap-3 rounded-xl border border-primary/30 bg-gradient-to-r to-primary/5 p-3 text-[13px] leading-relaxed text-foreground/80">
@@ -85,28 +100,45 @@ export function HomeIntro({ className }: { className?: string }) {
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
+        onPointerEnter={() => setHeld(true)}
+        onPointerLeave={() => setHeld(false)}
+        onFocus={() => setHeld(true)}
+        onBlur={() => setHeld(false)}
         aria-expanded={open}
         aria-controls="home-intro-body"
-        className="flex min-h-12 w-full items-center gap-3 rounded-xl text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+        className="grid w-full gap-1 rounded-xl py-2 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
       >
-        <span className="bg-primary/12 grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg text-primary">
-          <Sparkles aria-hidden="true" className="h-4 w-4" />
+        <span className="flex items-center gap-3">
+          <span className="bg-primary/12 grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg text-primary">
+            <Sparkles aria-hidden="true" className="h-4 w-4" />
+          </span>
+          <span id="home-intro-title" className="flex-1 text-[15px] font-bold text-foreground">
+            {t('title')}
+          </span>
+          <span className="text-[13px] text-muted-foreground">
+            {open ? t('hide') : t('more', { count: ITEMS.length })}
+          </span>
+          <span className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-full bg-[hsl(var(--surface-elevated))]">
+            <ChevronDown
+              aria-hidden="true"
+              className={cn(
+                'h-4 w-4 transition-transform duration-200 motion-reduce:transition-none',
+                open && 'rotate-180',
+              )}
+            />
+          </span>
         </span>
-        <span id="home-intro-title" className="flex-1 text-[15px] font-bold text-foreground">
-          {t('title')}
-        </span>
-        <span className="text-[13px] text-muted-foreground">
-          {open ? t('hide') : t('more', { count: ITEMS.length })}
-        </span>
-        <span className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-full bg-[hsl(var(--surface-elevated))]">
-          <ChevronDown
+        {/* One tip at a time while collapsed. Hidden from screen readers: the text
+            changes on its own, and every tip is in the list the button opens. */}
+        {!open && (
+          <span
+            key={tip}
             aria-hidden="true"
-            className={cn(
-              'h-4 w-4 transition-transform duration-200 motion-reduce:transition-none',
-              open && 'rotate-180',
-            )}
-          />
-        </span>
+            className="line-clamp-2 min-h-[2lh] ps-11 text-[13px] leading-relaxed text-foreground/75 motion-safe:duration-300 motion-safe:animate-in motion-safe:fade-in-0"
+          >
+            {t.rich(TIPS[tip], RICH)}
+          </span>
+        )}
       </button>
 
       <div id="home-intro-body" hidden={!open} className={cn('grid gap-3 pb-2 pt-2', !open && 'hidden')}>
