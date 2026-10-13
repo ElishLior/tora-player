@@ -59,7 +59,7 @@ import { useBookmarksStore, type LocalBookmark } from '@/stores/bookmarks-store'
 import { useNotesStore, type LocalNote } from '@/stores/notes-store';
 import { submitSnippet } from '@/actions/snippets';
 import { updateLessonTags } from '@/actions/lessons';
-import { updateLessonCategory } from '@/actions/categories';
+import { setLessonCategories } from '@/actions/lesson-categories';
 import { TagInput } from '@/components/tags/tag-input';
 import { CategoryPicker } from '@/components/categories/category-picker';
 import { LessonTagLink } from '@/components/lessons/lesson-browse-links';
@@ -1553,26 +1553,34 @@ interface LessonTagsProps {
   lessonId: string;
   tags: string[];
   admin: boolean;
-  /** Admins only: the lesson's category and the category tree for its inline picker. */
-  categoryId?: string | null;
+  /** Admins only: the lesson's categories (primary first) and the category tree for its inline picker. */
+  categoryIds?: string[];
   categories?: CategoryWithChildren[];
 }
 
 interface LessonCategoryEditorProps {
   lessonId: string;
-  categoryId: string | null;
+  categoryIds: string[];
   categories: CategoryWithChildren[];
 }
 
 /**
- * Admin control for the lesson's category. Saves on change: the new value
- * shows at once and rolls back with an error message if saving fails.
+ * Admin control for the lesson's categories (several, any level; the first is
+ * primary). The picker stays enabled while saving, so keyboard focus is kept.
+ * Saves run one at a time: a change made during a save is sent next, and only
+ * the newest answer is shown. A failed save rolls back to the last confirmed selection.
  */
-function LessonCategoryEditor({ lessonId, categoryId, categories }: LessonCategoryEditorProps) {
-  const t = useTranslations('categoryAdmin');
-  const [value, setValue] = useState(categoryId ?? '');
+function LessonCategoryEditor({ lessonId, categoryIds, categories }: LessonCategoryEditorProps) {
+  const t = useTranslations('lessonCategories');
+  const [values, setValues] = useState(categoryIds);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  /** The last selection the server confirmed. */
+  const confirmed = useRef(categoryIds);
+  /** The newest selection the admin asked for that has not been sent yet. */
+  const pending = useRef<string[] | null>(null);
+  const running = useRef(false);
 
   useEffect(() => {
     if (!error) return;
@@ -1580,40 +1588,61 @@ function LessonCategoryEditor({ lessonId, categoryId, categories }: LessonCatego
     return () => clearTimeout(timer);
   }, [error]);
 
-  const change = async (next: string) => {
-    const previous = value;
-    setValue(next);
+  const drain = async () => {
+    running.current = true;
     setSaving(true);
-    setError(null);
     try {
-      const result = await updateLessonCategory(lessonId, next || null);
-      if ('error' in result) throw new Error(result.error);
+      while (pending.current) {
+        const next = pending.current;
+        pending.current = null;
+        const result = await setLessonCategories(lessonId, next);
+        if ('error' in result) {
+          pending.current = null;
+          setValues(confirmed.current);
+          setError(t('saveFailed'));
+          break;
+        }
+        confirmed.current = result.categoryIds;
+        // Show the server's answer only once nothing newer is waiting.
+        if (pending.current === null) setValues(result.categoryIds);
+        setNotice(!result.membershipsSaved && result.categoryIds.length > 1 ? t('migrationNeeded') : null);
+      }
     } catch {
-      setValue(previous);
-      setError(t('lessonCategorySaveFailed'));
+      pending.current = null;
+      setValues(confirmed.current);
+      setError(t('saveFailed'));
     } finally {
+      running.current = false;
       setSaving(false);
     }
   };
 
+  const change = (next: string[]) => {
+    setValues(next);
+    setError(null);
+    pending.current = next;
+    if (!running.current) void drain();
+  };
+
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <label htmlFor={`lesson-category-${lessonId}`} className="text-xs font-medium text-muted-foreground">
-        {t('lessonCategory')}
-      </label>
+    <div className="space-y-2" aria-busy={saving || undefined}>
+      <p className="text-xs font-medium text-muted-foreground">{t('legend')}</p>
       <CategoryPicker
-        id={`lesson-category-${lessonId}`}
-        value={value}
-        onChange={change}
+        id={`lesson-categories-${lessonId}`}
+        multiple
+        values={values}
+        onValuesChange={change}
         categories={categories}
-        includeNone
-        noneLabel={t('noCategory')}
-        disabled={saving}
-        className="max-w-full rounded-full bg-[hsl(var(--surface-elevated))] px-3 py-1 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 border-0"
+        aria-label={t('legend')}
       />
       {saving && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" aria-hidden="true" />}
+      {notice && (
+        <p role="status" className="text-xs font-medium text-muted-foreground">
+          {notice}
+        </p>
+      )}
       {error && (
-        <p role="alert" className="w-full text-xs font-medium text-red-400">
+        <p role="alert" className="text-xs font-medium text-red-400">
           {error}
         </p>
       )}
@@ -1626,7 +1655,7 @@ function LessonCategoryEditor({ lessonId, categoryId, categories }: LessonCatego
  * inline: the new tags show immediately and roll back if saving fails. The
  * admin category picker sits under the tags.
  */
-export function LessonTags({ lessonId, tags: initialTags, admin, categoryId, categories }: LessonTagsProps) {
+export function LessonTags({ lessonId, tags: initialTags, admin, categoryIds, categories }: LessonTagsProps) {
   const t = useTranslations('tagBrowse');
   const [tags, setTags] = useState(initialTags);
   const [draft, setDraft] = useState<string[] | null>(null);
@@ -1717,7 +1746,7 @@ export function LessonTags({ lessonId, tags: initialTags, admin, categoryId, cat
         <LessonCategoryEditor
           key={lessonId}
           lessonId={lessonId}
-          categoryId={categoryId ?? null}
+          categoryIds={categoryIds ?? []}
           categories={categories}
         />
       )}

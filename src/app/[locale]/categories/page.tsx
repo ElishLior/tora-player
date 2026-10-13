@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { isSupabaseConfigured } from '@/lib/supabase/server';
-import { getCachedCategoriesTree, getCachedCategoryLessonCounts } from '@/lib/supabase/anon';
+import { getCachedCategoriesTree, getCachedCategoryLessonTotals } from '@/lib/supabase/anon';
 import { ListLoadError } from '@/components/shared/list-load-error';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PageHeader } from '@/components/shared/page-header';
@@ -25,7 +25,7 @@ export default async function CategoriesPage({ params }: Props) {
 
   if (isSupabaseConfigured()) {
     try {
-      [categories, counts] = await Promise.all([getCachedCategoriesTree(), getCachedCategoryLessonCounts()]);
+      [categories, counts] = await Promise.all([getCachedCategoriesTree(), getCachedCategoryLessonTotals()]);
     } catch {
       failed = true;
     }

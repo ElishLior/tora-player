@@ -4,7 +4,7 @@ import { cache } from 'react';
 import type { Metadata } from 'next';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { isSupabaseConfigured } from '@/lib/supabase/server';
-import { getCachedCategoriesTree, getCachedCategoryLessonCounts, getCachedCategoryLessons } from '@/lib/supabase/anon';
+import { getCachedCategoriesTree, getCachedCategoryLessonTotals, getCachedCategoryLessons } from '@/lib/supabase/anon';
 import { PlayCategoryButton } from '@/components/lessons/play-category-button';
 import { LessonCard } from '@/components/lessons/lesson-card';
 import { LessonCardList } from '@/components/lessons/lesson-card-list';
@@ -86,7 +86,7 @@ export default async function CategoryDetailPage({ params }: Props) {
 
   // Counts for the subcategory tiles (cached). A failed count read shows no numbers, not an error.
   const counts =
-    subcategories.length > 0 ? await getCachedCategoryLessonCounts().catch(() => ({}) as Record<string, number>) : {};
+    subcategories.length > 0 ? await getCachedCategoryLessonTotals().catch(() => ({}) as Record<string, number>) : {};
 
   // The continuous-play session starts from the first lessons of the list above (no second read),
   // so the tap can play synchronously. Snapshot is taken after the cached read: its rows predate it.

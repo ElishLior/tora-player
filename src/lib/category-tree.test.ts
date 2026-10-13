@@ -187,12 +187,11 @@ describe('ancestors, children and subtrees', () => {
     expect(categorySubtree(tree, MISSING)).toEqual([]);
   });
 
-  it('sums lesson counts over a whole branch without counting a category twice', () => {
-    const counts = { [LESSONS]: 1, [ETZ]: 2, [ETZ_YEAR]: 4, [TZION]: 8, [WORK]: 16 };
-    expect(categoryLessonTotal(tree, counts, LESSONS)).toBe(15);
-    expect(categoryLessonTotal(tree, counts, ETZ)).toBe(6);
-    expect(categoryLessonTotal(tree, counts, WORK)).toBe(16);
-    expect(categoryLessonTotal(tree, counts, MISSING)).toBe(0);
+  it('reads the branch total (subtree counts, each lesson once) and 0 for an unknown category', () => {
+    const totals = { [LESSONS]: 15, [ETZ]: 6, [WORK]: 16 };
+    expect(categoryLessonTotal(totals, LESSONS)).toBe(15);
+    expect(categoryLessonTotal(totals, ETZ)).toBe(6);
+    expect(categoryLessonTotal(totals, MISSING)).toBe(0);
   });
 });
 

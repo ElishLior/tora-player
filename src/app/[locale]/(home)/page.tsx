@@ -4,7 +4,7 @@ import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { isSupabaseConfigured } from '@/lib/supabase/server';
 import {
   getCachedCategoriesTree,
-  getCachedCategoryLessonCounts,
+  getCachedCategoryLessonTotals,
   getCachedRecentLessons,
   getCachedShortLessons,
 } from '@/lib/supabase/anon';
@@ -51,7 +51,7 @@ export default async function HomePage({ params }: Props) {
       [recentLessons, categories, counts, { lessons: recentShorts }] = await Promise.all([
         getCachedRecentLessons(10),
         getCachedCategoriesTree(),
-        getCachedCategoryLessonCounts(),
+        getCachedCategoryLessonTotals(),
         getCachedShortLessons(5),
       ]);
     } catch (error) {

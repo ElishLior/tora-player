@@ -87,7 +87,10 @@ export interface LessonDraft {
   partsEdited: boolean;
   /** Topic from the filename, used as the short-lesson title. */
   label: string;
+  /** The primary category (the first of categoryIds). Kept for single-value readers. */
   categoryId: string;
+  /** Every category the lesson is filed under, primary first (migration 026). Absent means [categoryId]. */
+  categoryIds?: string[];
   description: string;
   tags: string[];
   /** Admin left this lesson out of the batch. */
@@ -322,6 +325,7 @@ export function setDraftShort(draft: LessonDraft, isShort: boolean): LessonDraft
       ...draft,
       isShort,
       categoryId: isShort ? SHORTS_CATEGORY_ID : DAILY_CATEGORY_ID,
+      categoryIds: [isShort ? SHORTS_CATEGORY_ID : DAILY_CATEGORY_ID],
       partsEdited: false,
     }),
   );
@@ -497,8 +501,19 @@ export interface DraftLessonFields {
   location: string;
   lesson_type: string;
   category_id: string | null;
+  /** Ordered categories when there is more than one; createDraftLesson saves them after the insert. */
+  category_ids?: string[];
   description?: string;
   tags?: string[];
+}
+
+/** A draft's categories, primary first. */
+export function draftCategoryIds(draft: Pick<LessonDraft, 'categoryId' | 'categoryIds'>): string[] {
+  // categoryIds is authoritative only while its first entry is the primary categoryId.
+  // A write that changes categoryId alone leaves categoryIds stale; then categoryId wins.
+  const ids = draft.categoryIds ?? [];
+  if (ids.length > 0 && ids[0] === draft.categoryId) return ids;
+  return draft.categoryId ? [draft.categoryId] : [];
 }
 
 export function lessonFieldsForDraft(draft: LessonDraft): DraftLessonFields {
@@ -514,7 +529,8 @@ export function lessonFieldsForDraft(draft: LessonDraft): DraftLessonFields {
     teacher: meta.teacher,
     location: meta.location,
     lesson_type: draft.isShort ? SHORT_LESSON_TYPE : meta.lessonType,
-    category_id: draft.categoryId || null,
+    category_id: draftCategoryIds(draft)[0] ?? null,
+    ...(draftCategoryIds(draft).length > 1 ? { category_ids: draftCategoryIds(draft) } : {}),
     ...(description ? { description } : {}),
     tags: normalizeTags(draft.tags),
   };

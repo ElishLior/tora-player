@@ -29,7 +29,7 @@ export function CategoryTiles({ nodes, tree, counts, locale, emptyLabel, leading
   return (
     <CardGrid variant="cards">
       {nodes.map((node) => {
-        const total = categoryLessonTotal(tree, counts, node.id);
+        const total = categoryLessonTotal(counts, node.id);
         return (
           <CollectionCard
             key={node.id}
@@ -91,7 +91,7 @@ function CategoryRows({
   return (
     <ul className={cn('space-y-0.5', depth > 0 && 'ms-4')}>
       {nodes.map((node) => {
-        const total = categoryLessonTotal(tree, counts, node.id);
+        const total = categoryLessonTotal(counts, node.id);
         return (
           <li key={node.id}>
             <Link

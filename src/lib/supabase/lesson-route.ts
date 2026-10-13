@@ -74,3 +74,15 @@ export function isMissingSlugSchema(error: { code?: string; message?: string }):
     /slug|lesson_slug_history/i.test(error.message ?? '')
   );
 }
+
+/**
+ * The lesson_categories table (migration 026) is missing. PostgREST reports an
+ * embed of a missing table as a missing relationship (PGRST200), a read of it
+ * as a missing table (PGRST205 or 42P01). The message names the table.
+ */
+export function isMissingLessonCategories(error: { code?: string; message?: string }): boolean {
+  return (
+    ['42P01', 'PGRST200', 'PGRST205'].includes(error.code ?? '') &&
+    /lesson_categories/.test(error.message ?? '')
+  );
+}
