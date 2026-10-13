@@ -2,9 +2,11 @@
 
 Versions follow `MAJOR.MINOR.PATCH`. The version in `package.json` is the release being worked on; a version is released when it is deployed to production from `main` (tag `vX.Y.Z` on that commit). Add each change under the in-progress version as it lands in `dev`.
 
-## 1.2.0 — in progress
+## 1.2.1 — in progress
 
-Migrations 023, 024 and 025 applied in production on October 13, 2026, before the deploy (checked read-only; a stale `move_category` call returns `CAT01` through PostgREST).
+## 1.2.0 — October 13, 2026
+
+Production release of `main` at `2fcc5da` (PRs #57, #58), deployment `dpl_ETd6f6SzSGBmoXEDkt3KniyL6QpC`, tag `v1.2.0`. Migrations 023–028 applied in production on October 13, 2026, before the deploy (checked read-only; a stale `move_category` call returns `CAT01` through PostgREST). Production smoke: health, home, lists, category, lesson page, feed, sitemap, and the Playwright offline-download, player-behavior and smoke specs (20 passed).
 
 
 - Continuous category playback: "ניגון רציף של הקטגוריה" on a category page plays the category and all its subcategories in one session. Order: date, then upload time. The queue is frozen when it starts, so new uploads don't reshuffle it. Multipart lessons finish before the next lesson, more lessons load ahead in segments of 25, and unavailable lessons are skipped with a notice (at most 3 in a row). It ends with a "category finished" notice, with no repeat or shuffle. A restored session never autoplays. A source error skips a lesson only after one retry. While the next lesson loads, the player shows loading and Play keeps waiting (only Pause cancels). Skipped, stopped and finished notices show on the mini player and the desktop bar. The saved queue keeps 50 tracks behind the current one.
