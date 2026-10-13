@@ -5,6 +5,7 @@ import {
   applyUploadLookup,
   buildLessonDrafts,
   DAILY_CATEGORY_ID,
+  draftCategoryIds,
   draftState,
   formatDraftDay,
   includedImages,
@@ -377,5 +378,42 @@ describe('jerusalemToday', () => {
   it('uses the Israel calendar date, not UTC', () => {
     expect(jerusalemToday(new Date('2026-09-23T22:30:00Z'))).toBe('2026-09-24');
     expect(jerusalemToday(new Date('2026-01-15T21:59:00Z'))).toBe('2026-01-15');
+  });
+});
+
+describe('draft categories (migration 026)', () => {
+  const base = { categoryId: DAILY_CATEGORY_ID, categoryIds: undefined, isShort: false } as Parameters<
+    typeof draftCategoryIds
+  >[0];
+
+  it('uses the ordered list while its first entry is the primary', () => {
+    expect(draftCategoryIds({ ...base, categoryIds: ['cat-b', 'cat-a'], categoryId: 'cat-b' })).toEqual([
+      'cat-b',
+      'cat-a',
+    ]);
+  });
+
+  it('falls back to the primary when the list is absent or stale', () => {
+    expect(draftCategoryIds(base)).toEqual([DAILY_CATEGORY_ID]);
+    expect(draftCategoryIds({ ...base, categoryIds: ['cat-a'], categoryId: 'cat-b' })).toEqual(['cat-b']);
+    expect(draftCategoryIds({ ...base, categoryId: '' })).toEqual([]);
+  });
+
+  it('a switch between daily and short resets the list to the new primary', () => {
+    const draft = {
+      ...base,
+      categoryIds: ['cat-x', 'cat-y'],
+      categoryId: 'cat-x',
+      partsEdited: true,
+      titleEdited: true,
+      title: 'כותרת',
+      date: '2026-10-13',
+      audio: [],
+      images: [],
+      existing: null,
+      appendToExisting: false,
+    } as unknown as Parameters<typeof setDraftShort>[0];
+    const switched = setDraftShort(draft, false);
+    expect(draftCategoryIds(switched)).toEqual([switched.categoryId]);
   });
 });

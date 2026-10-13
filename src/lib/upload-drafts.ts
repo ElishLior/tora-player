@@ -325,6 +325,7 @@ export function setDraftShort(draft: LessonDraft, isShort: boolean): LessonDraft
       ...draft,
       isShort,
       categoryId: isShort ? SHORTS_CATEGORY_ID : DAILY_CATEGORY_ID,
+      categoryIds: [isShort ? SHORTS_CATEGORY_ID : DAILY_CATEGORY_ID],
       partsEdited: false,
     }),
   );
@@ -508,7 +509,10 @@ export interface DraftLessonFields {
 
 /** A draft's categories, primary first. */
 export function draftCategoryIds(draft: Pick<LessonDraft, 'categoryId' | 'categoryIds'>): string[] {
-  if (draft.categoryIds) return draft.categoryIds;
+  // categoryIds is authoritative only while its first entry is the primary categoryId.
+  // A write that changes categoryId alone leaves categoryIds stale; then categoryId wins.
+  const ids = draft.categoryIds ?? [];
+  if (ids.length > 0 && ids[0] === draft.categoryId) return ids;
   return draft.categoryId ? [draft.categoryId] : [];
 }
 

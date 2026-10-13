@@ -77,6 +77,8 @@ export default function EditLessonClient({ lessonId }: { lessonId: string }) {
   // Categories (several; the first is primary). Saved with the lesson, in order.
   const tCategories = useTranslations('lessonCategories');
   const [categoryIds, setCategoryIds] = useState<string[]>([]);
+  // A failed read of the lesson's categories: the picker is disabled and the field is not saved (a save would drop the hidden ones).
+  const [categoriesFailed, setCategoriesFailed] = useState(false);
   const [categories, setCategories] = useState<CategoryWithChildren[]>([]);
   const [tags, setTags] = useState<string[]>([]);
 
@@ -129,7 +131,8 @@ export default function EditLessonClient({ lessonId }: { lessonId: string }) {
         setDescription(lesson.description || '');
         setDate(lesson.date || '');
         setIsPublished(lesson.is_published);
-        setCategoryIds('categoryIds' in categoryIdsResult ? categoryIdsResult.categoryIds : lesson.category_id ? [lesson.category_id] : []);
+        if ('categoryIds' in categoryIdsResult) setCategoryIds(categoryIdsResult.categoryIds);
+        else setCategoriesFailed(true);
         setTags(lesson.tags ?? []);
         // Metadata
         setHebrewDate(lesson.hebrew_date || '');
@@ -197,7 +200,7 @@ export default function EditLessonClient({ lessonId }: { lessonId: string }) {
       formData.set('location', location);
       formData.set('summary', summary);
       formData.set('lesson_type', lessonType);
-      formData.set('category_ids', JSON.stringify(categoryIds));
+      if (!categoriesFailed) formData.set('category_ids', JSON.stringify(categoryIds));
       formData.set('tags', JSON.stringify(tags));
       if (sederNumber) formData.set('seder_number', sederNumber);
 
@@ -215,9 +218,6 @@ export default function EditLessonClient({ lessonId }: { lessonId: string }) {
         setFormError(`שגיאה בעדכון השיעור: ${errMsg}`);
         setSaving(false);
         return;
-      }
-      if (result.membershipsSaved === false && categoryIds.length > 1) {
-        setFormError(tCategories('migrationNeeded'));
       }
 
       // Upload new images; failed ones stay queued so saving again retries them.
@@ -247,6 +247,11 @@ export default function EditLessonClient({ lessonId }: { lessonId: string }) {
         }
       }
 
+      // Stay on the page while the notice is needed (several categories saved as primary only).
+      if (result.membershipsSaved === false && categoryIds.length > 1) {
+        setFormError(tCategories('migrationNeeded'));
+        return;
+      }
       setSuccessMsg('השיעור עודכן בהצלחה');
       setTimeout(() => {
         router.push(lessonPath(result.data ?? { id: lessonId, slug: currentSlug }));
@@ -676,7 +681,11 @@ export default function EditLessonClient({ lessonId }: { lessonId: string }) {
             values={categoryIds}
             onValuesChange={setCategoryIds}
             categories={categories}
+            disabled={categoriesFailed}
           />
+          {categoriesFailed && (
+            <p role="alert" className="mt-1 text-xs font-medium text-red-400">{tCategories('errFailed')}</p>
+          )}
         </div>
 
         {/* Topic tags */}

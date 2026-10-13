@@ -1566,8 +1566,9 @@ interface LessonCategoryEditorProps {
 
 /**
  * Admin control for the lesson's categories (several, any level; the first is
- * primary). Saves on each change: the new selection shows at once and rolls
- * back with an error message if saving fails.
+ * primary). The picker stays enabled while saving, so keyboard focus is kept.
+ * Saves run one at a time: a change made during a save is sent next, and only
+ * the newest answer is shown. A failed save rolls back to the last confirmed selection.
  */
 function LessonCategoryEditor({ lessonId, categoryIds, categories }: LessonCategoryEditorProps) {
   const t = useTranslations('lessonCategories');
@@ -1575,6 +1576,11 @@ function LessonCategoryEditor({ lessonId, categoryIds, categories }: LessonCateg
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  /** The last selection the server confirmed. */
+  const confirmed = useRef(categoryIds);
+  /** The newest selection the admin asked for that has not been sent yet. */
+  const pending = useRef<string[] | null>(null);
+  const running = useRef(false);
 
   useEffect(() => {
     if (!error) return;
@@ -1582,27 +1588,44 @@ function LessonCategoryEditor({ lessonId, categoryIds, categories }: LessonCateg
     return () => clearTimeout(timer);
   }, [error]);
 
-  const change = async (next: string[]) => {
-    const previous = values;
-    setValues(next);
+  const drain = async () => {
+    running.current = true;
     setSaving(true);
-    setError(null);
-    setNotice(null);
     try {
-      const result = await setLessonCategories(lessonId, next);
-      if ('error' in result) throw new Error(result.error);
-      setValues(result.categoryIds);
-      if (!result.membershipsSaved && result.categoryIds.length > 1) setNotice(t('migrationNeeded'));
+      while (pending.current) {
+        const next = pending.current;
+        pending.current = null;
+        const result = await setLessonCategories(lessonId, next);
+        if ('error' in result) {
+          pending.current = null;
+          setValues(confirmed.current);
+          setError(t('saveFailed'));
+          break;
+        }
+        confirmed.current = result.categoryIds;
+        // Show the server's answer only once nothing newer is waiting.
+        if (pending.current === null) setValues(result.categoryIds);
+        setNotice(!result.membershipsSaved && result.categoryIds.length > 1 ? t('migrationNeeded') : null);
+      }
     } catch {
-      setValues(previous);
+      pending.current = null;
+      setValues(confirmed.current);
       setError(t('saveFailed'));
     } finally {
+      running.current = false;
       setSaving(false);
     }
   };
 
+  const change = (next: string[]) => {
+    setValues(next);
+    setError(null);
+    pending.current = next;
+    if (!running.current) void drain();
+  };
+
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" aria-busy={saving || undefined}>
       <p className="text-xs font-medium text-muted-foreground">{t('legend')}</p>
       <CategoryPicker
         id={`lesson-categories-${lessonId}`}
@@ -1610,7 +1633,6 @@ function LessonCategoryEditor({ lessonId, categoryIds, categories }: LessonCateg
         values={values}
         onValuesChange={change}
         categories={categories}
-        disabled={saving}
         aria-label={t('legend')}
       />
       {saving && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" aria-hidden="true" />}

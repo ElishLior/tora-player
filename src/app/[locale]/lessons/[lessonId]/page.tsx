@@ -44,9 +44,16 @@ const loadLesson = cache(async (lessonId: string) => {
     const route = await resolveLessonRoute(client, lessonId);
     if (route.kind === 'not-found') return null;
     const lesson = await getLessonById(client, route.lessonId);
-    // Every category of the lesson (migration 026). A failed or missing read shows the primary only.
-    const memberships = await readLessonCategoryIds(client, route.lessonId).catch(() => null);
-    return { route, lesson, categoryIds: categorySelectionFor(memberships, lesson.category_id) };
+    // Every category of the lesson (migration 026). A missing table (null) falls back to the primary.
+    // A failed read is kept apart: the admin editor would otherwise save over the hidden categories.
+    let memberships: string[] | null = null;
+    let membershipsReadFailed = false;
+    try {
+      memberships = await readLessonCategoryIds(client, route.lessonId);
+    } catch {
+      membershipsReadFailed = true;
+    }
+    return { route, lesson, categoryIds: categorySelectionFor(memberships, lesson.category_id), membershipsReadFailed };
   } catch {
     return null;
   }
@@ -88,7 +95,7 @@ export default async function LessonDetailPage({ params, searchParams }: Props) 
 
   const loaded = await loadLesson(lessonId);
   if (!loaded) notFound();
-  const { lesson, route, categoryIds } = loaded;
+  const { lesson, route, categoryIds, membershipsReadFailed } = loaded;
   if (route.kind === 'redirect') {
     permanentRedirect(lessonRedirectUrl(route.pathname, isSiteLocale(locale) ? locale : 'he', await searchParams));
   }
@@ -96,7 +103,7 @@ export default async function LessonDetailPage({ params, searchParams }: Props) 
   const admin = await isAdmin();
   // The tree names the lesson's categories and feeds the admin picker. A failed read shows the primary category only.
   const tree = await getCachedCategoriesTree().catch(() => []);
-  const categories = admin ? tree : undefined;
+  const categories = admin && !membershipsReadFailed ? tree : undefined;
   const named = categoryIds
     .map((id) => findCategory(tree, id))
     .filter((category) => category !== undefined);

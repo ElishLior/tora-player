@@ -338,7 +338,7 @@ export function LessonsClient({
       {/* Floating action bar */}
       {selectionMode && selectedIds.size > 0 && (
         <div className="fixed bottom-20 inset-x-0 z-50 flex justify-center px-4" dir="rtl">
-          <div className="bg-[hsl(var(--surface-elevated))] border border-[hsl(var(--border))] rounded-2xl shadow-2xl px-4 py-3 flex items-center gap-3 max-w-md w-full">
+          <div className="bg-[hsl(var(--surface-elevated))] border border-[hsl(var(--border))] rounded-2xl shadow-2xl px-4 py-3 flex flex-wrap items-center gap-3 max-w-md w-full">
             {/* What to do with the chosen category */}
             <select
               value={bulkMode}
