@@ -2,7 +2,7 @@
 
 import { useParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { Shield, Upload, BarChart3, LogOut, BookOpen, ListMusic, Library, FolderTree, Scissors, Bell, Megaphone, Users } from 'lucide-react';
+import { Shield, Upload, BarChart3, LogOut, BookOpen, ListMusic, Library, FolderTree, Scissors, Bell, Megaphone, Users, SlidersHorizontal } from 'lucide-react';
 import Link from 'next/link';
 import { signOutAndReset } from '@/lib/account/sync';
 import { AppVersionLabel } from '@/components/shared/app-version-label';
@@ -15,6 +15,7 @@ export default function AdminDashboardPage() {
   const tRelease = useTranslations('releaseAnnouncement');
   const tStats = useTranslations('adminStats');
   const tUsers = useTranslations('adminUsers');
+  const tSettings = useTranslations('adminSettings');
   const tCommon = useTranslations('common');
 
   const insightLinks = [
@@ -70,6 +71,12 @@ export default function AdminDashboardPage() {
       icon: Megaphone,
       label: tRelease('title'),
       description: tRelease('cardDescription'),
+    },
+    {
+      href: `/${locale}/admin/settings`,
+      icon: SlidersHorizontal,
+      label: tSettings('title'),
+      description: tSettings('cardDescription'),
     },
   ];
 

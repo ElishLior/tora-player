@@ -14,6 +14,7 @@ import {
   getSeriesById,
 } from './queries';
 import { getShortLessons } from './shorts';
+import { readAppSettings } from './app-settings';
 import { partTypeOptions } from '@/lib/part-types';
 import { descendantIds } from '@/lib/category-tree';
 import { CATEGORY_LIST_LIMIT } from '@/lib/category-queue';
@@ -53,6 +54,13 @@ export function revalidateCatalog() {
 
 // Cached public catalog reads (5 minutes, or until revalidateCatalog()).
 // Arguments are part of each cache key.
+
+/** Public display settings (app_settings, migration 028); defaults before it is applied. */
+export const getCachedAppSettings = unstable_cache(
+  async () => (await readAppSettings(createAnonSupabaseClient())).settings,
+  ['app-settings'],
+  CATALOG_CACHE,
+);
 
 export const getCachedRecentLessons = unstable_cache(
   (limit: number) => getRecentLessons(createAnonSupabaseClient(), limit),

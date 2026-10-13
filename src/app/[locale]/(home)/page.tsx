@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { isSupabaseConfigured } from '@/lib/supabase/server';
 import {
+  getCachedAppSettings,
   getCachedCategoriesTree,
   getCachedCategoryLessonTotals,
   getCachedRecentLessons,
@@ -15,6 +16,7 @@ import { Link } from '@/i18n/routing';
 import { BookOpen, Upload, ChevronLeft } from 'lucide-react';
 import { isAdmin } from '@/lib/auth/admin';
 import { HomeIntro } from '@/components/home/home-intro';
+import { DEFAULT_APP_SETTINGS } from '@/lib/app-settings';
 import { ContinueListeningSection } from '@/components/home/continue-listening-section';
 import { LatestLessonHero } from '@/components/home/latest-lesson-hero';
 import { LatestLessonsSection } from '@/components/home/latest-lessons-section';
@@ -39,6 +41,8 @@ export default async function HomePage({ params }: Props) {
   const tUpload = await getTranslations('upload.entry');
 
   const admin = await isAdmin();
+  // Never throws: defaults before migration 028 or without a database (CI build).
+  const settings = isSupabaseConfigured() ? await getCachedAppSettings() : DEFAULT_APP_SETTINGS;
 
   let recentLessons: LessonWithRelations[] = [];
   let recentShorts: LessonWithRelations[] = [];
@@ -88,7 +92,7 @@ export default async function HomePage({ params }: Props) {
           </Link>
         )}
 
-        <HomeIntro className="lg:order-3" />
+        <HomeIntro className="lg:order-3" intervalSeconds={settings.tipIntervalSeconds} />
 
         {/* From xl the now-playing panel shows this same lesson, so the strip is hidden there. */}
         <ContinueListeningSection title={t('continueListening')} className="lg:order-4 xl:hidden" />
