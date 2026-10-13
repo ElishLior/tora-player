@@ -2,8 +2,10 @@ import { withLessonSlugSelect } from './lesson-slug-select';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Category, LessonWithRelations } from '@/types/database';
 import { dateFromSearchParam, matchTags, type TagCount } from '@/lib/tag-links';
-import { getAllCategories } from './queries';
-import { LESSON_AUDIO_FILES, LESSON_CARD_COLUMNS } from './lesson-selects';
+import { getAllCategories, getCategoriesTree } from './queries';
+import { LESSON_AUDIO_FILES, LESSON_CARD_COLUMNS, LESSON_CATEGORY } from './lesson-selects';
+import { descendantIds } from '@/lib/category-tree';
+import { categoryScope, withCategoryScope, type CategoryScopeMode } from './category-scope';
 
 export const DEFAULT_LESSON_PAGE_SIZE = 20;
 
@@ -53,7 +55,8 @@ export interface LessonQueryFilters {
 
 export interface LessonListReader {
   getAllCategories(): Promise<Category[]>;
-  getChildCategoryIds(categoryId: string): Promise<string[]>;
+  /** The category and all its descendants (up to three levels), for the `cat` filter. */
+  getDescendantCategoryIds(categoryId: string): Promise<string[]>;
   getTagCounts(): Promise<TagCount[]>;
   /** Text matches plus lessons carrying any of `matchedTags`, newest first. */
   searchLessons(query: string, filters: LessonQueryFilters, matchedTags: string[]): Promise<LessonWithRelations[]>;
@@ -145,7 +148,7 @@ async function getFilters(
   params: Pick<InitialLessonListParams, 'audioTypeFilter' | 'categoryFilter' | 'tagFilter' | 'dateFilter'>,
 ): Promise<LessonQueryFilters> {
   const categoryIds = params.categoryFilter
-    ? [params.categoryFilter, ...(await reader.getChildCategoryIds(params.categoryFilter))]
+    ? await reader.getDescendantCategoryIds(params.categoryFilter)
     : undefined;
 
   return {
@@ -254,7 +257,7 @@ function throwIfError<T>(result: { data: T | null; error: unknown }) {
   return result.data;
 }
 
-const LESSON_LIST_SELECT = `${LESSON_CARD_COLUMNS}, series(id, name, hebrew_name), category:categories(id, hebrew_name), ${LESSON_AUDIO_FILES}`;
+const LESSON_LIST_SELECT = `${LESSON_CARD_COLUMNS}, series(id, name, hebrew_name), ${LESSON_CATEGORY}, ${LESSON_AUDIO_FILES}`;
 export const SEARCH_RESULT_LIMIT = 50;
 
 /**
@@ -275,10 +278,15 @@ export interface LessonFilterableQuery<Q> {
  * `AUDIO_TYPE_MATCH` inner embed (one request instead of an id list); the tag
  * uses array containment (`tags @> {tag}`, GIN-indexed).
  */
-export function applyLessonFilters<Q extends LessonFilterableQuery<Q>>(query: Q, filters: LessonQueryFilters): Q {
+export function applyLessonFilters<Q extends LessonFilterableQuery<Q>>(
+  query: Q,
+  filters: LessonQueryFilters,
+  categoryMode: CategoryScopeMode = 'primary',
+): Q {
   let next = query;
   if (filters.audioType) next = next.eq(`${AUDIO_TYPE_MATCH}.audio_type`, filters.audioType);
-  if (filters.categoryIds) next = next.in('category_id', filters.categoryIds);
+  // A lesson is in the category when any of its categories is (membership mode, migration 026).
+  if (filters.categoryIds) next = categoryScope(filters.categoryIds, categoryMode).filter(next);
   if (filters.tag) next = next.contains('tags', [filters.tag]);
   if (filters.date) next = next.eq('date', filters.date);
   return next;
@@ -303,12 +311,12 @@ export async function fetchTagCounts(supabase: SupabaseClient): Promise<TagCount
 
 export function createSupabaseLessonListReader(supabase: SupabaseClient): LessonListReader {
   /** Published lessons for a list, filtered; the audio type needs the inner-joined embed. */
-  const publishedLessons = (filters: LessonQueryFilters, columns = LESSON_LIST_SELECT) => {
+  const publishedLessons = (filters: LessonQueryFilters, columns: string, categoryMode: CategoryScopeMode) => {
+    let select = filters.categoryIds ? categoryScope(filters.categoryIds, categoryMode).select(columns) : columns;
+    if (filters.audioType) select = `${select}, ${AUDIO_TYPE_MATCH}:lesson_audio!inner(audio_type)`;
     // Widened to string: the select type parser can't handle this union; rows are typed with overrideTypes.
-    const select: string = filters.audioType
-      ? `${columns}, ${AUDIO_TYPE_MATCH}:lesson_audio!inner(audio_type)`
-      : columns;
-    return applyLessonFilters(supabase.from('lessons').select(select).eq('is_published', true), filters);
+    const typed: string = select;
+    return applyLessonFilters(supabase.from('lessons').select(typed).eq('is_published', true), filters, categoryMode);
   };
 
   return {
@@ -316,27 +324,25 @@ export function createSupabaseLessonListReader(supabase: SupabaseClient): Lesson
 
     getTagCounts: () => fetchTagCounts(supabase),
 
-    async getChildCategoryIds(categoryId) {
-      const result = await supabase.from('categories').select('id').eq('parent_id', categoryId);
-      const data = throwIfError(result);
-      return (data || []).map((row: { id: string }) => row.id);
+    async getDescendantCategoryIds(categoryId) {
+      return descendantIds(await getCategoriesTree(supabase), categoryId);
     },
 
     async searchLessons(queryText, filters, matchedTags) {
       // LIKE-escape, then turn or() syntax characters into single-character wildcards.
       const pattern = `%${queryText.replace(/[%_\\]/g, '\\$&').replace(/[,()"]/g, '_')}%`;
-      const textQuery = withLessonSlugSelect(LESSON_LIST_SELECT, (columns) => publishedLessons(filters, columns)
+      const textQuery = withCategoryScope(filters.categoryIds ?? [], (scope) => withLessonSlugSelect(LESSON_LIST_SELECT, (columns) => publishedLessons(filters, columns, scope.mode)
         .or(`title.ilike.${pattern},hebrew_title.ilike.${pattern},description.ilike.${pattern}`)
         .order('date', { ascending: false })
         .limit(SEARCH_RESULT_LIMIT)
-        .overrideTypes<LessonWithRelations[], { merge: false }>());
+        .overrideTypes<LessonWithRelations[], { merge: false }>()));
       const tagQuery =
         matchedTags.length > 0
-          ? withLessonSlugSelect(LESSON_LIST_SELECT, (columns) => publishedLessons(filters, columns)
+          ? withCategoryScope(filters.categoryIds ?? [], (scope) => withLessonSlugSelect(LESSON_LIST_SELECT, (columns) => publishedLessons(filters, columns, scope.mode)
               .overlaps('tags', matchedTags)
               .order('date', { ascending: false })
               .limit(SEARCH_RESULT_LIMIT)
-              .overrideTypes<LessonWithRelations[], { merge: false }>())
+              .overrideTypes<LessonWithRelations[], { merge: false }>()))
           : null;
 
       const [textResult, tagResult] = await Promise.all([textQuery, tagQuery]);
@@ -346,10 +352,10 @@ export function createSupabaseLessonListReader(supabase: SupabaseClient): Lesson
     },
 
     async getLessonsPage(offset, pageSize, filters) {
-      const result = await withLessonSlugSelect(LESSON_LIST_SELECT, (columns) => publishedLessons(filters, columns)
+      const result = await withCategoryScope(filters.categoryIds ?? [], (scope) => withLessonSlugSelect(LESSON_LIST_SELECT, (columns) => publishedLessons(filters, columns, scope.mode)
         .order('date', { ascending: false })
         .range(offset, offset + pageSize)
-        .overrideTypes<LessonWithRelations[], { merge: false }>());
+        .overrideTypes<LessonWithRelations[], { merge: false }>()));
       return throwIfError(result) ?? [];
     },
   };

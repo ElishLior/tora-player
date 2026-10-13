@@ -2,17 +2,20 @@
 
 import { useParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { Shield, Upload, BarChart3, LogOut, BookOpen, ListMusic, Library, FolderTree, Scissors, Bell, Users } from 'lucide-react';
+import { Shield, Upload, BarChart3, LogOut, BookOpen, ListMusic, Library, FolderTree, Scissors, Bell, Megaphone, Users, SlidersHorizontal } from 'lucide-react';
 import Link from 'next/link';
 import { signOutAndReset } from '@/lib/account/sync';
+import { AppVersionLabel } from '@/components/shared/app-version-label';
 
 export default function AdminDashboardPage() {
   const params = useParams();
   const locale = params.locale as string;
   const isRTL = locale === 'he';
   const tNotifications = useTranslations('notifications.admin');
+  const tRelease = useTranslations('releaseAnnouncement');
   const tStats = useTranslations('adminStats');
   const tUsers = useTranslations('adminUsers');
+  const tSettings = useTranslations('adminSettings');
   const tCommon = useTranslations('common');
 
   const insightLinks = [
@@ -63,6 +66,18 @@ export default function AdminDashboardPage() {
       label: tNotifications('title'),
       description: tNotifications('subtitle'),
     },
+    {
+      href: `/${locale}/admin/announcements`,
+      icon: Megaphone,
+      label: tRelease('title'),
+      description: tRelease('cardDescription'),
+    },
+    {
+      href: `/${locale}/admin/settings`,
+      icon: SlidersHorizontal,
+      label: tSettings('title'),
+      description: tSettings('cardDescription'),
+    },
   ];
 
   return (
@@ -80,6 +95,7 @@ export default function AdminDashboardPage() {
             <p className="text-sm text-muted-foreground">
               {tCommon('manageApp', { appName: tCommon('appName') })}
             </p>
+            <AppVersionLabel className="text-xs text-muted-foreground" />
           </div>
         </div>
 

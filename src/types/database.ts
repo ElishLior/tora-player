@@ -12,8 +12,9 @@ export interface Category {
   updated_at: string;
 }
 
+/** A category with its subcategories nested (up to three levels; see src/lib/category-tree.ts). */
 export interface CategoryWithChildren extends Category {
-  children: Category[];
+  children: CategoryWithChildren[];
   lesson_count?: number;
 }
 

@@ -7,7 +7,10 @@ import { Link } from '@/i18n/routing';
 import { LessonCard } from '@/components/lessons/lesson-card';
 import { LessonCardList } from '@/components/lessons/lesson-card-list';
 import { EmptyState } from '@/components/shared/empty-state';
-import { AlertTriangle, Search } from 'lucide-react';
+import { ListLoadError } from '@/components/shared/list-load-error';
+import { PageHeader } from '@/components/shared/page-header';
+import { SearchField } from '@/components/shared/search-field';
+import { Search } from 'lucide-react';
 import type { LessonWithRelations } from '@/types/database';
 
 type Props = {
@@ -20,7 +23,7 @@ export default async function SearchPage({ params, searchParams }: Props) {
   const q = normalizeSearchQuery((await searchParams).q);
   setRequestLocale(locale);
   const tagT = await getTranslations('tagBrowse');
-  const lessonsT = await getTranslations('lessons');
+  const t = await getTranslations('pagesDesign');
 
   let results: LessonWithRelations[] = [];
   let tags: TagCount[] = [];
@@ -43,17 +46,14 @@ export default async function SearchPage({ params, searchParams }: Props) {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">
-        {locale === 'he' ? 'חיפוש' : 'Search'}
-      </h1>
+      <PageHeader title={t('search.title')} />
 
-      <form className="relative">
-        <Search className="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <input
+      <form role="search">
+        <SearchField
           name="q"
           defaultValue={q}
-          placeholder={locale === 'he' ? 'חיפוש שיעורים...' : 'Search lessons...'}
-          className="w-full rounded-xl border bg-background ps-10 pe-4 py-2.5 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+          placeholder={t('search.placeholder')}
+          aria-label={t('search.placeholder')}
           autoFocus
         />
       </form>
@@ -66,10 +66,10 @@ export default async function SearchPage({ params, searchParams }: Props) {
               <li key={tag}>
                 <Link
                   href={tagPath(tag)}
-                  className="inline-flex items-baseline gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/20"
+                  className="inline-flex items-baseline gap-1.5 rounded-full bg-primary/10 px-3.5 py-1.5 text-[13px] font-medium text-primary transition-colors hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
                 >
                   <bdi>#{tag}</bdi>
-                  <span className="text-xs font-normal text-muted-foreground tabular-nums">{lesson_count}</span>
+                  <span className="text-xs font-normal tabular-nums text-muted-foreground">{lesson_count}</span>
                 </Link>
               </li>
             ))}
@@ -79,7 +79,7 @@ export default async function SearchPage({ params, searchParams }: Props) {
 
       {q ? (
         failed ? (
-          <EmptyState icon={AlertTriangle} title={lessonsT('loadErrorTitle')} description={lessonsT('loadErrorDescription')} />
+          <ListLoadError />
         ) : results.length > 0 ? (
           <LessonCardList>
             {results.map((lesson) => (
@@ -89,14 +89,12 @@ export default async function SearchPage({ params, searchParams }: Props) {
         ) : (
           <EmptyState
             icon={Search}
-            title={locale === 'he' ? 'לא נמצאו תוצאות' : 'No results found'}
-            description={locale === 'he' ? `לא נמצאו שיעורים עבור "${q}"` : `No lessons found for "${q}"`}
+            title={t('search.noResults')}
+            description={t('search.noResultsFor', { query: q })}
           />
         )
       ) : (
-        <p className="text-center text-muted-foreground py-12">
-          {locale === 'he' ? 'הקלד לחיפוש שיעורים' : 'Type to search lessons'}
-        </p>
+        <EmptyState icon={Search} title={t('search.hint')} />
       )}
     </div>
   );

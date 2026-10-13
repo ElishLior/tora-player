@@ -2,7 +2,8 @@ import { getTranslations } from 'next-intl/server';
 import { generateLessonMetadata } from '@/lib/hebrew-date';
 import { groupLessonsByWeek, type WeekGroup } from '@/lib/lesson-week-groups';
 import { HomeSectionHeader } from '@/components/home/home-section-header';
-import { LatestLessonRow } from '@/components/home/latest-lesson-row';
+import { LessonCard } from '@/components/lessons/lesson-card';
+import { LessonCardList } from '@/components/lessons/lesson-card-list';
 import type { LessonWithRelations } from '@/types/database';
 
 interface LatestLessonsSectionProps {
@@ -10,6 +11,8 @@ interface LatestLessonsSectionProps {
   lessons: LessonWithRelations[];
   /** Today's date in Asia/Jerusalem (YYYY-MM-DD), computed on the server. */
   today: string;
+  /** Layout hook: the home page's desktop order. */
+  className?: string;
 }
 
 /**
@@ -17,13 +20,13 @@ interface LatestLessonsSectionProps {
  * ("השבוע", "שבוע שעבר" or its date range) and the week's reading when a lesson
  * carries one. Grouping and labels are computed here on the server, never on the client.
  */
-export async function LatestLessonsSection({ lessons, today }: LatestLessonsSectionProps) {
+export async function LatestLessonsSection({ lessons, today, className }: LatestLessonsSectionProps) {
   const t = await getTranslations('home');
   const groups = groupLessonsByWeek(lessons, today);
   if (groups.length === 0) return null;
 
   return (
-    <section aria-labelledby="latest-lessons-title">
+    <section aria-labelledby="latest-lessons-title" className={className}>
       <HomeSectionHeader
         id="latest-lessons-title"
         title={t('recentLessons')}
@@ -67,13 +70,12 @@ function WeekBlock({
         {reading && <span className="font-medium text-muted-foreground">· {reading}</span>}
         <span aria-hidden="true" className="h-px flex-1 self-center bg-border/70" />
       </h3>
-      <ul className="grid">
+      {/* One column on phones and up to 1100px of pane; two and three columns on wide screens (see LessonCardList). */}
+      <LessonCardList>
         {group.lessons.map((lesson) => (
-          <li key={lesson.id}>
-            <LatestLessonRow lesson={lesson} />
-          </li>
+          <LessonCard key={lesson.id} lesson={lesson} />
         ))}
-      </ul>
+      </LessonCardList>
     </div>
   );
 }

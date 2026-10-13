@@ -2,7 +2,7 @@
 
 import { lessonPath, localePath, type SiteLocale } from '@/config/site';
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, type ReactNode } from 'react';
 import {
   Play,
   Cast,
@@ -59,12 +59,15 @@ import { useBookmarksStore, type LocalBookmark } from '@/stores/bookmarks-store'
 import { useNotesStore, type LocalNote } from '@/stores/notes-store';
 import { submitSnippet } from '@/actions/snippets';
 import { updateLessonTags } from '@/actions/lessons';
-import { updateLessonCategory } from '@/actions/categories';
+import { setLessonCategories } from '@/actions/lesson-categories';
 import { TagInput } from '@/components/tags/tag-input';
 import { CategoryPicker } from '@/components/categories/category-picker';
 import { LessonTagLink } from '@/components/lessons/lesson-browse-links';
 import { normalizeTags } from '@/lib/tags';
 import { getImageStreamUrl } from '@/lib/image-keys';
+import { sortLessonImages } from '@/lib/image-download';
+import { ImageDownloadButton } from '@/components/lessons/image-download-button';
+import { useModalDialog } from '@/hooks/use-modal-dialog';
 
 function formatDur(seconds: number): string {
   if (!seconds || seconds <= 0) return '';
@@ -337,9 +340,13 @@ function MarkSnippetDialogInline({
 interface LessonPlayerClientProps {
   lesson: LessonWithRelations;
   images?: LessonImage[];
+  /** Server-rendered content above the gallery in the desktop side column (description, category). */
+  sideSlot?: ReactNode;
+  /** Server-rendered content after the notes in the main column (parts, snippets). */
+  mainSlot?: ReactNode;
 }
 
-export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) {
+export function LessonPlayerClient({ lesson, images, sideSlot, mainSlot }: LessonPlayerClientProps) {
   const locale = useLocale();
   const t = useTranslations('player');
   const router = useRouter();
@@ -763,596 +770,616 @@ export function LessonPlayerClient({ lesson, images }: LessonPlayerClientProps) 
     ? getAudioDownloadUrl(primaryAudioAsset.audioUrl, primaryDownloadFilename)
     : '#';
 
+  const hasSideColumn = Boolean(sideSlot) || Boolean(images && images.length > 0);
+
   return (
-    <div className="space-y-4">
-      {/* Clip mode badge */}
-      {isClipMode && clipStart !== null && clipEnd !== null && (
-        <div className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary/10 border border-primary/20">
-          <Scissors className="h-4 w-4 text-primary flex-shrink-0" />
-          <span className="text-sm font-medium text-primary">
-            {t('clipMode')}:{' '}
-            <bdi dir="ltr">
-              {formatDur(clipStart)}–{formatDur(clipEnd)}
-            </bdi>
-          </span>
-        </div>
-      )}
-
-      <div className="rounded-xl bg-[hsl(var(--surface-elevated))] p-5 space-y-4">
-        <BookmarkChips bookmarks={lessonBookmarks} onSeek={seekBookmark} />
-
-        {/* Seek bar with bookmark markers; seeking another lesson's bar starts this one */}
-        <div className="relative">
-          <SeekBar currentTime={displayTime} duration={displayDuration} onSeek={seekLesson} />
-          <BookmarkMarkers bookmarks={shownPartBookmarks} duration={displayDuration} onSeek={seekBookmark} />
-        </div>
-
-        {isCurrentLesson && playbackIssue && (
-          <p role="status" className="text-center text-xs text-amber-300">
-            {t(`issue.${playbackIssue}`)}
-          </p>
+    <>
+      {/*
+        Two columns from xl: the main column (player, part list, notes) on the left and the side column
+        (description, category, gallery) on the right, which sticks while the main column scrolls. Below xl
+        both wrappers are `contents`, so their children form one column; `order-*` keeps the phone order:
+        description, player, part list, gallery, notes, parts, snippets.
+      */}
+      <div className="contents xl:block xl:col-start-1 xl:row-start-2 xl:min-w-0 xl:space-y-4">
+        {/* Clip mode badge */}
+        {isClipMode && clipStart !== null && clipEnd !== null && (
+          <div className="order-2 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary/10 border border-primary/20">
+            <Scissors className="h-4 w-4 text-primary flex-shrink-0" />
+            <span className="text-sm font-medium text-primary">
+              {t('clipMode')}:{' '}
+              <bdi dir="ltr">
+                {formatDur(clipStart)}–{formatDur(clipEnd)}
+              </bdi>
+            </span>
+          </div>
         )}
 
-        {/* Controls: back → play → forward in DOM order; RTL puts "back" on the right. */}
-        <div className="flex items-center justify-center gap-6">
-          <SpeedControl speed={playbackSpeed} onSpeedChange={setPlaybackSpeed} />
+        <div className="order-2 rounded-xl bg-[hsl(var(--surface-elevated))] p-5 xl:p-6 space-y-4">
+          <BookmarkChips bookmarks={lessonBookmarks} onSeek={seekBookmark} />
 
-          <SkipButton
-            direction="back"
-            onClick={skipBackward}
-            disabled={!isCurrentLesson}
-            className="p-2 text-muted-foreground hover:text-foreground"
-            iconClassName="h-7 w-7"
-          />
+          {/* Seek bar with bookmark markers; seeking another lesson's bar starts this one */}
+          <div className="relative">
+            <SeekBar currentTime={displayTime} duration={displayDuration} onSeek={seekLesson} />
+            <BookmarkMarkers bookmarks={shownPartBookmarks} duration={displayDuration} onSeek={seekBookmark} />
+          </div>
 
-          <button
-            type="button"
-            onClick={handlePlay}
-            className="rounded-full p-4 bg-foreground text-background hover:scale-105 transition-transform shadow-lg"
-            aria-label={isCurrentLesson && transport !== 'paused' ? t('pause') : t('play')}
-          >
-            <PlayPauseIcon transport={isCurrentLesson ? transport : 'paused'} className="h-7 w-7" />
-          </button>
-
-          <SkipButton
-            direction="forward"
-            onClick={skipForward}
-            disabled={!isCurrentLesson}
-            className="p-2 text-muted-foreground hover:text-foreground"
-            iconClassName="h-7 w-7"
-          />
-
-          {/* Balances the speed control on the other side */}
-          <div className="w-12" aria-hidden />
-        </div>
-
-        {resumeHint && <p className="text-center text-xs text-muted-foreground">{resumeHint}</p>}
-
-        {/* Secondary actions row */}
-        <div className="flex items-center justify-center gap-5 pt-1 flex-wrap">
-          {/* Bookmark */}
-          <button
-            type="button"
-            onClick={() => setBookmarkPosition(currentTime)}
-            disabled={!isCurrentLesson}
-            className={`flex flex-col items-center gap-1.5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${bookmarkCount > 0 ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
-          >
-            <div className="relative">
-              <Bookmark className={`h-5 w-5 ${bookmarkCount > 0 ? 'fill-current' : ''}`} />
-              {bookmarkCount > 0 && (
-                <span className="absolute -top-1.5 -end-2 bg-primary text-primary-foreground text-[9px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
-                  {bookmarkCount}
-                </span>
-              )}
-            </div>
-            <span className="text-[10px]">{t('bookmark')}</span>
-          </button>
-
-          {/* Share the lesson (sheet: copy link, share at the current time, native share) */}
-          <ShareButton
-            variant="action"
-            lessonId={lesson.id}
-            lessonSlug={lesson.slug}
-            title={lesson.hebrew_title || lesson.title}
-            seriesName={lesson.series?.hebrew_name || lesson.series?.name}
-          />
-
-          {/* Sleep timer (applies to whatever is playing) */}
-          {isCurrentLesson && (
-            <SleepTimerControl className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors" />
-          )}
-
-          {/* Mark snippet — always enabled, not dependent on player state */}
-          <button
-            onClick={() => setShowShareClipDialog(true)}
-            className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <Scissors className="h-5 w-5" />
-            <span className="text-[10px]">{t('markSnippet')}</span>
-          </button>
-
-          {/* Driving mode */}
-          <button
-            onClick={() => {
-              // Driving mode controls the current lesson; start this one if another is loaded.
-              if (!isCurrentLesson) playAsset(0);
-              router.push(`/${locale}/driving`);
-            }}
-            className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <Car className="h-5 w-5" />
-            <span className="text-[10px]">{t('drivingMode')}</span>
-          </button>
-
-          {/* Save for offline playback */}
-          <button
-            onClick={handleSaveLessonOffline}
-            disabled={
-              lessonSaveState === 'downloaded' || lessonSaveState === 'downloading' || lessonAudioAssets.length === 0
-            }
-            className={`flex flex-col items-center gap-1.5 transition-colors disabled:cursor-not-allowed ${lessonSaveState === 'downloaded' ? 'text-green-400' : lessonSaveState === 'downloading' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
-          >
-            {lessonSaveState === 'downloading' ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : lessonSaveState === 'downloaded' ? (
-              <CheckCircle className="h-5 w-5" />
-            ) : (
-              <Download className="h-5 w-5" />
-            )}
-            <span className="text-[10px] whitespace-nowrap">
-              {lessonSaveState === 'downloading'
-                ? `${lessonSaveProgress}%`
-                : lessonSaveState === 'downloaded'
-                  ? locale === 'he'
-                    ? 'נשמר'
-                    : 'Saved'
-                  : locale === 'he'
-                    ? 'שמירה אופליין'
-                    : 'Save offline'}
-            </span>
-          </button>
-          {offlineSaveError && (
-            <p
-              role="alert"
-              className="fixed inset-x-4 bottom-36 z-50 mx-auto max-w-md rounded-lg bg-destructive px-4 py-3 text-center text-sm text-destructive-foreground shadow-lg"
-            >
-              {tOffline(offlineSaveError === 'quota' ? 'storageFull' : 'saveFailed')}
+          {isCurrentLesson && playbackIssue && (
+            <p role="status" className="text-center text-xs text-amber-300">
+              {t(`issue.${playbackIssue}`)}
             </p>
           )}
 
-          {/* Device file download */}
-          <a
-            href={primaryDownloadUrl}
-            download={primaryDownloadFilename}
-            onClick={(e) => {
-              if (!primaryAudioAsset) return;
-              handleDeviceDownloadClick(e, {
-                lessonId: lesson.id,
-                offlineKey: primaryAudioAsset.offlineKey,
-                audioUrl: primaryAudioAsset.audioUrl,
-                filename: primaryDownloadFilename,
-                savedOffline: isAssetDownloaded(primaryAudioAsset),
-              });
-            }}
-            className={`flex flex-col items-center gap-1.5 transition-colors ${primaryAudioAsset ? 'text-muted-foreground hover:text-foreground' : 'pointer-events-none opacity-30'}`}
-            aria-label={locale === 'he' ? 'הורדת קובץ למכשיר' : 'Download file to device'}
-          >
-            <FileDown className="h-5 w-5" />
-            <span className="text-[10px] whitespace-nowrap">{locale === 'he' ? 'הורדת קובץ' : 'Download file'}</span>
-          </a>
+          {/* Controls: back → play → forward in DOM order; RTL puts "back" on the right. */}
+          <div className="flex items-center justify-center gap-6">
+            <SpeedControl speed={playbackSpeed} onSpeedChange={setPlaybackSpeed} />
 
-          {/* Cast */}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              void handleCastClick();
-            }}
-            className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <Cast className="h-5 w-5" />
-            <span className="text-[10px]">{t('cast')}</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Audio files list (inlined to avoid webpack dev chunk issue) */}
-      {lessonAudioAssets.length > 1 && (
-        <div className="rounded-xl bg-[hsl(var(--surface-elevated))] p-4">
-          <h2 className="text-sm font-bold mb-3 text-muted-foreground uppercase tracking-wider">
-            {t('audioFiles')}
-          </h2>
-          <div className="space-y-0.5">
-            {lessonAudioAssets.map((asset, index) => {
-              const active = isFileActive(asset);
-              const activeTransport = active ? transport : 'paused';
-              const assetDownloadState = getAssetDownloadState(asset);
-              const assetProgress = dlProgress[asset.offlineKey] || 0;
-              const assetFilename = getAudioAssetFilename(lesson, asset, index);
-              return (
-                <div
-                  key={asset.offlineKey}
-                  className={`w-full flex items-center gap-3 rounded-md p-2.5 transition-colors group text-start ${active ? 'bg-primary/10' : 'hover:bg-[hsl(var(--surface-highlight))]'}`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => handleFileClick(asset, index)}
-                    className="min-w-0 flex-1 flex items-center gap-3 text-start"
-                    aria-label={activeTransport === 'paused' ? t('play') : t('pause')}
-                  >
-                    <span className="w-5 text-center flex-shrink-0">
-                      {activeTransport === 'playing' ? (
-                        <Volume2 className="h-4 w-4 text-primary animate-pulse mx-auto" />
-                      ) : activeTransport === 'loading' ? (
-                        <Loader2 className="h-4 w-4 text-primary animate-spin mx-auto" />
-                      ) : active ? (
-                        <Play className="h-4 w-4 text-primary fill-current mx-auto" />
-                      ) : (
-                        <>
-                          <span className="text-sm font-medium text-muted-foreground group-hover:hidden">
-                            {index + 1}
-                          </span>
-                          <Play className="h-4 w-4 text-foreground hidden group-hover:block mx-auto" />
-                        </>
-                      )}
-                    </span>
-
-                    <div className="flex-1 min-w-0 flex items-center gap-2">
-                      <p className={`text-sm font-medium truncate ${active ? 'text-primary' : ''}`} dir="auto">
-                        {asset.originalName || asset.title || t('part', { number: index + 1 })}
-                      </p>
-                      {asset.audioType && (
-                        <span
-                          className={`text-[10px] font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${asset.audioType === 'עץ חיים' ? 'bg-primary/15 text-primary' : 'bg-amber-500/15 text-amber-400'}`}
-                        >
-                          {asset.audioType}
-                        </span>
-                      )}
-                    </div>
-
-                    {asset.duration > 0 && (
-                      <bdi className="text-xs text-muted-foreground tabular-nums flex-shrink-0">
-                        {formatDur(asset.duration)}
-                      </bdi>
-                    )}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleSaveAssetOffline(asset);
-                    }}
-                    disabled={assetDownloadState === 'downloaded' || assetDownloadState === 'downloading'}
-                    className={`h-8 w-8 rounded-full flex items-center justify-center transition-colors disabled:cursor-not-allowed ${assetDownloadState === 'downloaded' ? 'text-green-400' : assetDownloadState === 'downloading' ? 'text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--surface-highlight))]'}`}
-                    aria-label={
-                      assetDownloadState === 'downloaded'
-                        ? locale === 'he'
-                          ? 'נשמר לאופליין'
-                          : 'Saved offline'
-                        : assetDownloadState === 'downloading'
-                          ? `${assetProgress}%`
-                          : locale === 'he'
-                            ? 'שמור קובץ לאופליין'
-                            : 'Save file offline'
-                    }
-                    title={
-                      assetDownloadState === 'downloading'
-                        ? `${assetProgress}%`
-                        : locale === 'he'
-                          ? 'שמור לאופליין'
-                          : 'Save offline'
-                    }
-                  >
-                    {assetDownloadState === 'downloading' ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : assetDownloadState === 'downloaded' ? (
-                      <CheckCircle className="h-4 w-4" />
-                    ) : (
-                      <Download className="h-4 w-4" />
-                    )}
-                  </button>
-
-                  <a
-                    href={getAudioDownloadUrl(asset.audioUrl, assetFilename)}
-                    download={assetFilename}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeviceDownloadClick(e, {
-                        lessonId: lesson.id,
-                        offlineKey: asset.offlineKey,
-                        audioUrl: asset.audioUrl,
-                        filename: assetFilename,
-                        savedOffline: assetDownloadState === 'downloaded',
-                      });
-                    }}
-                    className="h-8 w-8 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--surface-highlight))] transition-colors"
-                    aria-label={locale === 'he' ? 'הורדת קובץ למכשיר' : 'Download file to device'}
-                    title={locale === 'he' ? 'הורדת קובץ' : 'Download file'}
-                  >
-                    <FileDown className="h-4 w-4" />
-                  </a>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Image gallery */}
-      {images && images.length > 0 && <ImageGallerySection images={images} locale={locale} lessonTitle={lesson.title} />}
-
-      {/* ==================== Notes (inlined: one client component per page) ==================== */}
-      <section className="rounded-xl bg-[hsl(var(--surface-elevated))]" aria-labelledby="lesson-notes-title">
-        <button
-          type="button"
-          onClick={() => setNotesOpen(!notesOpen)}
-          aria-expanded={notesOpen}
-          className="w-full flex items-center justify-between p-4 text-start"
-        >
-          <div className="flex items-center gap-2">
-            <StickyNote className="h-4 w-4 text-primary" />
-            <h2 id="lesson-notes-title" className="text-sm font-bold text-muted-foreground uppercase tracking-wider">
-              {tNotes('title')}
-            </h2>
-            {lessonNotes.length > 0 && (
-              <span className="bg-primary/15 text-primary text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-                {lessonNotes.length}
-              </span>
-            )}
-          </div>
-          <ChevronDown
-            className={`h-4 w-4 text-muted-foreground transition-transform ${notesOpen ? 'rotate-180' : ''}`}
-          />
-        </button>
-
-        {notesOpen && (
-          <div className="px-4 pb-4 space-y-3">
-            <input
-              ref={noteImageInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"
-              multiple
-              hidden
-              onChange={handleNoteImagesPicked}
+            <SkipButton
+              direction="back"
+              onClick={skipBackward}
+              disabled={!isCurrentLesson}
+              className="p-2 text-muted-foreground hover:text-foreground"
+              iconClassName="h-7 w-7"
             />
 
-            {/* Composer */}
-            <div className="space-y-2">
-              <textarea
-                value={newNoteText}
-                onChange={(e) => setNewNoteText(e.target.value)}
-                placeholder={tNotes('placeholder')}
-                aria-label={tNotes('placeholder')}
-                maxLength={MAX_NOTE_LENGTH}
-                className="w-full rounded-lg bg-[hsl(0,0%,10%)] border border-[hsl(0,0%,20%)] px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 resize-none"
-                rows={2}
-                dir="auto"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void handleAddNote();
-                }}
-              />
+            <button
+              type="button"
+              onClick={handlePlay}
+              className="rounded-full p-4 bg-foreground text-background hover:scale-105 transition-transform shadow-lg"
+              aria-label={isCurrentLesson && transport !== 'paused' ? t('pause') : t('play')}
+            >
+              <PlayPauseIcon transport={isCurrentLesson ? transport : 'paused'} className="h-7 w-7" />
+            </button>
 
-              {pendingImages.length > 0 && (
-                <div className="flex gap-2 overflow-x-auto pb-1">
-                  {pendingPreviews.map((url, index) => (
-                    <div key={url} className="relative shrink-0">
-                      {/* eslint-disable-next-line @next/next/no-img-element -- local preview (blob URL) */}
-                      <img
-                        src={url}
-                        alt={tNotes('image', { index: index + 1 })}
-                        className="h-14 w-14 rounded-lg object-cover bg-[hsl(var(--surface-highlight))]"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setPendingImages((files) => files.filter((_, i) => i !== index))}
-                        className="absolute -top-1.5 -end-1.5 rounded-full bg-background p-0.5 text-muted-foreground shadow ring-1 ring-border hover:text-red-400"
-                        aria-label={tNotes('removeImage')}
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
+            <SkipButton
+              direction="forward"
+              onClick={skipForward}
+              disabled={!isCurrentLesson}
+              className="p-2 text-muted-foreground hover:text-foreground"
+              iconClassName="h-7 w-7"
+            />
 
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={attachTimestamp && isCurrentLesson}
-                    disabled={!isCurrentLesson}
-                    onClick={() => setAttachTimestamp(!attachTimestamp)}
-                    className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs transition-colors disabled:opacity-40 ${
-                      attachTimestamp && isCurrentLesson
-                        ? 'bg-primary/15 text-primary'
-                        : 'bg-[hsl(var(--surface-highlight))] text-muted-foreground'
-                    }`}
-                    title={isCurrentLesson ? undefined : tNotes('timeNeedsPlayback')}
-                  >
-                    <Clock className="h-3 w-3" />
-                    {tNotes('attachTime')}
-                    {attachTimestamp && isCurrentLesson && (
-                      <bdi dir="ltr" className="font-mono font-bold tabular-nums">
-                        {formatDur(currentTime) || '0:00'}
-                      </bdi>
-                    )}
-                  </button>
+            {/* Balances the speed control on the other side */}
+            <div className="w-12" aria-hidden />
+          </div>
 
-                  {notesSignedIn ? (
-                    <button
-                      type="button"
-                      onClick={() => pickNoteImages('new')}
-                      disabled={pendingImages.length >= MAX_NOTE_IMAGES}
-                      className="flex items-center gap-1.5 rounded-full bg-[hsl(var(--surface-highlight))] px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-40"
-                    >
-                      <ImagePlus className="h-3.5 w-3.5" />
-                      {tNotes('addImages')}
-                    </button>
-                  ) : (
-                    <Link
-                      href={`/${locale}/auth/sign-in?next=${encodeURIComponent(localePath(lessonPath(lesson), locale as SiteLocale))}`}
-                      className="flex items-center gap-1.5 rounded-full bg-[hsl(var(--surface-highlight))] px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground"
-                    >
-                      <ImagePlus className="h-3.5 w-3.5" />
-                      {tNotes('imagesSignIn')}
-                    </Link>
-                  )}
-                </div>
+          {resumeHint && <p className="text-center text-xs text-muted-foreground">{resumeHint}</p>}
 
-                <button
-                  type="button"
-                  onClick={() => void handleAddNote()}
-                  disabled={!newNoteText.trim()}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  {tNotes('add')}
-                </button>
+          {/* Secondary actions row */}
+          <div className="flex items-center justify-center gap-5 pt-1 flex-wrap">
+            {/* Bookmark */}
+            <button
+              type="button"
+              onClick={() => setBookmarkPosition(currentTime)}
+              disabled={!isCurrentLesson}
+              className={`flex flex-col items-center gap-1.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${bookmarkCount > 0 ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              <div className="relative">
+                <Bookmark className={`h-5 w-5 ${bookmarkCount > 0 ? 'fill-current' : ''}`} />
+                {bookmarkCount > 0 && (
+                  <span className="absolute -top-1.5 -end-2 bg-primary text-primary-foreground text-[9px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
+                    {bookmarkCount}
+                  </span>
+                )}
               </div>
-            </div>
+              <span className="text-[10px] xl:text-[13px]">{t('bookmark')}</span>
+            </button>
 
-            {noteMessage && (
-              <p role="alert" className="rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
-                {noteMessage}
+            {/* Share the lesson (sheet: copy link, share at the current time, native share) */}
+            <ShareButton
+              variant="action"
+              lessonId={lesson.id}
+              lessonSlug={lesson.slug}
+              title={lesson.hebrew_title || lesson.title}
+              seriesName={lesson.series?.hebrew_name || lesson.series?.name}
+            />
+
+            {/* Sleep timer (applies to whatever is playing) */}
+            {isCurrentLesson && (
+              <SleepTimerControl className="flex flex-col items-center gap-1.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 text-muted-foreground hover:text-foreground transition-colors" />
+            )}
+
+            {/* Mark snippet — always enabled, not dependent on player state */}
+            <button
+              onClick={() => setShowShareClipDialog(true)}
+              className="flex flex-col items-center gap-1.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Scissors className="h-5 w-5" />
+              <span className="text-[10px] xl:text-[13px]">{t('markSnippet')}</span>
+            </button>
+
+            {/* Driving mode */}
+            <button
+              onClick={() => {
+                // Driving mode controls the current lesson; start this one if another is loaded.
+                if (!isCurrentLesson) playAsset(0);
+                router.push(`/${locale}/driving`);
+              }}
+              className="flex flex-col items-center gap-1.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Car className="h-5 w-5" />
+              <span className="text-[10px] xl:text-[13px]">{t('drivingMode')}</span>
+            </button>
+
+            {/* Save for offline playback */}
+            <button
+              onClick={handleSaveLessonOffline}
+              disabled={
+                lessonSaveState === 'downloaded' || lessonSaveState === 'downloading' || lessonAudioAssets.length === 0
+              }
+              className={`flex flex-col items-center gap-1.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 transition-colors disabled:cursor-not-allowed ${lessonSaveState === 'downloaded' ? 'text-green-400' : lessonSaveState === 'downloading' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              {lessonSaveState === 'downloading' ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : lessonSaveState === 'downloaded' ? (
+                <CheckCircle className="h-5 w-5" />
+              ) : (
+                <Download className="h-5 w-5" />
+              )}
+              <span className="text-[10px] whitespace-nowrap xl:text-[13px]">
+                {lessonSaveState === 'downloading'
+                  ? `${lessonSaveProgress}%`
+                  : lessonSaveState === 'downloaded'
+                    ? locale === 'he'
+                      ? 'נשמר'
+                      : 'Saved'
+                    : locale === 'he'
+                      ? 'שמירה אופליין'
+                      : 'Save offline'}
+              </span>
+            </button>
+            {offlineSaveError && (
+              <p
+                role="alert"
+                className="fixed inset-x-4 bottom-36 z-50 mx-auto max-w-md rounded-lg bg-destructive px-4 py-3 text-center text-sm text-destructive-foreground shadow-lg"
+              >
+                {tOffline(offlineSaveError === 'quota' ? 'storageFull' : 'saveFailed')}
               </p>
             )}
 
-            {/* Notes list, newest first */}
-            {lessonNotes.length > 0 ? (
-              <ul className="space-y-2 pt-1">
-                {lessonNotes.map((note) => (
-                  <li key={note.id} className="rounded-lg bg-[hsl(0,0%,10%)] p-3 space-y-2 group">
-                    {editingNoteId === note.id ? (
-                      <div className="space-y-2">
-                        <textarea
-                          value={editingNoteText}
-                          onChange={(e) => setEditingNoteText(e.target.value)}
-                          aria-label={tNotes('edit')}
-                          maxLength={MAX_NOTE_LENGTH}
-                          className="w-full rounded-lg bg-[hsl(0,0%,8%)] border border-primary/40 px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 resize-none"
-                          rows={3}
-                          dir="auto"
-                          autoFocus
+            {/* Device file download */}
+            <a
+              href={primaryDownloadUrl}
+              download={primaryDownloadFilename}
+              onClick={(e) => {
+                if (!primaryAudioAsset) return;
+                handleDeviceDownloadClick(e, {
+                  lessonId: lesson.id,
+                  offlineKey: primaryAudioAsset.offlineKey,
+                  audioUrl: primaryAudioAsset.audioUrl,
+                  filename: primaryDownloadFilename,
+                  savedOffline: isAssetDownloaded(primaryAudioAsset),
+                });
+              }}
+              className={`flex flex-col items-center gap-1.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 transition-colors ${primaryAudioAsset ? 'text-muted-foreground hover:text-foreground' : 'pointer-events-none opacity-30'}`}
+              aria-label={locale === 'he' ? 'הורדת קובץ למכשיר' : 'Download file to device'}
+            >
+              <FileDown className="h-5 w-5" />
+              <span className="text-[10px] whitespace-nowrap xl:text-[13px]">{locale === 'he' ? 'הורדת קובץ' : 'Download file'}</span>
+            </a>
+
+            {/* Cast */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                void handleCastClick();
+              }}
+              className="flex flex-col items-center gap-1.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Cast className="h-5 w-5" />
+              <span className="text-[10px] xl:text-[13px]">{t('cast')}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Audio files list (inlined to avoid webpack dev chunk issue) */}
+        {lessonAudioAssets.length > 1 && (
+          <div className="order-3 rounded-xl bg-[hsl(var(--surface-elevated))] p-4">
+            <h2 className="text-sm font-bold mb-3 text-muted-foreground uppercase tracking-wider">
+              {t('audioFiles')}
+            </h2>
+            <div className="space-y-0.5">
+              {lessonAudioAssets.map((asset, index) => {
+                const active = isFileActive(asset);
+                const activeTransport = active ? transport : 'paused';
+                const assetDownloadState = getAssetDownloadState(asset);
+                const assetProgress = dlProgress[asset.offlineKey] || 0;
+                const assetFilename = getAudioAssetFilename(lesson, asset, index);
+                return (
+                  <div
+                    key={asset.offlineKey}
+                    className={`w-full flex items-center gap-3 rounded-md p-2.5 transition-colors group text-start ${active ? 'bg-primary/10' : 'hover:bg-[hsl(var(--surface-highlight))]'}`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => handleFileClick(asset, index)}
+                      className="min-w-0 flex-1 flex items-center gap-3 text-start"
+                      aria-label={activeTransport === 'paused' ? t('play') : t('pause')}
+                    >
+                      <span className="w-5 text-center flex-shrink-0">
+                        {activeTransport === 'playing' ? (
+                          <Volume2 className="h-4 w-4 text-primary animate-pulse mx-auto" />
+                        ) : activeTransport === 'loading' ? (
+                          <Loader2 className="h-4 w-4 text-primary animate-spin mx-auto" />
+                        ) : active ? (
+                          <Play className="h-4 w-4 text-primary fill-current mx-auto" />
+                        ) : (
+                          <>
+                            <span className="text-sm font-medium text-muted-foreground group-hover:hidden">
+                              {index + 1}
+                            </span>
+                            <Play className="h-4 w-4 text-foreground hidden group-hover:block mx-auto" />
+                          </>
+                        )}
+                      </span>
+
+                      <div className="flex-1 min-w-0 flex items-center gap-2">
+                        <p className={`text-sm font-medium truncate ${active ? 'text-primary' : ''}`} dir="auto">
+                          {asset.originalName || asset.title || t('part', { number: index + 1 })}
+                        </p>
+                        {asset.audioType && (
+                          <span
+                            className={`text-[10px] font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${asset.audioType === 'עץ חיים' ? 'bg-primary/15 text-primary' : 'bg-amber-500/15 text-amber-400'}`}
+                          >
+                            {asset.audioType}
+                          </span>
+                        )}
+                      </div>
+
+                      {asset.duration > 0 && (
+                        <bdi className="text-xs text-muted-foreground tabular-nums flex-shrink-0">
+                          {formatDur(asset.duration)}
+                        </bdi>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSaveAssetOffline(asset);
+                      }}
+                      disabled={assetDownloadState === 'downloaded' || assetDownloadState === 'downloading'}
+                      className={`h-8 w-8 rounded-full flex items-center justify-center transition-colors disabled:cursor-not-allowed ${assetDownloadState === 'downloaded' ? 'text-green-400' : assetDownloadState === 'downloading' ? 'text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--surface-highlight))]'}`}
+                      aria-label={
+                        assetDownloadState === 'downloaded'
+                          ? locale === 'he'
+                            ? 'נשמר לאופליין'
+                            : 'Saved offline'
+                          : assetDownloadState === 'downloading'
+                            ? `${assetProgress}%`
+                            : locale === 'he'
+                              ? 'שמור קובץ לאופליין'
+                              : 'Save file offline'
+                      }
+                      title={
+                        assetDownloadState === 'downloading'
+                          ? `${assetProgress}%`
+                          : locale === 'he'
+                            ? 'שמור לאופליין'
+                            : 'Save offline'
+                      }
+                    >
+                      {assetDownloadState === 'downloading' ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : assetDownloadState === 'downloaded' ? (
+                        <CheckCircle className="h-4 w-4" />
+                      ) : (
+                        <Download className="h-4 w-4" />
+                      )}
+                    </button>
+
+                    <a
+                      href={getAudioDownloadUrl(asset.audioUrl, assetFilename)}
+                      download={assetFilename}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeviceDownloadClick(e, {
+                          lessonId: lesson.id,
+                          offlineKey: asset.offlineKey,
+                          audioUrl: asset.audioUrl,
+                          filename: assetFilename,
+                          savedOffline: assetDownloadState === 'downloaded',
+                        });
+                      }}
+                      className="h-8 w-8 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--surface-highlight))] transition-colors"
+                      aria-label={locale === 'he' ? 'הורדת קובץ למכשיר' : 'Download file to device'}
+                      title={locale === 'he' ? 'הורדת קובץ' : 'Download file'}
+                    >
+                      <FileDown className="h-4 w-4" />
+                    </a>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ==================== Notes (inlined: one client component per page) ==================== */}
+        <section className="order-5 rounded-xl bg-[hsl(var(--surface-elevated))]" aria-labelledby="lesson-notes-title">
+          <button
+            type="button"
+            onClick={() => setNotesOpen(!notesOpen)}
+            aria-expanded={notesOpen}
+            className="w-full flex items-center justify-between p-4 text-start"
+          >
+            <div className="flex items-center gap-2">
+              <StickyNote className="h-4 w-4 text-primary" />
+              <h2 id="lesson-notes-title" className="text-sm font-bold text-muted-foreground uppercase tracking-wider">
+                {tNotes('title')}
+              </h2>
+              {lessonNotes.length > 0 && (
+                <span className="bg-primary/15 text-primary text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                  {lessonNotes.length}
+                </span>
+              )}
+            </div>
+            <ChevronDown
+              className={`h-4 w-4 text-muted-foreground transition-transform ${notesOpen ? 'rotate-180' : ''}`}
+            />
+          </button>
+
+          {notesOpen && (
+            <div className="px-4 pb-4 space-y-3">
+              <input
+                ref={noteImageInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"
+                multiple
+                hidden
+                onChange={handleNoteImagesPicked}
+              />
+
+              {/* Composer */}
+              <div className="space-y-2">
+                <textarea
+                  value={newNoteText}
+                  onChange={(e) => setNewNoteText(e.target.value)}
+                  placeholder={tNotes('placeholder')}
+                  aria-label={tNotes('placeholder')}
+                  maxLength={MAX_NOTE_LENGTH}
+                  className="w-full rounded-lg bg-[hsl(0,0%,10%)] border border-[hsl(0,0%,20%)] px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 resize-none"
+                  rows={2}
+                  dir="auto"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void handleAddNote();
+                  }}
+                />
+
+                {pendingImages.length > 0 && (
+                  <div className="flex gap-2 overflow-x-auto pb-1">
+                    {pendingPreviews.map((url, index) => (
+                      <div key={url} className="relative shrink-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element -- local preview (blob URL) */}
+                        <img
+                          src={url}
+                          alt={tNotes('image', { index: index + 1 })}
+                          className="h-14 w-14 rounded-lg object-cover bg-[hsl(var(--surface-highlight))]"
                         />
-                        <div className="flex gap-2 justify-end">
+                        <button
+                          type="button"
+                          onClick={() => setPendingImages((files) => files.filter((_, i) => i !== index))}
+                          className="absolute -top-1.5 -end-1.5 rounded-full bg-background p-0.5 text-muted-foreground shadow ring-1 ring-border hover:text-red-400"
+                          aria-label={tNotes('removeImage')}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={attachTimestamp && isCurrentLesson}
+                      disabled={!isCurrentLesson}
+                      onClick={() => setAttachTimestamp(!attachTimestamp)}
+                      className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs transition-colors disabled:opacity-40 ${
+                        attachTimestamp && isCurrentLesson
+                          ? 'bg-primary/15 text-primary'
+                          : 'bg-[hsl(var(--surface-highlight))] text-muted-foreground'
+                      }`}
+                      title={isCurrentLesson ? undefined : tNotes('timeNeedsPlayback')}
+                    >
+                      <Clock className="h-3 w-3" />
+                      {tNotes('attachTime')}
+                      {attachTimestamp && isCurrentLesson && (
+                        <bdi dir="ltr" className="font-mono font-bold tabular-nums">
+                          {formatDur(currentTime) || '0:00'}
+                        </bdi>
+                      )}
+                    </button>
+
+                    {notesSignedIn ? (
+                      <button
+                        type="button"
+                        onClick={() => pickNoteImages('new')}
+                        disabled={pendingImages.length >= MAX_NOTE_IMAGES}
+                        className="flex items-center gap-1.5 rounded-full bg-[hsl(var(--surface-highlight))] px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-40"
+                      >
+                        <ImagePlus className="h-3.5 w-3.5" />
+                        {tNotes('addImages')}
+                      </button>
+                    ) : (
+                      <Link
+                        href={`/${locale}/auth/sign-in?next=${encodeURIComponent(localePath(lessonPath(lesson), locale as SiteLocale))}`}
+                        className="flex items-center gap-1.5 rounded-full bg-[hsl(var(--surface-highlight))] px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        <ImagePlus className="h-3.5 w-3.5" />
+                        {tNotes('imagesSignIn')}
+                      </Link>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => void handleAddNote()}
+                    disabled={!newNoteText.trim()}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    {tNotes('add')}
+                  </button>
+                </div>
+              </div>
+
+              {noteMessage && (
+                <p role="alert" className="rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+                  {noteMessage}
+                </p>
+              )}
+
+              {/* Notes list, newest first */}
+              {lessonNotes.length > 0 ? (
+                <ul className="space-y-2 pt-1">
+                  {lessonNotes.map((note) => (
+                    <li key={note.id} className="rounded-lg bg-[hsl(0,0%,10%)] p-3 space-y-2 group">
+                      {editingNoteId === note.id ? (
+                        <div className="space-y-2">
+                          <textarea
+                            value={editingNoteText}
+                            onChange={(e) => setEditingNoteText(e.target.value)}
+                            aria-label={tNotes('edit')}
+                            maxLength={MAX_NOTE_LENGTH}
+                            className="w-full rounded-lg bg-[hsl(0,0%,8%)] border border-primary/40 px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 resize-none"
+                            rows={3}
+                            dir="auto"
+                            autoFocus
+                          />
+                          <div className="flex gap-2 justify-end">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingNoteId(null);
+                                setEditingNoteText('');
+                              }}
+                              className="px-2.5 py-1 rounded-md text-xs text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                              {tNotes('cancel')}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleSaveEdit()}
+                              disabled={!editingNoteText.trim()}
+                              className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 disabled:opacity-40 transition-colors"
+                            >
+                              <Check className="h-3 w-3" />
+                              {tNotes('save')}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap break-words" dir="auto">
+                          {note.body}
+                        </p>
+                      )}
+
+                      <NoteImageStrip
+                        images={note.images}
+                        uploading={uploadingNoteId === note.id}
+                        onRemove={
+                          editingNoteId === note.id ? (imageId) => void handleRemoveNoteImage(note.id, imageId) : undefined
+                        }
+                      />
+
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                          {note.position !== null && (
+                            <button
+                              type="button"
+                              onClick={() => seekNote(note)}
+                              className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-primary hover:bg-primary/20 font-mono font-bold"
+                              aria-label={tNotes('playFrom', { time: formatDur(note.position) || '0:00' })}
+                            >
+                              <Play className="h-2.5 w-2.5 fill-current" />
+                              <bdi dir="ltr">{formatDur(note.position) || '0:00'}</bdi>
+                            </button>
+                          )}
+                          <span>{new Date(note.createdAt).toLocaleDateString(locale === 'he' ? 'he-IL' : 'en-US')}</span>
+                        </div>
+                        <div className="flex items-center gap-1 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-within:opacity-100">
+                          {notesSignedIn && note.images.length < MAX_NOTE_IMAGES && (
+                            <button
+                              type="button"
+                              onClick={() => pickNoteImages(note.id)}
+                              disabled={uploadingNoteId !== null}
+                              className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--surface-highlight))] transition-colors disabled:opacity-40"
+                              aria-label={tNotes('addImages')}
+                            >
+                              <ImagePlus className="h-3.5 w-3.5" />
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => {
-                              setEditingNoteId(null);
-                              setEditingNoteText('');
+                              setEditingNoteId(note.id);
+                              setEditingNoteText(note.body);
                             }}
-                            className="px-2.5 py-1 rounded-md text-xs text-muted-foreground hover:text-foreground transition-colors"
+                            className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--surface-highlight))] transition-colors"
+                            aria-label={tNotes('edit')}
                           >
-                            {tNotes('cancel')}
+                            <Pencil className="h-3.5 w-3.5" />
                           </button>
                           <button
                             type="button"
-                            onClick={() => void handleSaveEdit()}
-                            disabled={!editingNoteText.trim()}
-                            className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 disabled:opacity-40 transition-colors"
+                            onClick={() => void handleDeleteNote(note.id)}
+                            className={`flex items-center gap-1 p-1 rounded transition-colors ${
+                              confirmDeleteNoteId === note.id
+                                ? 'bg-red-500/15 text-red-400'
+                                : 'text-muted-foreground hover:text-red-400 hover:bg-red-500/10'
+                            }`}
+                            aria-label={confirmDeleteNoteId === note.id ? tNotes('confirmDelete') : tNotes('delete')}
                           >
-                            <Check className="h-3 w-3" />
-                            {tNotes('save')}
+                            <Trash2 className="h-3.5 w-3.5" />
+                            {confirmDeleteNoteId === note.id && <span className="text-[10px]">{tNotes('confirmDelete')}</span>}
                           </button>
                         </div>
                       </div>
-                    ) : (
-                      <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap break-words" dir="auto">
-                        {note.body}
-                      </p>
-                    )}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-muted-foreground text-center py-3">{tNotes('empty')}</p>
+              )}
+            </div>
+          )}
+        </section>
 
-                    <NoteImageStrip
-                      images={note.images}
-                      uploading={uploadingNoteId === note.id}
-                      onRemove={
-                        editingNoteId === note.id ? (imageId) => void handleRemoveNoteImage(note.id, imageId) : undefined
-                      }
-                    />
+        {mainSlot}
 
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                        {note.position !== null && (
-                          <button
-                            type="button"
-                            onClick={() => seekNote(note)}
-                            className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-primary hover:bg-primary/20 font-mono font-bold"
-                            aria-label={tNotes('playFrom', { time: formatDur(note.position) || '0:00' })}
-                          >
-                            <Play className="h-2.5 w-2.5 fill-current" />
-                            <bdi dir="ltr">{formatDur(note.position) || '0:00'}</bdi>
-                          </button>
-                        )}
-                        <span>{new Date(note.createdAt).toLocaleDateString(locale === 'he' ? 'he-IL' : 'en-US')}</span>
-                      </div>
-                      <div className="flex items-center gap-1 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-within:opacity-100">
-                        {notesSignedIn && note.images.length < MAX_NOTE_IMAGES && (
-                          <button
-                            type="button"
-                            onClick={() => pickNoteImages(note.id)}
-                            disabled={uploadingNoteId !== null}
-                            className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--surface-highlight))] transition-colors disabled:opacity-40"
-                            aria-label={tNotes('addImages')}
-                          >
-                            <ImagePlus className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingNoteId(note.id);
-                            setEditingNoteText(note.body);
-                          }}
-                          className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--surface-highlight))] transition-colors"
-                          aria-label={tNotes('edit')}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void handleDeleteNote(note.id)}
-                          className={`flex items-center gap-1 p-1 rounded transition-colors ${
-                            confirmDeleteNoteId === note.id
-                              ? 'bg-red-500/15 text-red-400'
-                              : 'text-muted-foreground hover:text-red-400 hover:bg-red-500/10'
-                          }`}
-                          aria-label={confirmDeleteNoteId === note.id ? tNotes('confirmDelete') : tNotes('delete')}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                          {confirmDeleteNoteId === note.id && <span className="text-[10px]">{tNotes('confirmDelete')}</span>}
-                        </button>
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-xs text-muted-foreground text-center py-3">{tNotes('empty')}</p>
-            )}
-          </div>
+        {bookmarkPosition !== null && (
+          <BookmarkDialog
+            onClose={() => setBookmarkPosition(null)}
+            lessonId={lesson.id}
+            audioFileId={isCurrentLesson ? currentTrack?.audioFileId : undefined}
+            position={bookmarkPosition}
+          />
         )}
-      </section>
 
-      {bookmarkPosition !== null && (
-        <BookmarkDialog
-          onClose={() => setBookmarkPosition(null)}
+        {/* Mark snippet dialog — inlined to avoid separate 'use client' import */}
+        <MarkSnippetDialogInline
+          isOpen={showShareClipDialog}
+          onClose={() => setShowShareClipDialog(false)}
           lessonId={lesson.id}
-          audioFileId={isCurrentLesson ? currentTrack?.audioFileId : undefined}
-          position={bookmarkPosition}
+          currentAudioFileId={currentAudioFileId}
+          currentTime={isCurrentLesson ? currentTime : 0}
+          duration={isCurrentLesson ? duration : lesson.duration}
         />
-      )}
+      </div>
 
-      {/* Mark snippet dialog — inlined to avoid separate 'use client' import */}
-      <MarkSnippetDialogInline
-        isOpen={showShareClipDialog}
-        onClose={() => setShowShareClipDialog(false)}
-        lessonId={lesson.id}
-        currentAudioFileId={currentAudioFileId}
-        currentTime={isCurrentLesson ? currentTime : 0}
-        duration={isCurrentLesson ? duration : lesson.duration}
-      />
-    </div>
+      {hasSideColumn && (
+        <div className="contents xl:sticky xl:top-16 xl:block xl:col-start-2 xl:row-start-2 xl:min-w-0 xl:self-start xl:space-y-4">
+          {sideSlot}
+          {images && images.length > 0 && (
+            <div className="order-4">
+              <ImageGallerySection images={images} locale={locale} lessonTitle={lesson.title} />
+            </div>
+          )}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -1368,7 +1395,7 @@ function ImageGallerySection({
   lessonTitle: string;
 }) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
-  const sorted = [...images].sort((a, b) => a.sort_order - b.sort_order);
+  const sorted = sortLessonImages(images);
 
   const openLightbox = (index: number) => setLightboxIndex(index);
   const closeLightbox = () => setLightboxIndex(null);
@@ -1411,61 +1438,113 @@ function ImageGallerySection({
       </div>
 
       {lightboxIndex !== null && (
-        <div className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center" onClick={closeLightbox}>
-          <button
-            onClick={closeLightbox}
-            className="absolute top-4 end-4 z-10 rounded-full p-2 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 transition-colors"
-            aria-label="Close"
-          >
-            <X className="h-6 w-6" />
-          </button>
-
-          <div className="absolute top-5 start-4 text-sm text-white/60 tabular-nums">
-            {lightboxIndex + 1} / {sorted.length}
-          </div>
-
-          {sorted.length > 1 && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                goPrev();
-              }}
-              className="absolute start-2 top-1/2 -translate-y-1/2 z-10 rounded-full p-2 text-white/60 hover:text-white bg-white/10 hover:bg-white/20 transition-colors"
-              aria-label="Previous"
-            >
-              <ChevronRight className="h-6 w-6" />
-            </button>
-          )}
-
-          <img
-            src={getImageStreamUrl(sorted[lightboxIndex].file_key)}
-            alt={sorted[lightboxIndex].caption || `${lessonTitle} – ${lightboxIndex + 1}`}
-            className="max-w-[90vw] max-h-[85vh] object-contain rounded-lg"
-            onClick={(e) => e.stopPropagation()}
-          />
-
-          {sorted.length > 1 && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                goNext();
-              }}
-              className="absolute end-2 top-1/2 -translate-y-1/2 z-10 rounded-full p-2 text-white/60 hover:text-white bg-white/10 hover:bg-white/20 transition-colors"
-              aria-label="Next"
-            >
-              <ChevronLeft className="h-6 w-6" />
-            </button>
-          )}
-
-          {sorted[lightboxIndex].caption && (
-            <div className="absolute bottom-6 inset-x-0 text-center">
-              <p className="text-sm text-white/80 bg-black/50 inline-block px-4 py-2 rounded-full" dir="rtl">
-                {sorted[lightboxIndex].caption}
-              </p>
-            </div>
-          )}
-        </div>
+        <ImageLightbox
+          images={sorted}
+          index={lightboxIndex}
+          lessonTitle={lessonTitle}
+          onPrev={goPrev}
+          onNext={goNext}
+          onClose={closeLightbox}
+        />
       )}
+    </div>
+  );
+}
+
+/**
+ * Full-size image viewer, a modal dialog: focus moves in on open, Tab stays
+ * inside, Escape closes and focus returns to the tile. The download button is
+ * in the focus order after the image. Every click that is not on the image,
+ * its controls or the download button closes the viewer.
+ */
+function ImageLightbox({
+  images,
+  index,
+  lessonTitle,
+  onPrev,
+  onNext,
+  onClose,
+}: {
+  images: LessonImage[];
+  index: number;
+  lessonTitle: string;
+  onPrev: () => void;
+  onNext: () => void;
+  onClose: () => void;
+}) {
+  const t = useTranslations('imageDownload');
+  const tPage = useTranslations('lessonPage');
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalDialog(dialogRef, onClose);
+  const image = images[index];
+
+  return (
+    <div
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label={t('lightboxLabel')}
+      tabIndex={-1}
+      className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center focus:outline-none"
+      onClick={onClose}
+    >
+      <button
+        onClick={onClose}
+        className="absolute top-4 end-4 z-10 rounded-full p-2 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 transition-colors"
+        aria-label={tPage('lightboxClose')}
+      >
+        <X className="h-6 w-6" />
+      </button>
+
+      <div className="absolute top-5 start-4 text-sm text-white/60 tabular-nums">
+        {index + 1} / {images.length}
+      </div>
+
+      {images.length > 1 && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onPrev();
+          }}
+          className="absolute start-2 top-1/2 -translate-y-1/2 z-10 rounded-full p-2 text-white/60 hover:text-white bg-white/10 hover:bg-white/20 transition-colors"
+          aria-label={tPage('lightboxPrevious')}
+        >
+          <ChevronRight className="h-6 w-6" />
+        </button>
+      )}
+
+      <img
+        src={getImageStreamUrl(image.file_key)}
+        alt={image.caption || `${lessonTitle} – ${index + 1}`}
+        className="max-w-[90vw] max-h-[85vh] object-contain rounded-lg"
+        onClick={(e) => e.stopPropagation()}
+      />
+
+      {images.length > 1 && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onNext();
+          }}
+          className="absolute end-2 top-1/2 -translate-y-1/2 z-10 rounded-full p-2 text-white/60 hover:text-white bg-white/10 hover:bg-white/20 transition-colors"
+          aria-label={tPage('lightboxNext')}
+        >
+          <ChevronLeft className="h-6 w-6" />
+        </button>
+      )}
+
+      <div
+        className="absolute bottom-6 inset-x-0 flex flex-col items-center gap-3 px-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {image.caption && (
+          <p className="text-sm text-white/80 bg-black/50 inline-block px-4 py-2 rounded-full" dir="rtl">
+            {image.caption}
+          </p>
+        )}
+        {/* Keyed by image: its preparing/error state must not carry over to the next image. */}
+        <ImageDownloadButton key={image.id} imageId={image.id} number={index + 1} />
+      </div>
     </div>
   );
 }
@@ -1474,26 +1553,34 @@ interface LessonTagsProps {
   lessonId: string;
   tags: string[];
   admin: boolean;
-  /** Admins only: the lesson's category and the category tree for its inline picker. */
-  categoryId?: string | null;
+  /** Admins only: the lesson's categories (primary first) and the category tree for its inline picker. */
+  categoryIds?: string[];
   categories?: CategoryWithChildren[];
 }
 
 interface LessonCategoryEditorProps {
   lessonId: string;
-  categoryId: string | null;
+  categoryIds: string[];
   categories: CategoryWithChildren[];
 }
 
 /**
- * Admin control for the lesson's category. Saves on change: the new value
- * shows at once and rolls back with an error message if saving fails.
+ * Admin control for the lesson's categories (several, any level; the first is
+ * primary). The picker stays enabled while saving, so keyboard focus is kept.
+ * Saves run one at a time: a change made during a save is sent next, and only
+ * the newest answer is shown. A failed save rolls back to the last confirmed selection.
  */
-function LessonCategoryEditor({ lessonId, categoryId, categories }: LessonCategoryEditorProps) {
-  const t = useTranslations('categoryAdmin');
-  const [value, setValue] = useState(categoryId ?? '');
+function LessonCategoryEditor({ lessonId, categoryIds, categories }: LessonCategoryEditorProps) {
+  const t = useTranslations('lessonCategories');
+  const [values, setValues] = useState(categoryIds);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  /** The last selection the server confirmed. */
+  const confirmed = useRef(categoryIds);
+  /** The newest selection the admin asked for that has not been sent yet. */
+  const pending = useRef<string[] | null>(null);
+  const running = useRef(false);
 
   useEffect(() => {
     if (!error) return;
@@ -1501,40 +1588,61 @@ function LessonCategoryEditor({ lessonId, categoryId, categories }: LessonCatego
     return () => clearTimeout(timer);
   }, [error]);
 
-  const change = async (next: string) => {
-    const previous = value;
-    setValue(next);
+  const drain = async () => {
+    running.current = true;
     setSaving(true);
-    setError(null);
     try {
-      const result = await updateLessonCategory(lessonId, next || null);
-      if ('error' in result) throw new Error(result.error);
+      while (pending.current) {
+        const next = pending.current;
+        pending.current = null;
+        const result = await setLessonCategories(lessonId, next);
+        if ('error' in result) {
+          pending.current = null;
+          setValues(confirmed.current);
+          setError(t('saveFailed'));
+          break;
+        }
+        confirmed.current = result.categoryIds;
+        // Show the server's answer only once nothing newer is waiting.
+        if (pending.current === null) setValues(result.categoryIds);
+        setNotice(!result.membershipsSaved && result.categoryIds.length > 1 ? t('migrationNeeded') : null);
+      }
     } catch {
-      setValue(previous);
-      setError(t('lessonCategorySaveFailed'));
+      pending.current = null;
+      setValues(confirmed.current);
+      setError(t('saveFailed'));
     } finally {
+      running.current = false;
       setSaving(false);
     }
   };
 
+  const change = (next: string[]) => {
+    setValues(next);
+    setError(null);
+    pending.current = next;
+    if (!running.current) void drain();
+  };
+
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <label htmlFor={`lesson-category-${lessonId}`} className="text-xs font-medium text-muted-foreground">
-        {t('lessonCategory')}
-      </label>
+    <div className="space-y-2" aria-busy={saving || undefined}>
+      <p className="text-xs font-medium text-muted-foreground">{t('legend')}</p>
       <CategoryPicker
-        id={`lesson-category-${lessonId}`}
-        value={value}
-        onChange={change}
+        id={`lesson-categories-${lessonId}`}
+        multiple
+        values={values}
+        onValuesChange={change}
         categories={categories}
-        includeNone
-        noneLabel={t('noCategory')}
-        disabled={saving}
-        className="max-w-full rounded-full bg-[hsl(var(--surface-elevated))] px-3 py-1 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 border-0"
+        aria-label={t('legend')}
       />
       {saving && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" aria-hidden="true" />}
+      {notice && (
+        <p role="status" className="text-xs font-medium text-muted-foreground">
+          {notice}
+        </p>
+      )}
       {error && (
-        <p role="alert" className="w-full text-xs font-medium text-red-400">
+        <p role="alert" className="text-xs font-medium text-red-400">
           {error}
         </p>
       )}
@@ -1547,7 +1655,7 @@ function LessonCategoryEditor({ lessonId, categoryId, categories }: LessonCatego
  * inline: the new tags show immediately and roll back if saving fails. The
  * admin category picker sits under the tags.
  */
-export function LessonTags({ lessonId, tags: initialTags, admin, categoryId, categories }: LessonTagsProps) {
+export function LessonTags({ lessonId, tags: initialTags, admin, categoryIds, categories }: LessonTagsProps) {
   const t = useTranslations('tagBrowse');
   const [tags, setTags] = useState(initialTags);
   const [draft, setDraft] = useState<string[] | null>(null);
@@ -1638,7 +1746,7 @@ export function LessonTags({ lessonId, tags: initialTags, admin, categoryId, cat
         <LessonCategoryEditor
           key={lessonId}
           lessonId={lessonId}
-          categoryId={categoryId ?? null}
+          categoryIds={categoryIds ?? []}
           categories={categories}
         />
       )}

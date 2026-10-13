@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, type ReactNode } from 'react';
+import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
@@ -11,12 +11,41 @@ import {
   updateCategory,
   deleteCategory,
   countCategoryLessons,
-  reorderCategories,
+  moveCategory,
+  reorderCategory,
+  type CategoryActionError,
   type CategoryFieldErrors,
 } from '@/actions/categories';
-import { CategoryPicker } from '@/components/categories/category-picker';
-import { categoryLabel, childrenOf, containsProtectedCategory, isProtectedCategory } from '@/lib/category-tree';
+import {
+  MAX_CATEGORY_LEVELS,
+  categoryLabel,
+  childrenOf,
+  containsProtectedCategory,
+  descendantIds,
+  hasEnglishName,
+  isProtectedCategory,
+  validMoveTargets,
+} from '@/lib/category-tree';
 import type { Category, CategoryWithChildren } from '@/types/database';
+
+/** Parents of the "Move to…" control, by the depth they would land at (indent). */
+const INDENT_BY_DEPTH = ['ps-0', 'ps-8', 'ps-16'];
+
+/** Value of the "Move to…" option for top level. */
+const TOP_LEVEL_VALUE = '__top__';
+
+/** Admin error codes (src/actions/categories.ts) to messages in categoryAdmin. */
+const MOVE_ERROR_KEY: Record<CategoryActionError, string> = {
+  'not-admin': 'errNotAdmin',
+  failed: 'errFailed',
+  'migration-missing': 'errMigration',
+  stale: 'errStale',
+  'missing-category': 'errMissingCategory',
+  'missing-parent': 'errMissingParent',
+  self: 'errSelf',
+  cycle: 'errCycle',
+  'too-deep': 'errTooDeep',
+};
 
 // ---- Icon map for rendering category icons ----
 // Maps icon name strings to simple emoji/text fallbacks (lucide icons would need dynamic import)
@@ -33,13 +62,12 @@ interface FormState {
   name: string;
   description: string;
   icon: string;
-  parent_id: string;
 }
 
-const EMPTY_FORM: FormState = { hebrew_name: '', name: '', description: '', icon: '', parent_id: '' };
+const EMPTY_FORM: FormState = { hebrew_name: '', name: '', description: '', icon: '' };
 
 interface CreateState {
-  /** null = a new top-level category; otherwise a new child of this category. */
+  /** null = a new top-level category; otherwise a new subcategory of this category. */
   parentId: string | null;
   form: FormState;
   errors: CategoryFieldErrors;
@@ -47,13 +75,16 @@ interface CreateState {
 
 interface EditState {
   id: string;
+  /** The category's updated_at when the edit opened; a save against a newer version is refused. */
+  updatedAt: string;
   form: FormState;
   errors: CategoryFieldErrors;
 }
 
 interface DeleteState {
-  category: Category;
-  childCount: number;
+  category: CategoryWithChildren;
+  /** Subcategories at every level below the category. */
+  descendantCount: number;
   /** null while counting. */
   lessonCount: number | null;
   countFailed: boolean;
@@ -62,17 +93,19 @@ interface DeleteState {
 const inputClasses =
   'w-full rounded-lg bg-[hsl(var(--surface-elevated))] px-4 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 border-0';
 
-function toFormData(form: FormState): FormData {
+/** Form values as FormData. `parentId` is sent only for a new category (undefined = leave the parent alone). */
+function toFormData(form: FormState, parentId?: string | null): FormData {
   const data = new FormData();
   for (const [key, value] of Object.entries(form)) {
     data.set(key, value.trim());
   }
+  if (parentId !== undefined) data.set('parent_id', parentId ?? '');
   return data;
 }
 
-/** Top-level categories the given category may be moved under (itself excluded). */
-function parentChoices(categories: CategoryWithChildren[], excludeId?: string): CategoryWithChildren[] {
-  return categories.filter((c) => c.id !== excludeId).map((c) => ({ ...c, children: [] }));
+/** The English name as the edit form shows it: '' when the category has none yet. */
+function englishFor(category: Category): string {
+  return hasEnglishName(category) ? category.name : '';
 }
 
 function FormErrors({ messages }: { messages?: string[] }) {
@@ -118,46 +151,43 @@ interface CategoryFormFieldsProps {
   form: FormState;
   onChange: (patch: Partial<FormState>) => void;
   errors: CategoryFieldErrors;
-  /** Choices for the parent selector: top-level categories only. */
-  parents: CategoryWithChildren[];
-  parentLocked: boolean;
-  parentLockedHint?: string;
 }
 
-function CategoryFormFields({
-  idPrefix,
-  form,
-  onChange,
-  errors,
-  parents,
-  parentLocked,
-  parentLockedHint,
-}: CategoryFormFieldsProps) {
+/** Hebrew and English names side by side, each in its own direction. English may stay empty. */
+function CategoryFormFields({ idPrefix, form, onChange, errors }: CategoryFormFieldsProps) {
   const t = useTranslations('categoryAdmin');
   return (
     <div className="space-y-3">
-      <FormField id={`${idPrefix}-hebrew`} label={`${t('hebrewName')} *`} messages={errors.hebrew_name}>
-        <input
-          id={`${idPrefix}-hebrew`}
-          type="text"
-          value={form.hebrew_name}
-          onChange={(e) => onChange({ hebrew_name: e.target.value })}
-          className={inputClasses}
-          dir="rtl"
-          aria-invalid={errors.hebrew_name ? true : undefined}
-        />
-      </FormField>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <FormField id={`${idPrefix}-hebrew`} label={`${t('hebrewName')} *`} messages={errors.hebrew_name}>
+          <input
+            id={`${idPrefix}-hebrew`}
+            type="text"
+            value={form.hebrew_name}
+            onChange={(e) => onChange({ hebrew_name: e.target.value })}
+            className={inputClasses}
+            dir="rtl"
+            aria-invalid={errors.hebrew_name ? true : undefined}
+          />
+        </FormField>
 
-      <FormField id={`${idPrefix}-english`} label={t('englishName')} hint={t('englishNameHint')} messages={errors.name}>
-        <input
+        <FormField
           id={`${idPrefix}-english`}
-          type="text"
-          value={form.name}
-          onChange={(e) => onChange({ name: e.target.value })}
-          className={inputClasses}
-          aria-invalid={errors.name ? true : undefined}
-        />
-      </FormField>
+          label={t('englishName')}
+          hint={t('englishNameHint')}
+          messages={errors.name}
+        >
+          <input
+            id={`${idPrefix}-english`}
+            type="text"
+            value={form.name}
+            onChange={(e) => onChange({ name: e.target.value })}
+            className={inputClasses}
+            dir="ltr"
+            aria-invalid={errors.name ? true : undefined}
+          />
+        </FormField>
+      </div>
 
       <FormField id={`${idPrefix}-description`} label={t('description')} messages={errors.description}>
         <input
@@ -179,25 +209,6 @@ function CategoryFormFields({
           className={inputClasses}
         />
       </FormField>
-
-      <FormField
-        id={`${idPrefix}-parent`}
-        label={t('parent')}
-        hint={parentLocked ? parentLockedHint : undefined}
-        messages={errors.parent_id}
-      >
-        <CategoryPicker
-          id={`${idPrefix}-parent`}
-          value={form.parent_id}
-          onChange={(parent_id) => onChange({ parent_id })}
-          categories={parents}
-          includeNone
-          noneValue=""
-          noneLabel={t('topLevelOption')}
-          disabled={parentLocked}
-          className={inputClasses}
-        />
-      </FormField>
     </div>
   );
 }
@@ -216,6 +227,8 @@ export default function AdminCategoriesPage() {
   const [create, setCreate] = useState<CreateState | null>(null);
   const [edit, setEdit] = useState<EditState | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteState | null>(null);
+  // Set synchronously, so a double click before React re-renders cannot start a second write.
+  const writing = useRef(false);
 
   // ---- Fetch categories ----
   const load = useCallback(async () => {
@@ -239,76 +252,94 @@ export default function AdminCategoriesPage() {
     return () => clearTimeout(timer);
   }, [notice]);
 
+  /** Runs one write at a time; the tree reloads afterwards, so the screen always shows what the server holds. */
+  const runWrite = async (write: () => Promise<void>) => {
+    if (writing.current) return;
+    writing.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      await write();
+    } finally {
+      writing.current = false;
+      setBusy(false);
+    }
+  };
+
   // ---- Create ----
   const openCreate = (parentId: string | null) => {
     setCreate((current) =>
-      current && current.parentId === parentId
-        ? null
-        : { parentId, form: { ...EMPTY_FORM, parent_id: parentId ?? '' }, errors: {} },
+      current && current.parentId === parentId ? null : { parentId, form: { ...EMPTY_FORM }, errors: {} },
     );
     setEdit(null);
   };
 
-  const submitCreate = async () => {
+  const submitCreate = () => {
     if (!create) return;
     if (!create.form.hebrew_name.trim()) {
       setCreate({ ...create, errors: { hebrew_name: [t('hebrewNameRequired')] } });
       return;
     }
-    setBusy(true);
-    setError(null);
-    const result = await createCategory(toFormData(create.form));
-    if ('error' in result) {
-      setCreate((current) => (current ? { ...current, errors: result.error } : current));
-    } else {
-      setCreate(null);
-      setNotice(t('created'));
-      await load();
-    }
-    setBusy(false);
+    void runWrite(async () => {
+      const result = await createCategory(toFormData(create.form, create.parentId));
+      if ('error' in result) {
+        setCreate((current) => (current ? { ...current, errors: result.error } : current));
+      } else {
+        setCreate(null);
+        setNotice(t('created'));
+        await load();
+      }
+    });
   };
 
   // ---- Edit ----
-  const startEdit = (cat: Category) => {
+  const startEdit = (cat: CategoryWithChildren) => {
     setCreate(null);
     setEdit({
       id: cat.id,
+      updatedAt: cat.updated_at,
       form: {
         hebrew_name: cat.hebrew_name,
-        name: cat.name || '',
+        name: englishFor(cat),
         description: cat.description || '',
         icon: cat.icon || '',
-        parent_id: cat.parent_id || '',
       },
       errors: {},
     });
   };
 
-  const submitEdit = async () => {
+  const submitEdit = () => {
     if (!edit) return;
     if (!edit.form.hebrew_name.trim()) {
       setEdit({ ...edit, errors: { hebrew_name: [t('hebrewNameRequired')] } });
       return;
     }
-    setBusy(true);
-    setError(null);
-    const result = await updateCategory(edit.id, toFormData(edit.form));
-    if ('error' in result) {
-      setEdit((current) => (current ? { ...current, errors: result.error } : current));
-    } else {
-      setEdit(null);
-      setNotice(t('updated'));
-      await load();
-    }
-    setBusy(false);
+    void runWrite(async () => {
+      const result = await updateCategory(edit.id, toFormData(edit.form), edit.updatedAt);
+      if ('error' in result) {
+        const failure = result.error;
+        if (failure === 'stale') {
+          // Someone else changed it: close the form, reload the tree, and say so.
+          setEdit(null);
+          await load();
+          setError(t('errStale'));
+        } else {
+          setEdit((current) => (current ? { ...current, errors: failure } : current));
+        }
+      } else {
+        setEdit(null);
+        setNotice(t('updated'));
+        await load();
+      }
+    });
   };
 
   // ---- Delete ----
-  const askDelete = async (cat: Category) => {
+  const askDelete = async (cat: CategoryWithChildren) => {
     setEdit(null);
     setDeleteTarget({
       category: cat,
-      childCount: childrenOf(categories, cat.id).length,
+      descendantCount: descendantIds(categories, cat.id).length - 1,
       lessonCount: null,
       countFailed: false,
     });
@@ -324,98 +355,109 @@ export default function AdminCategoriesPage() {
     );
   };
 
-  const handleDelete = async (id: string) => {
-    setBusy(true);
-    setError(null);
-    const result = await deleteCategory(id);
-    if ('error' in result) {
-      setError(result.error);
-    } else {
-      setNotice(t('deleted'));
-      await load();
-    }
-    setDeleteTarget(null);
-    setBusy(false);
+  const handleDelete = (id: string) => {
+    void runWrite(async () => {
+      const result = await deleteCategory(id);
+      if ('error' in result) {
+        setError(result.error);
+      } else {
+        setNotice(t('deleted'));
+        await load();
+      }
+      setDeleteTarget(null);
+    });
   };
 
-  // ---- Reorder ----
-  // Optimistic: the new order shows at once. If the server refuses it, the snapshot taken before the move comes back.
-  const moveCategory = async (parentId: string | null, index: number, step: -1 | 1) => {
-    const snapshot = categories;
-    let ids: string[];
-    let next: CategoryWithChildren[];
+  // ---- Move and reorder ----
+  /** Moves a category, with its branch, to `parentId` (null = top level) at the end of that parent's children. */
+  const moveTo = (cat: CategoryWithChildren, parentId: string | null) => {
+    const index = parentId ? childrenOf(categories, parentId).length : categories.length;
+    void runWrite(async () => {
+      const result = await moveCategory(cat.id, parentId, index, cat.updated_at);
+      if ('error' in result) setError(t(MOVE_ERROR_KEY[result.error]));
+      else setNotice(t('moved'));
+      await load();
+    });
+  };
 
-    if (parentId === null) {
-      const target = index + step;
-      if (target < 0 || target >= categories.length) return;
-      const reordered = [...categories];
-      [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
-      next = reordered.map((c, i) => ({ ...c, sort_order: i }));
-      ids = next.map((c) => c.id);
-    } else {
-      const parent = categories.find((p) => p.id === parentId);
-      if (!parent) return;
-      const target = index + step;
-      if (target < 0 || target >= parent.children.length) return;
-      const children = [...parent.children];
-      [children[index], children[target]] = [children[target], children[index]];
-      const renumbered = children.map((c, i) => ({ ...c, sort_order: i }));
-      next = categories.map((p) => (p.id === parentId ? { ...p, children: renumbered } : p));
-      ids = renumbered.map((c) => c.id);
-    }
-
-    setCategories(next);
-    setBusy(true);
-    const result = await reorderCategories(ids);
-    if ('error' in result) {
-      setCategories(snapshot);
-      setError(t('reorderFailed'));
-    }
-    setBusy(false);
+  /** Moves a category one place up (step -1) or down (step 1) among its siblings. */
+  const step = (cat: CategoryWithChildren, index: number, delta: -1 | 1) => {
+    void runWrite(async () => {
+      const result = await reorderCategory(cat.id, index + delta, cat.updated_at);
+      if ('error' in result) setError(t(MOVE_ERROR_KEY[result.error]));
+      else setNotice(t('orderSaved'));
+      await load();
+    });
   };
 
   // ---- Render helpers ----
 
-  // Render a single category row (parent or child)
-  function renderCategoryRow(
-    cat: Category,
-    index: number,
-    siblings: Category[],
-    parentId: string | null,
-    isChild: boolean,
-  ) {
+  /** The "Move to…" control: valid targets only (validMoveTargets). Renders nothing when there are none. */
+  function renderMoveTo(cat: CategoryWithChildren) {
+    const targets = validMoveTargets(categories, cat.id, locale);
+    if (targets.length === 0) return null;
+    return (
+      <select
+        aria-label={t('moveTo')}
+        value=""
+        disabled={busy}
+        onChange={(e) => {
+          const value = e.target.value;
+          if (!value) return;
+          moveTo(cat, value === TOP_LEVEL_VALUE ? null : value);
+        }}
+        className="max-w-[140px] rounded-lg bg-[hsl(var(--surface-highlight))] px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:opacity-40"
+        dir="rtl"
+      >
+        <option value="" disabled>
+          {t('moveTo')}
+        </option>
+        {targets.map((target) => (
+          <option key={target.parentId ?? TOP_LEVEL_VALUE} value={target.parentId ?? TOP_LEVEL_VALUE}>
+            {target.parentId === null ? t('moveToTopLevel') : `${' '.repeat(target.depth * 4)}${target.label}`}
+          </option>
+        ))}
+      </select>
+    );
+  }
+
+  // Render one category row with its subcategories (up to three levels).
+  function renderCategory(cat: CategoryWithChildren, index: number, siblings: CategoryWithChildren[], depth: number) {
     const isEditing = edit?.id === cat.id;
     const isDeleting = deleteTarget?.category.id === cat.id;
     const protectedSelf = isProtectedCategory(cat.id);
     const protectedInside = !protectedSelf && containsProtectedCategory(categories, cat.id);
     const deleteBlocked = protectedSelf || protectedInside;
     const deleteHint = protectedSelf ? t('protectedHint') : protectedInside ? t('protectedChildHint') : undefined;
+    const parent = depth > 0 ? findParent(cat.id) : null;
+    const canHaveChildren = depth < MAX_CATEGORY_LEVELS - 1;
+    const english = hasEnglishName(cat) ? cat.name : null;
 
     return (
-      <div key={cat.id} className={`group ${isChild ? 'ps-8' : ''}`}>
+      <div key={cat.id} className={`group ${INDENT_BY_DEPTH[depth] ?? ''}`}>
         <div
           className={`flex items-center gap-3 rounded-xl px-4 py-3 transition-colors ${
-            isChild
+            depth > 0
               ? 'border border-border/30 bg-[hsl(var(--surface-elevated))]/50'
               : 'border border-s-2 border-border/50 border-s-primary bg-[hsl(var(--surface-elevated))]'
           } ${isEditing ? 'ring-1 ring-primary/30' : ''}`}
         >
-          {/* Reorder buttons */}
+          {/* Move up / move down */}
           <div className="flex flex-shrink-0 flex-col gap-0.5">
             <button
               type="button"
-              onClick={() => moveCategory(parentId, index, -1)}
+              onClick={() => step(cat, index, -1)}
               disabled={index === 0 || busy}
-              className="p-0.5 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-20"
+              className="p-0.5 text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/60 disabled:opacity-20 motion-reduce:transition-none"
               aria-label={t('moveUp')}
             >
               <ChevronUp className="h-3.5 w-3.5" />
             </button>
             <button
               type="button"
-              onClick={() => moveCategory(parentId, index, 1)}
+              onClick={() => step(cat, index, 1)}
               disabled={index === siblings.length - 1 || busy}
-              className="p-0.5 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-20"
+              className="p-0.5 text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/60 disabled:opacity-20 motion-reduce:transition-none"
               aria-label={t('moveDown')}
             >
               <ChevronDown className="h-3.5 w-3.5" />
@@ -438,9 +480,6 @@ export default function AdminCategoriesPage() {
                     setEdit((current) => current && { ...current, form: { ...current.form, ...patch }, errors: {} })
                   }
                   errors={edit.errors}
-                  parents={parentChoices(categories, cat.id)}
-                  parentLocked={childrenOf(categories, cat.id).length > 0}
-                  parentLockedHint={t('parentLocked')}
                 />
                 <FormErrors messages={edit.errors._form} />
                 <div className="flex gap-2 pt-1">
@@ -448,10 +487,10 @@ export default function AdminCategoriesPage() {
                     type="button"
                     onClick={submitEdit}
                     disabled={busy || !edit.form.hebrew_name.trim()}
-                    className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-bold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40"
+                    className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-bold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-primary/60 disabled:opacity-40"
                   >
                     {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                    <span>{t('save')}</span>
+                    <span>{busy ? t('saving') : t('save')}</span>
                   </button>
                   <button
                     type="button"
@@ -464,12 +503,16 @@ export default function AdminCategoriesPage() {
               </div>
             ) : (
               <div className="space-y-1">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <p className="truncate text-sm font-medium text-foreground" dir="rtl">
-                    {categoryLabel(cat)}
+                    {categoryLabel(cat, 'he')}
                   </p>
-                  {cat.name && cat.name !== cat.hebrew_name && (
-                    <span className="hidden text-xs text-muted-foreground sm:inline">({cat.name})</span>
+                  {english ? (
+                    <span className="hidden text-xs text-muted-foreground sm:inline" dir="ltr">
+                      ({english})
+                    </span>
+                  ) : (
+                    <span className="hidden text-xs text-muted-foreground/70 sm:inline">{t('noEnglishYet')}</span>
                   )}
                   {cat.description && (
                     <span className="hidden max-w-[200px] truncate text-xs text-muted-foreground md:inline">
@@ -482,6 +525,11 @@ export default function AdminCategoriesPage() {
                     </span>
                   )}
                 </div>
+                {parent && (
+                  <p className="text-xs text-muted-foreground" dir="rtl">
+                    {t('within', { parent: categoryLabel(parent, 'he') })}
+                  </p>
+                )}
                 {deleteHint && <p className="text-xs text-muted-foreground">{deleteHint}</p>}
               </div>
             )}
@@ -489,13 +537,14 @@ export default function AdminCategoriesPage() {
 
           {/* Action buttons (hidden when editing) */}
           {!isEditing && (
-            <div className="flex flex-shrink-0 items-center gap-1 opacity-60 transition-opacity group-hover:opacity-100">
-              {!isChild && (
+            <div className="flex flex-shrink-0 flex-wrap items-center justify-end gap-1 opacity-60 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+              {renderMoveTo(cat)}
+              {canHaveChildren && (
                 <button
                   type="button"
                   onClick={() => openCreate(cat.id)}
                   disabled={busy}
-                  className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                  className="flex min-h-9 items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/60"
                 >
                   <Plus className="h-3.5 w-3.5" />
                   <span>{t('addSubcategory')}</span>
@@ -505,7 +554,7 @@ export default function AdminCategoriesPage() {
                 type="button"
                 onClick={() => startEdit(cat)}
                 disabled={busy}
-                className="p-1.5 text-muted-foreground transition-colors hover:text-foreground"
+                className="flex h-9 w-9 items-center justify-center text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/60"
                 aria-label={t('edit')}
               >
                 <Pencil className="h-3.5 w-3.5" />
@@ -515,7 +564,7 @@ export default function AdminCategoriesPage() {
                 onClick={() => askDelete(cat)}
                 disabled={busy || deleteBlocked}
                 title={deleteHint}
-                className="p-1.5 text-muted-foreground transition-colors hover:text-destructive disabled:opacity-30 disabled:hover:text-muted-foreground"
+                className="flex h-9 w-9 items-center justify-center text-muted-foreground transition-colors hover:text-destructive focus-visible:ring-2 focus-visible:ring-primary/60 disabled:opacity-30 disabled:hover:text-muted-foreground"
                 aria-label={t('delete')}
               >
                 <Trash2 className="h-3.5 w-3.5" />
@@ -528,9 +577,13 @@ export default function AdminCategoriesPage() {
         {isDeleting && deleteTarget && (
           <div className="mt-2 space-y-3 rounded-lg border border-destructive/20 bg-destructive/10 p-4">
             <div className="space-y-1" dir="rtl">
-              <p className="text-sm font-medium text-destructive">{t('deleteConfirm', { name: categoryLabel(cat) })}</p>
-              {deleteTarget.childCount > 0 && (
-                <p className="text-sm text-destructive">{t('deleteChildren', { count: deleteTarget.childCount })}</p>
+              <p className="text-sm font-medium text-destructive">
+                {t('deleteConfirm', { name: categoryLabel(cat, 'he') })}
+              </p>
+              {deleteTarget.descendantCount > 0 && (
+                <p className="text-sm text-destructive">
+                  {t('deleteChildren', { count: deleteTarget.descendantCount })}
+                </p>
               )}
               <p className="text-sm text-destructive">
                 {deleteTarget.lessonCount !== null
@@ -560,20 +613,40 @@ export default function AdminCategoriesPage() {
             </div>
           </div>
         )}
+
+        {/* Subcategories, and the form for a new one when it is open under this category */}
+        {(cat.children.length > 0 || create?.parentId === cat.id) && (
+          <div className="mt-1.5 space-y-1.5">
+            {cat.children.map((child, childIndex) => renderCategory(child, childIndex, cat.children, depth + 1))}
+            {create?.parentId === cat.id && renderCreatePanel(cat, depth + 1)}
+          </div>
+        )}
       </div>
     );
   }
 
+  /** The category holding `id` as a direct child, for the parent context line. */
+  function findParent(id: string): CategoryWithChildren | null {
+    const walk = (nodes: CategoryWithChildren[]): CategoryWithChildren | null => {
+      for (const node of nodes) {
+        if (node.children.some((child) => child.id === id)) return node;
+        const found = walk(node.children);
+        if (found) return found;
+      }
+      return null;
+    };
+    return walk(categories);
+  }
+
   // Create panel: the top-level one at the top of the list, a subcategory one under its parent.
-  function renderCreatePanel(nested: boolean) {
+  function renderCreatePanel(parent: CategoryWithChildren | null, depth: number) {
     if (!create) return null;
-    const parentName = nested ? (categories.find((c) => c.id === create.parentId)?.hebrew_name ?? '') : '';
     return (
       <div
-        className={`space-y-4 rounded-xl border border-border/50 bg-[hsl(var(--surface-elevated))] p-5 ${nested ? 'ms-8' : ''}`}
+        className={`space-y-4 rounded-xl border border-border/50 bg-[hsl(var(--surface-elevated))] p-5 ${INDENT_BY_DEPTH[depth] ?? ''}`}
       >
         <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
-          {nested ? t('newSubcategory', { parent: parentName }) : t('newCategory')}
+          {parent ? t('newSubcategory', { parent: categoryLabel(parent, 'he') }) : t('newCategory')}
         </h2>
 
         <CategoryFormFields
@@ -583,8 +656,6 @@ export default function AdminCategoriesPage() {
             setCreate((current) => current && { ...current, form: { ...current.form, ...patch }, errors: {} })
           }
           errors={create.errors}
-          parents={parentChoices(categories)}
-          parentLocked={false}
         />
         <FormErrors messages={create.errors._form} />
 
@@ -593,10 +664,10 @@ export default function AdminCategoriesPage() {
             type="button"
             onClick={submitCreate}
             disabled={busy || !create.form.hebrew_name.trim()}
-            className="flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-primary/60 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-            <span>{t('save')}</span>
+            <span>{busy ? t('saving') : t('save')}</span>
           </button>
           <button
             type="button"
@@ -621,7 +692,7 @@ export default function AdminCategoriesPage() {
 
   // ---- Main render ----
   return (
-    <div className="animate-fade-in mx-auto max-w-2xl space-y-6" dir="rtl">
+    <div className="animate-fade-in mx-auto max-w-3xl space-y-6" dir="rtl">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Link
@@ -660,13 +731,13 @@ export default function AdminCategoriesPage() {
       <button
         type="button"
         onClick={() => openCreate(null)}
-        className="flex w-full items-center justify-center gap-2 rounded-lg border border-primary/20 bg-primary/10 px-4 py-3 text-sm font-medium text-primary transition-colors hover:bg-primary/20"
+        className="flex w-full items-center justify-center gap-2 rounded-lg border border-primary/20 bg-primary/10 px-4 py-3 text-sm font-medium text-primary transition-colors hover:bg-primary/20 focus-visible:ring-2 focus-visible:ring-primary/60"
       >
         <Plus className="h-4 w-4" />
         <span>{t('addCategory')}</span>
       </button>
 
-      {create?.parentId === null && renderCreatePanel(false)}
+      {create?.parentId === null && renderCreatePanel(null, 0)}
 
       {/* Category tree list */}
       <div className="space-y-3">
@@ -676,22 +747,7 @@ export default function AdminCategoriesPage() {
             <p className="text-sm text-muted-foreground">{t('empty')}</p>
           </div>
         ) : (
-          categories.map((parent, parentIndex) => (
-            <div key={parent.id} className="space-y-1.5">
-              {/* Parent category row */}
-              {renderCategoryRow(parent, parentIndex, categories, null, false)}
-
-              {/* Children, and the subcategory form when it is open for this parent */}
-              {(parent.children.length > 0 || create?.parentId === parent.id) && (
-                <div className="space-y-1.5">
-                  {parent.children.map((child, childIndex) =>
-                    renderCategoryRow(child, childIndex, parent.children, parent.id, true),
-                  )}
-                  {create?.parentId === parent.id && renderCreatePanel(true)}
-                </div>
-              )}
-            </div>
-          ))
+          categories.map((cat, index) => renderCategory(cat, index, categories, 0))
         )}
       </div>
     </div>

@@ -25,6 +25,7 @@ import { ImageUnreadableError, useUpload, uploadImageFile, type FileWithMeta } f
 import { UploadZone, type SelectedFile } from '@/components/upload/upload-zone';
 import type { LessonAudio, LessonImage, CategoryWithChildren } from '@/types/database';
 import { getCategories } from '@/actions/categories';
+import { getLessonCategoryIds } from '@/actions/lesson-categories';
 import { CategoryPicker } from '@/components/categories/category-picker';
 import { generateLessonMetadata } from '@/lib/hebrew-date';
 import { TagInput } from '@/components/tags/tag-input';
@@ -73,8 +74,11 @@ export default function EditLessonClient({ lessonId }: { lessonId: string }) {
   const [date, setDate] = useState('');
   const [isPublished, setIsPublished] = useState(false);
 
-  // Category
-  const [categoryId, setCategoryId] = useState<string>('');
+  // Categories (several; the first is primary). Saved with the lesson, in order.
+  const tCategories = useTranslations('lessonCategories');
+  const [categoryIds, setCategoryIds] = useState<string[]>([]);
+  // A failed read of the lesson's categories: the picker is disabled and the field is not saved (a save would drop the hidden ones).
+  const [categoriesFailed, setCategoriesFailed] = useState(false);
   const [categories, setCategories] = useState<CategoryWithChildren[]>([]);
   const [tags, setTags] = useState<string[]>([]);
 
@@ -111,11 +115,12 @@ export default function EditLessonClient({ lessonId }: { lessonId: string }) {
   // Load data
   useEffect(() => {
     async function load() {
-      const [lessonResult, audioResult, imagesResult, categoriesResult] = await Promise.all([
+      const [lessonResult, audioResult, imagesResult, categoriesResult, categoryIdsResult] = await Promise.all([
         getLesson(lessonId),
         getAudioFiles(lessonId),
         getImages(lessonId),
         getCategories(),
+        getLessonCategoryIds(lessonId),
       ]);
       if (lessonResult.data) {
         const lesson = lessonResult.data;
@@ -126,7 +131,8 @@ export default function EditLessonClient({ lessonId }: { lessonId: string }) {
         setDescription(lesson.description || '');
         setDate(lesson.date || '');
         setIsPublished(lesson.is_published);
-        setCategoryId(lesson.category_id || '');
+        if ('categoryIds' in categoryIdsResult) setCategoryIds(categoryIdsResult.categoryIds);
+        else setCategoriesFailed(true);
         setTags(lesson.tags ?? []);
         // Metadata
         setHebrewDate(lesson.hebrew_date || '');
@@ -194,7 +200,7 @@ export default function EditLessonClient({ lessonId }: { lessonId: string }) {
       formData.set('location', location);
       formData.set('summary', summary);
       formData.set('lesson_type', lessonType);
-      formData.set('category_id', categoryId || '');
+      if (!categoriesFailed) formData.set('category_ids', JSON.stringify(categoryIds));
       formData.set('tags', JSON.stringify(tags));
       if (sederNumber) formData.set('seder_number', sederNumber);
 
@@ -241,6 +247,11 @@ export default function EditLessonClient({ lessonId }: { lessonId: string }) {
         }
       }
 
+      // Stay on the page while the notice is needed (several categories saved as primary only).
+      if (result.membershipsSaved === false && categoryIds.length > 1) {
+        setFormError(tCategories('migrationNeeded'));
+        return;
+      }
       setSuccessMsg('השיעור עודכן בהצלחה');
       setTimeout(() => {
         router.push(lessonPath(result.data ?? { id: lessonId, slug: currentSlug }));
@@ -666,12 +677,15 @@ export default function EditLessonClient({ lessonId }: { lessonId: string }) {
           </div>
           <CategoryPicker
             id="lesson-category"
-            value={categoryId}
-            onChange={setCategoryId}
+            multiple
+            values={categoryIds}
+            onValuesChange={setCategoryIds}
             categories={categories}
-            includeNone
-            noneLabel="ללא קטגוריה"
+            disabled={categoriesFailed}
           />
+          {categoriesFailed && (
+            <p role="alert" className="mt-1 text-xs font-medium text-red-400">{tCategories('errFailed')}</p>
+          )}
         </div>
 
         {/* Topic tags */}

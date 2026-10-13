@@ -11,6 +11,11 @@ import { normalizeTags } from '@/lib/tags';
 import { normalizePartType } from '@/lib/part-types';
 import { notifyNewLesson } from '@/lib/notifications/notify';
 import { updateLessonSchema } from '@/lib/validators';
+import { normalizeCategorySelection } from '@/lib/lesson-categories';
+import { getCategoriesTree } from '@/lib/supabase/queries';
+import { writeLessonCategories } from '@/lib/supabase/lesson-category-writes';
+import { isUuid } from '@/lib/lesson-slugs';
+import { LESSON_CATEGORY } from '@/lib/supabase/lesson-selects';
 import type { Lesson, LessonWithRelations, LessonAudio, LessonImage } from '@/types/database';
 
 export async function updateLesson(id: string, formData: FormData) {
@@ -51,6 +56,14 @@ export async function updateLesson(id: string, formData: FormData) {
     return { error: { _form: ['Invalid tags'] } };
   }
 
+  // The lesson's categories (migration 026): an ordered JSON array of ids, first = primary.
+  // Absent means "leave the categories unchanged".
+  const categoryIdsField = formData.get('category_ids');
+  const categoryIds = categoryIdsField === null ? undefined : parseIdList(categoryIdsField);
+  if (categoryIds === null || (categoryIds && !categoryIds.every(isUuid))) {
+    return { error: { _form: ['Invalid categories'] } };
+  }
+
   const slugField = formData.get('slug');
   const slug = typeof slugField === 'string' ? slugField.trim() : '';
   const tSlug = await getTranslations('lessonSlug');
@@ -78,11 +91,30 @@ export async function updateLesson(id: string, formData: FormData) {
     return { error: { _form: [error.message] } };
   }
 
+  let membershipsSaved: boolean | undefined;
+  if (categoryIds) {
+    const tree = await getCategoriesTree(supabase);
+    const written = await writeLessonCategories(supabase, id, normalizeCategorySelection(categoryIds, tree));
+    if ('error' in written) return { error: { _form: [written.error] } };
+    membershipsSaved = written.membershipsSaved;
+  }
+
   // Publishing a draft from the edit page announces it (no-op if already announced).
   if (parsed.data.is_published === true) await notifyNewLesson(id);
 
   revalidateCatalog();
-  return { data: data as Lesson };
+  return { data: data as Lesson, membershipsSaved };
+}
+
+/** A JSON array of strings from a form field, or null when malformed. */
+function parseIdList(field: FormDataEntryValue): string[] | null {
+  if (typeof field !== 'string') return null;
+  try {
+    const value: unknown = JSON.parse(field);
+    return Array.isArray(value) && value.every((id) => typeof id === 'string') ? value : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Normalized tags from a JSON string array, or null when the payload is malformed. */
@@ -165,7 +197,7 @@ export async function getLesson(id: string) {
 
   const { data, error } = await supabase
     .from('lessons')
-    .select('*, series(*), category:categories(id, hebrew_name), snippets(*), audio_files:lesson_audio(*), images:lesson_images(*)')
+    .select(`*, series(*), ${LESSON_CATEGORY}, snippets(*), audio_files:lesson_audio(*), images:lesson_images(*)`)
     .eq('id', id)
     .single();
 
@@ -332,50 +364,10 @@ export async function getLessonsByIds(ids: string[]) {
   const supabase = await requireServerSupabaseClient();
   const { data, error } = await supabase
     .from('lessons')
-    .select('*, series(*), category:categories(id, hebrew_name), audio_files:lesson_audio(*)')
+    .select(`*, series(*), ${LESSON_CATEGORY}, audio_files:lesson_audio(*)`)
     .in('id', ids)
     .eq('is_published', true);
   if (error || !data) return [];
   return data as LessonWithRelations[];
 }
 
-// ==================== BULK CATEGORY UPDATE (admin) ====================
-
-export async function bulkUpdateLessonCategory(
-  lessonIds: string[],
-  categoryId: string | null
-): Promise<{ success?: boolean; error?: string }> {
-  if (!(await isAdmin())) {
-    return { error: 'Unauthorized' };
-  }
-
-  if (!lessonIds.length) {
-    return { error: 'No lessons selected' };
-  }
-
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (!lessonIds.every((id) => uuidRegex.test(id))) {
-    return { error: 'Invalid lesson ID' };
-  }
-  if (categoryId !== null && !uuidRegex.test(categoryId)) {
-    return { error: 'Invalid category ID' };
-  }
-
-  try {
-    const supabase = createAdminSupabaseClient();
-
-    const { error } = await supabase
-      .from('lessons')
-      .update({ category_id: categoryId })
-      .in('id', lessonIds);
-
-    if (error) {
-      return { error: error.message };
-    }
-
-    revalidateCatalog();
-    return { success: true };
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : 'Failed to update lessons' };
-  }
-}

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { createBookmark, deleteBookmark, updateBookmark } from '@/actions/bookmarks';
+import { createBookmark, deleteBookmark, updateBookmark as updateBookmarkOnAccount } from '@/actions/bookmarks';
 
 export interface LocalBookmark {
   id: string;
@@ -11,10 +11,29 @@ export interface LocalBookmark {
   createdAt: string;
   lessonTitle?: string;
   audioFileId?: string | null;
+  /**
+   * The account's `updated_at` for this bookmark, as the server returned it (create,
+   * edit or sync). Never set from the device clock. Undefined until the account has
+   * confirmed the bookmark, and always before migration 024. Edits are conditioned on it.
+   */
+  updatedAt?: string;
 }
 
-/** `sync_failed`: saved on this device, but mirroring to the signed-in account failed (UI: t('bookmarks.syncFailed')). */
+/** Note and/or tag: the only fields a bookmark edit changes (position, part and lesson stay). */
+export type BookmarkEdit = Partial<Pick<LocalBookmark, 'note' | 'tag'>>;
+
+/**
+ * `sync_failed`: saved on this device, but mirroring to the signed-in account failed (UI: t('bookmarks.syncFailed')).
+ * For an edit it also means: applied on this device, not in the account yet (the next sync inserts it with the edit).
+ */
 type SyncResult = { error?: 'sync_failed' };
+
+/**
+ * Edit outcomes. `changed_elsewhere`: the bookmark differs from the version the editor
+ * opened (another device, or a sync). Nothing changed here; reload to see it.
+ * `save_failed`: the account could not be reached or refused the change; nothing changed here.
+ */
+export type BookmarkUpdateResult = { error?: 'sync_failed' | 'changed_elsewhere' | 'save_failed' };
 
 interface BookmarksState {
   bookmarks: LocalBookmark[];
@@ -31,12 +50,26 @@ interface BookmarksState {
     extra?: { lessonTitle?: string; audioFileId?: string | null },
   ) => Promise<SyncResult>;
   removeBookmark: (id: string) => Promise<SyncResult>;
-  updateBookmark: (id: string, updates: Partial<Pick<LocalBookmark, 'note' | 'tag'>>) => Promise<SyncResult>;
+  /**
+   * Edits one bookmark in place: same id, lesson, position and part; nothing new is created.
+   * `expectedUpdatedAt` is the version the editor opened (`bookmark.updatedAt` at that time;
+   * omit or null when the account never confirmed it). A different current version means
+   * `changed_elsewhere`. Signed-in: the account write goes first and the device copy changes
+   * only after it succeeds (the server holds the stale-edit check).
+   */
+  updateBookmark: (
+    id: string,
+    updates: BookmarkEdit,
+    options?: { expectedUpdatedAt?: string | null },
+  ) => Promise<BookmarkUpdateResult>;
   getBookmarksByLesson: (lessonId: string) => LocalBookmark[];
   hasBookmark: (lessonId: string) => boolean;
 }
 
+const BOOKMARKS_STORAGE_KEY = 'tora-bookmarks';
 const SYNC_FAILED = 'sync_failed' as const;
+const CHANGED_ELSEWHERE = 'changed_elsewhere' as const;
+const SAVE_FAILED = 'save_failed' as const;
 const MAX_PENDING_DELETES = 500;
 
 export const useBookmarksStore = create<BookmarksState>()(
@@ -71,7 +104,9 @@ export const useBookmarksStore = create<BookmarksState>()(
             tag: tag || null,
             audio_file_id: bookmark.audioFileId,
           });
-          return result.error ? { error: SYNC_FAILED } : {};
+          if (result.error) return { error: SYNC_FAILED };
+          if (result.updatedAt) setServerUpdatedAt(bookmark.id, result.updatedAt);
+          return {};
         } catch {
           return { error: SYNC_FAILED };
         }
@@ -94,17 +129,36 @@ export const useBookmarksStore = create<BookmarksState>()(
         }
       },
 
-      updateBookmark: async (id, updates) => {
-        set((state) => ({
-          bookmarks: state.bookmarks.map((b) => (b.id === id ? { ...b, ...updates } : b)),
-        }));
+      updateBookmark: async (id, updates, options) => {
+        const current = get().bookmarks.find((b) => b.id === id);
+        const expected = options?.expectedUpdatedAt ?? null;
+        // The editor opened another version (a sync or another tab changed it since), or the bookmark is gone.
+        if (!current || (expected !== null && current.updatedAt !== expected)) return { error: CHANGED_ELSEWHERE };
 
-        if (!get().accountUserId) return {};
+        const applyLocally = (updatedAt?: string) =>
+          set((state) => ({
+            bookmarks: state.bookmarks.map((b) =>
+              b.id === id ? { ...b, ...updates, ...(updatedAt ? { updatedAt } : {}) } : b,
+            ),
+          }));
+
+        if (!get().accountUserId) {
+          applyLocally();
+          return {};
+        }
         try {
-          const result = await updateBookmark(id, updates);
-          return result.error ? { error: SYNC_FAILED } : {};
+          const result = await updateBookmarkOnAccount(id, updates, expected);
+          if (result.error === 'changed_elsewhere') return { error: CHANGED_ELSEWHERE };
+          if (result.error === 'not_uploaded') {
+            // Never reached the account: keep the edit here; the next sync inserts the bookmark with it.
+            applyLocally();
+            return { error: SYNC_FAILED };
+          }
+          if (result.error) return { error: SAVE_FAILED };
+          applyLocally(result.updatedAt ?? undefined);
+          return {};
         } catch {
-          return { error: SYNC_FAILED };
+          return { error: SAVE_FAILED };
         }
       },
 
@@ -113,8 +167,36 @@ export const useBookmarksStore = create<BookmarksState>()(
       hasBookmark: (lessonId) => get().bookmarks.some((b) => b.lessonId === lessonId),
     }),
     {
-      name: 'tora-bookmarks',
+      name: BOOKMARKS_STORAGE_KEY,
       partialize: (state) => ({ bookmarks: state.bookmarks, pendingDeletes: state.pendingDeletes }),
     },
   ),
 );
+
+/**
+ * Another tab saved the bookmarks (its `storage` event): reload them from storage so every open
+ * tab shows the same list. The whole list is replaced, so an edit or delete never duplicates a bookmark.
+ * Returns whether the event was for the bookmarks.
+ */
+export function rehydrateBookmarksOnStorageEvent(key: string | null): boolean {
+  if (key !== BOOKMARKS_STORAGE_KEY) return false;
+  void useBookmarksStore.persist.rehydrate();
+  return true;
+}
+
+/** Keeps every open tab on one bookmarks list. Returns the cleanup. */
+export function startBookmarksCrossTabSync(target: Pick<Window, 'addEventListener' | 'removeEventListener'>) {
+  const onStorage = (event: StorageEvent) => {
+    rehydrateBookmarksOnStorageEvent(event.key);
+  };
+  target.addEventListener('storage', onStorage);
+  return () => target.removeEventListener('storage', onStorage);
+}
+
+if (typeof window !== 'undefined') startBookmarksCrossTabSync(window);
+
+function setServerUpdatedAt(id: string, updatedAt: string) {
+  useBookmarksStore.setState((state) => ({
+    bookmarks: state.bookmarks.map((b) => (b.id === id ? { ...b, updatedAt } : b)),
+  }));
+}

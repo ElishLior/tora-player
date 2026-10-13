@@ -8,9 +8,16 @@ import { AudioPlayer } from '@/components/player/audio-player';
 import { Header } from '@/components/layout/header';
 import { BottomNav } from '@/components/layout/bottom-nav';
 import { SideNav } from '@/components/layout/side-nav';
+import { DesktopShell } from '@/components/layout/desktop-shell';
+import { NowPlayingPanel } from '@/components/player/now-playing-panel';
+import { getCachedRecentLessons } from '@/lib/supabase/anon';
+import { isSupabaseConfigured } from '@/lib/supabase/server';
+import { SHELL_PAGE_BACKGROUND } from '@/lib/desktop-shell';
+import type { LessonWithRelations } from '@/types/database';
 import { InstallPrompt } from '@/components/pwa/install-prompt';
 import { NotificationPrompt } from '@/components/notifications/notification-prompt';
 import { ServiceWorkerRegistrar } from '@/components/pwa/sw-registrar';
+import { AppUpdateBanner } from '@/components/pwa/app-update-banner';
 import { DEFAULT_LOCALE, SITE_DESCRIPTION, SITE_NAME, isSiteLocale } from '@/config/site';
 import { heebo } from '@/app/fonts';
 
@@ -18,6 +25,22 @@ type Props = {
   children: React.ReactNode;
   params: Promise<{ locale: string }>;
 };
+
+/**
+ * The latest published lesson, for the desktop panel's fallback. It is the same cached
+ * read the home page uses (getCachedRecentLessons(10), first row), so the panel and the
+ * hero always show the same lesson. Null when nothing can be read (CI builds, outages).
+ */
+async function readLatestLesson(): Promise<LessonWithRelations | null> {
+  if (!isSupabaseConfigured()) return null;
+  try {
+    const [latest] = await getCachedRecentLessons(10);
+    return latest ?? null;
+  } catch (error) {
+    console.error('Layout: failed to read the latest lesson', error);
+    return null;
+  }
+}
 
 export function generateStaticParams() {
   return routing.locales.map((locale) => ({ locale }));
@@ -48,24 +71,27 @@ export default async function LocaleLayout({ children, params }: Props) {
   setRequestLocale(locale);
   const messages = await getMessages();
   const isRTL = locale === 'he';
+  const latestLesson = await readLatestLesson();
 
   return (
     <html lang={locale} dir={isRTL ? 'rtl' : 'ltr'} className="dark" suppressHydrationWarning>
-      <body className={`${heebo.variable} font-sans antialiased bg-background text-foreground min-h-screen`} suppressHydrationWarning>
+      <body
+        className={`${heebo.variable} min-h-screen bg-background font-sans text-foreground antialiased`}
+        suppressHydrationWarning
+      >
         <ThemeProvider attribute="class" defaultTheme="dark" forcedTheme="dark" enableSystem={false}>
           <NextIntlClientProvider messages={messages}>
-            <div className="flex min-h-screen flex-col">
+            <div className={`flex min-h-screen flex-col ${SHELL_PAGE_BACKGROUND}`}>
               <Header locale={locale} />
 
-              {/* Desktop: side menu at the inline start (right in Hebrew, left in English) + centered content. */}
-              <div className="flex flex-1">
-                <SideNav locale={locale} />
-
-                {/* Padded for the bottom nav + mini player on phones, the mini player alone on desktop. */}
-                <main className="min-w-0 flex-1 px-4 py-4 pb-36 lg:px-8 lg:py-6 lg:pb-24">
-                  <div className="mx-auto w-full max-w-3xl lg:max-w-5xl">{children}</div>
-                </main>
-              </div>
+              {/* Phones and tablets: the page alone. Desktop: side menu, page and now-playing panel as panes (DesktopShell). */}
+              <DesktopShell
+                sidebar={<SideNav locale={locale} />}
+                panel={<NowPlayingPanel fallbackLesson={latestLesson} />}
+              >
+                {/* The page's content width: fluid on desktop, capped on very wide screens. */}
+                <div className="mx-auto w-full max-w-3xl lg:max-w-[1680px]">{children}</div>
+              </DesktopShell>
             </div>
 
             {/* Bottom navigation */}
@@ -79,6 +105,9 @@ export default async function LocaleLayout({ children, params }: Props) {
 
             {/* New-lesson notification question (once per device) */}
             <NotificationPrompt />
+
+            {/* A newer deployed build is available (passive; refresh is the user's choice) */}
+            <AppUpdateBanner />
 
             {/* Service worker registration */}
             <ServiceWorkerRegistrar />

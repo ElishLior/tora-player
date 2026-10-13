@@ -3,12 +3,15 @@
 import { playTrack } from "@/lib/audio-controller";
 import { getResumePoint, type ResumePoint } from "@/lib/lesson-progress";
 import { getTrackLessonId } from "@/lib/player-track-actions";
+import type { QueueSource } from "@/lib/queue-source";
 import { getTrackKey, useAudioStore, type AudioTrack } from "@/stores/audio-store";
 import { useProgressStore } from "@/stores/progress-store";
 
 export interface PlayLessonOptions {
   /** Start with this part from its beginning, instead of the saved position (a tapped part chip). If that part is the one already loaded, it resumes where it is (resuming never seeks). */
   startPart?: number;
+  /** Where the queue comes from (a category session). Omit for a plain queue. */
+  source?: QueueSource | null;
 }
 
 export interface LessonStartInput {
@@ -70,6 +73,7 @@ export function playLessons(lessons: AudioTrack[][], startLesson = 0, options: P
     queue,
     queueIndex: offset + start.index,
     startAt: start.position > 0 ? start.position : undefined,
+    source: options.source ?? null,
   });
 }
 

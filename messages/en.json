@@ -174,7 +174,7 @@
     "allLessons": "All lessons"
   },
   "homeIntro": {
-    "title": "Everything you can do here",
+    "title": "Tips and updates",
     "lead": "Tora Player is built to be easy to learn from anywhere. To open a lesson and see all of it, tap the lesson's title. Here is what you have:",
     "more": "{count} more",
     "hide": "Hide",
@@ -271,6 +271,7 @@
       "failed": "Playback stopped. Tap play to try again."
     },
     "previousTrack": "Previous",
+    "continueBlocked": "Tap to continue",
     "nextTrack": "Next",
     "upNextEmpty": "Nothing else in the queue",
     "showAllUpNext": "Show full queue ({count})",
@@ -464,6 +465,17 @@
     "jumpTo": "Jump to",
     "syncFailed": "Saved on this device, but syncing to your account failed. We'll retry next time the app opens."
   },
+  "bookmarkEdit": {
+    "title": "Edit bookmark",
+    "editBookmark": "Edit bookmark {time}",
+    "saving": "Saving...",
+    "reload": "Reload",
+    "saved": "Bookmark updated",
+    "noteCount": "{count} / {max}",
+    "saveFailed": "The change was not saved. Check your connection and try again. Your text is still here.",
+    "changedElsewhere": "This bookmark was changed on another device. Reload to see the latest version, then edit it again.",
+    "notUploaded": "Saved on this device. The change will reach your account the next time the app syncs."
+  },
   "offline": {
     "title": "Downloads",
     "download": "Download for offline",
@@ -507,7 +519,8 @@
     "library": "My library",
     "sidebarLabel": "Side menu",
     "searchPlaceholder": "Search lessons…",
-    "browse": "Browse"
+    "browse": "Browse",
+    "categories": "Categories"
   },
   "auth": {
     "adminArea": "Admin area",
@@ -790,6 +803,13 @@
     "close": "Close",
     "enabled": "Notifications are on"
   },
+  "lessonPage": {
+    "category": "Category",
+    "edit": "Edit",
+    "lightboxClose": "Close",
+    "lightboxPrevious": "Previous image",
+    "lightboxNext": "Next image"
+  },
   "categoryAdmin": {
     "title": "Manage categories",
     "topLevelCount": "{count, plural, =0 {No top-level categories} one {One top-level category} other {# top-level categories}}",
@@ -832,7 +852,48 @@
     "lessonCategory": "Category",
     "noCategory": "No category",
     "lessonCategorySaveFailed": "Could not save the category. Try again.",
-    "manageLink": "Manage categories"
+    "manageLink": "Manage categories",
+    "moveTo": "Move to…",
+    "moveToTopLevel": "Top level",
+    "moved": "Category moved",
+    "orderSaved": "Order saved",
+    "noEnglishYet": "No English name yet",
+    "within": "Inside {parent}",
+    "saving": "Saving…",
+    "errStale": "This category was changed by someone else. Reload the tree and try again.",
+    "errMigration": "This action needs database migration 023",
+    "errMissingCategory": "Category not found",
+    "errMissingParent": "The target category was not found",
+    "errSelf": "A category cannot be moved under itself",
+    "errCycle": "A category cannot move under one of its own subcategories",
+    "errTooDeep": "Categories allow three levels at most",
+    "errNotAdmin": "You do not have permission for this action",
+    "errFailed": "Could not save the change. Try again."
+  },
+  "lessonCategories": {
+    "legend": "Categories",
+    "pickerHint": "Tick a category or subcategory. The lesson appears in every category you tick. The first one is the primary.",
+    "search": "Search categories",
+    "noMatches": "No matching categories",
+    "selectedLabel": "Selected categories",
+    "noneSelected": "No category selected",
+    "primary": "Primary",
+    "makePrimary": "Make primary",
+    "makePrimaryFor": "Make {name} the primary category",
+    "remove": "Remove",
+    "removeFor": "Remove {name}",
+    "migrationNeeded": "Saving several categories for a lesson needs migration 026. Only the primary category was saved.",
+    "saveFailed": "Could not save the categories. Try again.",
+    "bulkMode": "Action",
+    "bulkSet": "Set (replaces all categories)",
+    "bulkAdd": "Add category",
+    "bulkRemove": "Remove category",
+    "bulkCategory": "Category",
+    "bulkNeedCategory": "Choose a category",
+    "bulkDone": "{count} lessons updated",
+    "errNotAdmin": "You are not allowed to do this",
+    "errInvalid": "The request is not valid",
+    "errFailed": "Could not save. Try again."
   },
   "diagnostics": {
     "title": "Playback log",
@@ -855,5 +916,154 @@
     "partWithLength": "{name}: {length}",
     "seconds": "{seconds} sec",
     "minutes": "{minutes} min"
+  },
+  "imageDownload": {
+    "label": "Download image",
+    "ariaLabel": "Download image {number}",
+    "preparing": "Preparing the image…",
+    "started": "Download started",
+    "iosHint": "To save: tap Share, then Save Image.",
+    "error": "Couldn't prepare the download. Try again.",
+    "lightboxLabel": "Lesson images"
+  },
+  "appUpdate": {
+    "available": "New version available — refresh",
+    "pausedFirst": "Refresh will happen once you pause playback",
+    "refresh": "Refresh",
+    "later": "Later",
+    "recovery": "The new version did not load. Close the tab and open the site again.",
+    "versionLabel": "Version {version} · {build}",
+    "runningAndDeployed": "Running: {running} · Live: {deployed}",
+    "versionDiffers": "(differs from the live site)"
+  },
+  "releaseAnnouncement": {
+    "title": "Release announcement",
+    "subtitle": "Manual update notice through browser notifications",
+    "cardDescription": "Write, preview and send a release notice by hand",
+    "back": "Back to dashboard",
+    "schemaMissing": "Sending release notices requires migration 025.",
+    "pushNotConfigured": "Push notifications are not configured, so nothing can be sent.",
+    "version": "Version",
+    "titleHe": "Title (Hebrew)",
+    "bodyHe": "Body (Hebrew)",
+    "titleEn": "Title (English)",
+    "bodyEn": "Body (English)",
+    "resetTemplate": "Restore the template",
+    "newDraft": "New draft",
+    "save": "Save draft",
+    "saved": "Draft saved",
+    "edit": "Edit",
+    "preview": "Preview",
+    "previewVersion": "Version {version}",
+    "previewAudience": "Devices that will receive it: {count}",
+    "previewLive": "Live version on the site: {live}",
+    "liveUnknown": "Could not check which version the site is serving.",
+    "liveMismatch": "The live site serves {live}. Send only after version {version} is live.",
+    "confirmQuestion": "Send version {version} to {count} devices now?",
+    "confirmBody": "The notice is sent once and cannot be recalled.",
+    "send": "Send",
+    "confirm": "Confirm and send",
+    "cancel": "Cancel",
+    "sending": "Sending…",
+    "sent": "Sent to {sent} devices (failed: {failed})",
+    "history": "Earlier notices",
+    "empty": "No notices yet",
+    "status": {
+      "draft": "Draft",
+      "sending": "Sending",
+      "sent": "Sent",
+      "failed": "Failed"
+    },
+    "errors": {
+      "unauthorized": "Not authorised",
+      "invalid": "Check the marked fields",
+      "schema_missing": "Migration 025 has not been applied",
+      "not-found": "Notice not found",
+      "not-draft": "This notice was already sent or is sending",
+      "not-confirmed": "The version changed, open the notice again",
+      "not-configured": "Push notifications are not configured",
+      "live-unknown": "Could not check the live version",
+      "live-mismatch": "The live version is not the announced one",
+      "already-claimed": "This notice is already being sent",
+      "send-failed": "Sending failed. Create a new draft to try again.",
+      "load-failed": "Could not load the data"
+    }
+  },
+  "categoryPlayback": {
+    "play": "Play category",
+    "playing": "Playing through the category",
+    "resume": "Continue playing the category",
+    "loading": "Loading the next lesson…",
+    "tapToContinue": "Tap to continue",
+    "finished": "Category finished",
+    "playAgain": "Play again from the start",
+    "stopped": "No playable lessons left — try again",
+    "retry": "Try again",
+    "skipped": "Skipped an unavailable lesson: {title}"
+  },
+  "desktopPlayer": {
+    "panelLabel": "Lesson player",
+    "lastPlayed": "Last played",
+    "resume": "Continue listening",
+    "nothingPlayedTitle": "No lesson played yet",
+    "nothingPlayedHint": "A lesson you start listening to will appear here."
+  },
+  "desktopShell": {
+    "partsCount": "{count, plural, =1 {1 part} =2 {2 parts} other {# parts}}",
+    "notifyTitle": "New lesson posted?",
+    "notifyBody": "Get an alert the moment a new lesson goes up.",
+    "errorTitle": "We could not load the lessons",
+    "errorHint": "Check your connection and try again.",
+    "retry": "Try again"
+  },
+  "pagesDesign": {
+    "search": {
+      "title": "Search",
+      "placeholder": "Search lessons...",
+      "hint": "Type to search lessons, topics and tags",
+      "noResults": "No results found",
+      "noResultsFor": "No lessons found for \"{query}\""
+    },
+    "playlists": {
+      "emptyPlaylist": "Empty playlist"
+    },
+    "series": {
+      "emptyLessons": "No lessons in this series"
+    },
+    "bookmarks": {
+      "hint": "Tap the bookmark button in the player to save important moments",
+      "lessonFallback": "Lesson"
+    },
+    "offline": {
+      "savedLessons": "Saved lessons"
+    },
+    "eyebrow": {
+      "playlist": "Playlist",
+      "series": "Series",
+      "category": "Category"
+    },
+    "lessonCount": "{count, plural, =0 {No lessons} =1 {One lesson} other {# lessons}}",
+    "subcategories": "Subcategories"
+  },
+  "adminSettings": {
+    "title": "Display settings",
+    "cardDescription": "How fast the home page's tips change",
+    "back": "Back to the dashboard",
+    "save": "Save",
+    "saved": "Saved. The home page will use the new pace.",
+    "schemaMissing": "Settings aren't available yet: migration 028 must be applied to the database.",
+    "tips": {
+      "title": "Tips and updates",
+      "description": "The box on the home page shows one tip at a time and changes it on its own. Choose how often here.",
+      "label": "Change the tip every",
+      "seconds": "{count} seconds",
+      "off": "Don't change (one fixed tip)"
+    },
+    "errors": {
+      "unauthorized": "Not authorized. Sign in again as an admin.",
+      "invalid": "That value isn't valid.",
+      "schema_missing": "Migration 028 must be applied before saving.",
+      "failed": "Saving failed. Try again."
+    }
   }
 }

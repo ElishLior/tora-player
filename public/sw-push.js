@@ -39,6 +39,8 @@ self.addEventListener('push', (event) => {
       lang: 'he',
       tag: payload.tag,
       renotify: Boolean(payload.tag),
+      // Release notices carry refresh/later buttons (Chromium); other pushes carry none.
+      actions: Array.isArray(payload.actions) ? payload.actions.slice(0, 2) : [],
       data: { url: samePushTarget(payload.url) },
     }),
   );
@@ -46,7 +48,13 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
+  // "Later" only dismisses the notification.
+  if (event.action === 'later') return;
   const targetUrl = samePushTarget(event.notification.data && event.notification.data.url);
+  // An update request (?update=1) must not navigate an open window: that would
+  // reload the page and cut off a lesson that is playing. The page decides
+  // (pause first, then refresh) from the message instead.
+  const wantsUpdate = new URL(targetUrl).searchParams.get('update') === '1';
 
   event.waitUntil(
     (async () => {
@@ -54,6 +62,10 @@ self.addEventListener('notificationclick', (event) => {
       const appWindow = windows.find((client) => new URL(client.url).origin === self.location.origin);
       if (appWindow) {
         await appWindow.focus();
+        if (wantsUpdate) {
+          appWindow.postMessage({ type: 'tora:update-requested' });
+          return;
+        }
         try {
           await appWindow.navigate(targetUrl);
           return;

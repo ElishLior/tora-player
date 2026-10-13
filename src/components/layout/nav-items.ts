@@ -1,4 +1,16 @@
-import { Bookmark, BookOpen, Download, Hash, Home, Library, ListMusic, Scissors, Search, type LucideIcon } from 'lucide-react';
+import {
+  Bookmark,
+  BookOpen,
+  Download,
+  FolderTree,
+  Hash,
+  Home,
+  Library,
+  ListMusic,
+  Scissors,
+  Search,
+  type LucideIcon,
+} from 'lucide-react';
 
 /*
  * The app's sections, shared by the mobile bottom bar and the desktop side
@@ -9,7 +21,17 @@ export interface NavItem {
   /** Path after the locale prefix ('' = home). */
   href: string;
   /** Key in the `nav` messages. */
-  label: 'home' | 'lessons' | 'shorts' | 'bookmarks' | 'playlists' | 'downloads' | 'search' | 'tags' | 'library';
+  label:
+    | 'home'
+    | 'lessons'
+    | 'shorts'
+    | 'bookmarks'
+    | 'playlists'
+    | 'downloads'
+    | 'search'
+    | 'tags'
+    | 'library'
+    | 'categories';
   icon: LucideIcon;
 }
 
@@ -25,6 +47,7 @@ export const PRIMARY_NAV: readonly NavItem[] = [
 
 /** Extra places the side menu has room for (phones reach them from the header). */
 export const BROWSE_NAV: readonly NavItem[] = [
+  { href: '/categories', label: 'categories', icon: FolderTree },
   { href: '/search', label: 'search', icon: Search },
   { href: '/tags', label: 'tags', icon: Hash },
   { href: '/me', label: 'library', icon: Library },

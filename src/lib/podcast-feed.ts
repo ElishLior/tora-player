@@ -4,6 +4,8 @@ import { normalizeAudioUrl } from '@/lib/audio-url';
 import { PODCAST_COVER_PATH, SITE_AUTHOR, absoluteUrl, lessonUrl } from '@/config/site';
 import { lessonDescription, lessonEpisodeAudio, type EpisodeAudio } from '@/lib/seo';
 import { withLessonSlugSelect } from '@/lib/supabase/lesson-slug-select';
+import { getCategoriesTree } from '@/lib/supabase/queries';
+import { descendantIds } from '@/lib/category-tree';
 import { LESSON_AUDIO_FILES } from '@/lib/supabase/lesson-selects';
 import { SHORT_LESSON_TYPE, SHORTS_CATEGORY_ID } from '@/lib/upload-drafts';
 import type { LessonWithRelations } from '@/types/database';
@@ -56,12 +58,7 @@ export async function loadFeedLessons(
 ): Promise<FeedLesson[]> {
   let shortCategoryIds: string[] | null = null;
   if (!options.seriesId) {
-    const { data: topics, error: topicsError } = await supabase
-      .from('categories')
-      .select('id')
-      .eq('parent_id', SHORTS_CATEGORY_ID);
-    if (topicsError) throw topicsError;
-    shortCategoryIds = [SHORTS_CATEGORY_ID, ...(topics ?? []).map((topic) => topic.id as string)];
+    shortCategoryIds = descendantIds(await getCategoriesTree(supabase), SHORTS_CATEGORY_ID);
   }
 
   const lessons: FeedLesson[] = [];

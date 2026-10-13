@@ -10,6 +10,8 @@ export interface PushPayload {
   url: string;
   /** Notifications with the same tag replace each other. */
   tag?: string;
+  /** Up to two buttons on the notification (Chromium only; sw-push.js shows them). */
+  actions?: Array<{ action: string; title: string }>;
 }
 
 export interface StoredPushSubscription {

@@ -3,6 +3,16 @@
 import { audioEngine, type AudioEngineStatus } from "@/lib/audio-engine";
 import { getPlaybackReaction, getRetryDelayMs } from "@/lib/audio-lifecycle";
 import { planTrackPlayback, resolveTrackSource } from "@/lib/audio-resume";
+import { nextSegmentRequest, segmentToPage } from "@/lib/category-queue";
+import {
+  createSegmentLoader,
+  isPermanentMediaError,
+  MAX_CONSECUTIVE_SKIPS,
+  MAX_EMPTY_SEGMENT_ROUNDS,
+  remainingLessonCount,
+  type QueueNotice,
+  type QueueSource,
+} from "@/lib/queue-source";
 import { isLastPart, isNearPartEnd } from "@/lib/lesson-progress";
 import { trustedPartDuration } from "@/lib/part-duration";
 import { startListenTracking } from "@/lib/listen-tracker";
@@ -22,6 +32,7 @@ import {
 import {
   getTrackKey,
   getTransportState,
+  isAwaitingNextLesson,
   useAudioStore,
   type AudioPlayerState,
   type AudioTrack,
@@ -65,6 +76,31 @@ let resumeWhenOnline = false;
 let lastCheckpointAt = 0;
 let lastServerSaveAt = 0;
 let serverProgressEnabled = true;
+
+// Category queues. The play token changes whenever the track, the queue position
+// or the play intent changes (pause included), so a wait that started earlier
+// can tell the listener moved on and must not advance.
+let playToken = 0;
+let pendingNext: { key: string; token: number } | null = null;
+// The ended lesson whose wait the listener cancelled: Play then moves on to the lesson that arrived.
+let resumeAfterCancel: string | null = null;
+let consecutiveSkips = 0;
+
+function cancelPendingNext() {
+  if (pendingNext) resumeAfterCancel = pendingNext.key;
+  pendingNext = null;
+}
+
+const segmentLoader = createSegmentLoader({
+  getSource: () => getState().queueSource,
+  fetchPage: async (source) => {
+    // Loaded on first use: the action reads the catalog on the server and only category playback needs it.
+    const { getCategoryQueueSegment } = await import("@/actions/category-queue");
+    const result = await getCategoryQueueSegment(nextSegmentRequest(source));
+    return result.ok ? segmentToPage(result.segment) : null;
+  },
+  append: (sessionId, page) => getState().appendQueueSegment(sessionId, page),
+});
 
 /** The length to believe for the current track: catalog and element evidence combined. */
 function trustedDuration(track: AudioTrack): number {
@@ -263,9 +299,112 @@ function finishTrack(track: AudioTrack) {
   if (sleepNow) {
     stoppedPartKey = stoppedAtEndOfPart || minutesExpired ? getTrackKey(track) : null;
     state.setSleepTimer(null);
+    state.pause();
+    return;
   }
-  if (!sleepNow && next) state.nextTrack();
-  else state.pause();
+  advanceOrWait(track);
+}
+
+/** Loads the category's segments ahead of the listener (a no-op for other queues). */
+function prepareNextLessons() {
+  const state = getState();
+  if (!state.queueSource) return;
+  segmentLoader.ensureAhead(remainingLessonCount(state.queue, state.queueIndex));
+}
+
+/**
+ * After a track ends or is skipped: the next queue item; else, in a category
+ * queue that has more lessons, wait for the next segment; else stop. A category
+ * queue that ran out is marked finished.
+ */
+function advanceOrWait(track: AudioTrack) {
+  const state = getState();
+  if (state.queue[state.queueIndex + 1]) {
+    state.nextTrack();
+    return;
+  }
+  if (state.queueSource && !state.queueSource.exhausted) {
+    awaitNextLesson(track, 0);
+    return;
+  }
+  state.pause();
+  if (state.queueSource) state.setQueueNotice({ kind: "finished" });
+}
+
+/** True while the wait started for `key` at `token` still applies: nothing moved, paused or changed. */
+function isWaitCurrent(key: string, token: number): boolean {
+  return (
+    pendingNext?.key === key &&
+    pendingNext.token === token &&
+    playToken === token &&
+    getTrackKey(getState().currentTrack) === key
+  );
+}
+
+/**
+ * Keeps the listener's intent on the ended lesson while the next segment loads,
+ * then moves on. Advances at most once: the continuation only acts while the
+ * same track and token are still current.
+ */
+function awaitNextLesson(track: AudioTrack, emptyRounds: number) {
+  const key = getTrackKey(track)!;
+  const token = playToken;
+  pendingNext = { key, token };
+  getState().setQueueNotice({ kind: "loading" });
+  void segmentLoader.loadNext().then((outcome) => {
+    if (!isWaitCurrent(key, token)) return;
+    pendingNext = null;
+    const state = getState();
+    if (state.queue[state.queueIndex + 1]) {
+      state.setQueueNotice(null);
+      state.nextTrack();
+    } else if (outcome === "appended" && emptyRounds < MAX_EMPTY_SEGMENT_ROUNDS) {
+      // A segment with no playable audio: read the one after it.
+      awaitNextLesson(track, emptyRounds + 1);
+    } else if (outcome === "exhausted") {
+      state.pause();
+      state.setQueueNotice({ kind: "finished" });
+    } else {
+      stopCategoryQueue();
+    }
+  });
+}
+
+function stopCategoryQueue() {
+  pendingNext = null;
+  clearRetry();
+  const state = getState();
+  state.pause();
+  state.setQueueNotice({ kind: "stopped" });
+}
+
+/** A lesson the server will not stream (removed, unpublished, undecodable): skip it, up to a limit in a row. */
+function skipUnavailable(track: AudioTrack) {
+  consecutiveSkips += 1;
+  if (consecutiveSkips > MAX_CONSECUTIVE_SKIPS) {
+    stopCategoryQueue();
+    return;
+  }
+  clearRetry();
+  const state = getState();
+  state.setPlaybackIssue(null);
+  // Set before advancing: "loading" or "finished" set by the advance replace it, as they should.
+  announceSkipped(track.hebrewTitle || track.title);
+  advanceOrWait(track);
+}
+
+/** The skipped-lesson line lasts as long as the Cast outcome does, then the bars return to their own text. */
+const SKIPPED_NOTICE_MS = 8_000;
+let skippedNoticeTimer: number | null = null;
+
+function announceSkipped(title: string) {
+  const notice: QueueNotice = { kind: "skipped", title };
+  getState().setQueueNotice(notice);
+  if (skippedNoticeTimer !== null) window.clearTimeout(skippedNoticeTimer);
+  skippedNoticeTimer = window.setTimeout(() => {
+    skippedNoticeTimer = null;
+    if (getState().queueNotice === notice) getState().setQueueNotice(null);
+  }, SKIPPED_NOTICE_MS);
 }
 
 /** Counts down a minutes sleep timer while audio plays, fading out over its last seconds. */
@@ -342,11 +481,24 @@ function handleStatusChange(status: AudioEngineStatus) {
     clearRetry();
     playedTrackKey = key;
     finishedTrackKey = null;
+    consecutiveSkips = 0;
     if (applySleepTimer()) return;
     if (state.playbackIssue) state.setPlaybackIssue(null);
     prefetchNextOfflineSource();
   } else if (status === "paused" || status === "error") {
     checkpoint({ server: true });
+  }
+
+  // Only while the listener wants to hear the queue: a skip must never start playback.
+  // A source error is final only once a retry of this track has failed as well (Chrome reports 4 for a 5xx too).
+  if (
+    status === "error" &&
+    state.isPlaying &&
+    state.queueSource &&
+    isPermanentMediaError(audioEngine.getAudioElement()?.error?.code, navigator.onLine, recovery.attempts)
+  ) {
+    skipUnavailable(track);
+    return;
   }
 
   const reaction = getPlaybackReaction({
@@ -394,6 +546,22 @@ function handleTimeUpdate(time: number) {
 }
 
 function handleStoreChange(state: AudioPlayerState, previous: AudioPlayerState) {
+  if (state.queueSource?.sessionId !== previous.queueSource?.sessionId) consecutiveSkips = 0;
+  if (getTrackKey(state.currentTrack) !== getTrackKey(previous.currentTrack) || state.queueIndex !== previous.queueIndex) {
+    playToken += 1;
+    resumeAfterCancel = null;
+    // The listener moved on (e.g. lock-screen previous) during a wait: that wait no longer applies,
+    // and its loading notice would otherwise keep play() from starting anything.
+    pendingNext = null;
+    if (state.queueNotice?.kind === "loading") state.setQueueNotice(null);
+  }
+  if (previous.isPlaying && !state.isPlaying) {
+    // Pausing (by anyone) cancels a pending media-recovery retry and a wait for the next lesson.
+    clearRetry();
+    playToken += 1;
+    cancelPendingNext();
+    if (state.queueNotice?.kind === "loading") state.setQueueNotice(null);
+  }
   if (state.playbackSpeed !== previous.playbackSpeed) audioEngine.setRate(state.playbackSpeed);
   // A changed or cancelled sleep timer ends any fade in progress.
   if (state.volume !== previous.volume || state.sleepTimer !== previous.sleepTimer) {
@@ -405,6 +573,7 @@ function handleStoreChange(state: AudioPlayerState, previous: AudioPlayerState) 
     if (getTrackKey(state.currentTrack) === getTrackKey(previous.currentTrack) && state.isPlaying) {
       prefetchNextOfflineSource();
     }
+    prepareNextLessons();
   }
 
   if (getTrackKey(state.currentTrack) !== getTrackKey(previous.currentTrack)) {
@@ -495,6 +664,8 @@ export function startAudioController(): () => void {
     clearRetry();
     if (sleepTimerTimeout !== null) window.clearTimeout(sleepTimerTimeout);
     sleepTimerTimeout = null;
+    if (skippedNoticeTimer !== null) window.clearTimeout(skippedNoticeTimer);
+    skippedNoticeTimer = null;
     stopController = null;
   };
   return stopController;
@@ -506,9 +677,37 @@ export function play() {
   const state = getState();
   diag("ctrl:play", { hasTrack: !!state.currentTrack, intent: state.isPlaying, status: state.playbackStatus });
   if (!state.currentTrack) return;
+  // The wait for the next lesson is already running and moves on by itself.
+  if (state.queueNotice?.kind === "loading") return;
+  if (state.queueNotice) state.setQueueNotice(null);
+  consecutiveSkips = 0;
+  // The listener paused while this ended lesson waited for the next one, which has now arrived: move on.
+  if (
+    state.playbackStatus === "ended" &&
+    state.queue[state.queueIndex + 1] &&
+    resumeAfterCancel !== null &&
+    resumeAfterCancel === getTrackKey(state.currentTrack)
+  ) {
+    resumeAfterCancel = null;
+    state.nextTrack();
+    prepareNextLessons();
+    return;
+  }
+  // An ended lesson at the loaded end of a category queue: fetch the next one
+  // instead of playing the ended element from its start.
+  if (
+    state.playbackStatus === "ended" &&
+    state.queueSource &&
+    !state.queue[state.queueIndex + 1] &&
+    !state.queueSource.exhausted
+  ) {
+    awaitNextLesson(state.currentTrack, 0);
+    return;
+  }
   if (stoppedPartKey === getTrackKey(state.currentTrack) && state.queue[state.queueIndex + 1]) {
     stoppedPartKey = null;
     state.nextTrack();
+    prepareNextLessons();
     return;
   }
   stoppedPartKey = null;
@@ -517,17 +716,24 @@ export function play() {
   // An unchanged intent does not reach the store subscriber (e.g. retrying
   // after an error), so drive the element directly.
   if (alreadyRequested) syncPlayback();
+  prepareNextLessons();
 }
 
 export function pause() {
   const state = getState();
   diag("ctrl:pause", { intent: state.isPlaying, status: state.playbackStatus });
+  // A stale retry must not restart the track after the listener paused (or paused and played again).
+  clearRetry();
+  cancelPendingNext();
   state.pause();
   audioEngine.pause();
 }
 
 export function togglePlay() {
-  if (getTransportState(getState()) === "paused") play();
+  const state = getState();
+  // The wait for the next category lesson keeps going on a tap; only pause() cancels it.
+  if (isAwaitingNextLesson(state)) return;
+  if (getTransportState(state) === "paused") play();
   else pause();
 }
 
@@ -568,7 +774,7 @@ export function skipForward() {
 /** Starts a track (and optionally a queue around it), then seeks when asked. */
 export function playTrack(
   track: AudioTrack,
-  options: { queue?: AudioTrack[]; queueIndex?: number; startAt?: number } = {},
+  options: { queue?: AudioTrack[]; queueIndex?: number; startAt?: number; source?: QueueSource | null } = {},
 ) {
   const state = getState();
   if (
@@ -576,18 +782,28 @@ export function playTrack(
     getTrackKey(state.currentTrack) === getTrackKey(track) &&
     getTrackKey(options.queue[options.queueIndex ?? 0]) === getTrackKey(track)
   ) {
-    useAudioStore.setState({ queue: options.queue, queueIndex: options.queueIndex ?? 0 });
+    useAudioStore.setState({
+      queue: options.queue,
+      queueIndex: options.queueIndex ?? 0,
+      queueSource: options.source ?? null,
+      queueNotice: null,
+    });
     if (audioEngine.getTrackKey() === getTrackKey(track)) state.setCurrentTime(audioEngine.getCurrentTime());
     play();
-  } else if (options.queue) state.setQueue(options.queue, options.queueIndex);
+  } else if (options.queue) state.setQueue(options.queue, options.queueIndex, options.source ?? null);
   else state.setTrack(track);
   if (options.startAt !== undefined) seekTo(options.startAt);
 }
 
-/** Car/headset "next": next lesson in the queue, otherwise skip ahead. */
+/**
+ * Car/headset/lock-screen "next": the next queue item; in a category queue
+ * that still has lessons, the next segment; otherwise skip ahead.
+ */
 export function nextTrackOrSkip() {
-  const { queue, queueIndex, nextTrack } = getState();
+  const state = getState();
+  const { queue, queueIndex, nextTrack, queueSource, currentTrack } = state;
   if (queue[queueIndex + 1]) nextTrack();
+  else if (queueSource && !queueSource.exhausted && currentTrack) awaitNextLesson(currentTrack, 0);
   else skipForward();
 }
 

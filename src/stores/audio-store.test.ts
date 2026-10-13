@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getTransportState, useAudioStore, type AudioTrack } from "./audio-store";
+import {
+  getTransportState,
+  isAwaitingNextLesson,
+  persistableQueue,
+  useAudioStore,
+  type AudioTrack,
+} from "./audio-store";
 
 // The store creates its localStorage adapter at import time, so the fake
 // storage must exist before the (hoisted) import above runs.
@@ -188,7 +194,7 @@ describe("queue editing", () => {
 });
 
 describe("getTransportState", () => {
-  const base = { isPlaying: false, playbackStatus: "paused", playbackIssue: null } as const;
+  const base = { isPlaying: false, playbackStatus: "paused", playbackIssue: null, queueNotice: null } as const;
 
   it("shows pause only while the element is really producing sound", () => {
     expect(getTransportState({ ...base, playbackStatus: "playing" })).toBe("playing");
@@ -204,8 +210,25 @@ describe("getTransportState", () => {
         isPlaying: true,
         playbackStatus: "error",
         playbackIssue: "retrying",
+        queueNotice: null,
       }),
     ).toBe("loading");
+  });
+
+  it("shows loading while a category waits for its next lesson after the end", () => {
+    const awaiting = { isPlaying: true, playbackStatus: "ended", playbackIssue: null, queueNotice: { kind: "loading" } } as const;
+    expect(getTransportState(awaiting)).toBe("loading");
+    expect(isAwaitingNextLesson(awaiting)).toBe(true);
+  });
+
+  it("does not count a stopped, finished or paused category as waiting", () => {
+    const ended = { isPlaying: true, playbackStatus: "ended", playbackIssue: null } as const;
+    expect(getTransportState({ ...ended, queueNotice: { kind: "stopped" } })).toBe("paused");
+    expect(getTransportState({ ...ended, queueNotice: { kind: "finished" } })).toBe("paused");
+    expect(
+      getTransportState({ isPlaying: false, playbackStatus: "ended", playbackIssue: null, queueNotice: { kind: "loading" } }),
+    ).toBe("paused");
+    expect(isAwaitingNextLesson({ ...ended, queueNotice: { kind: "loading" } })).toBe(true);
   });
 
   it("shows play when nothing will start without the listener", () => {
@@ -222,5 +245,86 @@ describe("getTransportState", () => {
     useAudioStore.getState().togglePlay();
 
     expect(useAudioStore.getState().isPlaying).toBe(false);
+  });
+
+  it("togglePlay keeps a category wait for the next lesson (only pause cancels it)", () => {
+    useAudioStore.setState({
+      currentTrack: first,
+      isPlaying: true,
+      playbackStatus: "ended",
+      queueNotice: { kind: "loading" },
+    });
+
+    useAudioStore.getState().togglePlay();
+
+    expect(useAudioStore.getState().isPlaying).toBe(true);
+    expect(useAudioStore.getState().queueNotice).toEqual({ kind: "loading" });
+  });
+});
+
+describe("persistableQueue", () => {
+  const many = (count: number) =>
+    Array.from({ length: count }, (_, index) => ({
+      ...makeTrack(`t${index}`),
+      description: `description ${index}`,
+    }));
+
+  it("keeps the current item, up to 50 behind it and everything ahead, with queueIndex moved to match", () => {
+    const tracks = many(200);
+
+    const persisted = persistableQueue(tracks, 120);
+
+    expect(persisted.queue).toHaveLength(130); // 50 behind + current + 79 ahead
+    expect(persisted.queueIndex).toBe(50);
+    expect(persisted.queue[50].id).toBe("t120");
+    expect(persisted.queue.at(-1)?.id).toBe("t199");
+  });
+
+  it("keeps the whole queue when fewer than 50 items are behind the current one", () => {
+    const tracks = many(10);
+
+    const persisted = persistableQueue(tracks, 3);
+
+    expect(persisted.queue).toHaveLength(10);
+    expect(persisted.queueIndex).toBe(3);
+    expect(persisted.queue[3].id).toBe("t3");
+  });
+
+  it("handles no current item (queueIndex -1) and a queue without descriptions", () => {
+    expect(persistableQueue(many(4), -1)).toMatchObject({ queueIndex: -1 });
+    const bare = [makeTrack("solo")];
+    expect(persistableQueue(bare, 0).queue).toEqual(bare);
+  });
+
+  it("drops descriptions from queued items but never from the live queue", () => {
+    const tracks = many(3);
+
+    const persisted = persistableQueue(tracks, 1);
+
+    expect(persisted.queue.every((track) => !("description" in track))).toBe(true);
+    expect(tracks[1].description).toBe("description 1");
+  });
+
+  it("stores the trimmed, description-free queue and the current item's description", () => {
+    const tracks = many(70);
+    useAudioStore.getState().setQueue(tracks, 60);
+
+    const written = JSON.parse(setItem.mock.calls.at(-1)?.[1] as string).state;
+
+    expect(written.queue).toHaveLength(70 - 10);
+    expect(written.queueIndex).toBe(50);
+    expect(written.queue.some((track: AudioTrack) => "description" in track)).toBe(false);
+    expect(useAudioStore.getState().currentTrack?.description).toBe("description 60");
+  });
+
+  it("does not rewrite the stored queue on playback time updates", () => {
+    useAudioStore.getState().setQueue(many(200), 150);
+    setItem.mockClear();
+
+    for (let second = 1; second <= 20; second += 1) {
+      useAudioStore.getState().setCurrentTime(second);
+    }
+
+    expect(setItem).not.toHaveBeenCalled();
   });
 });

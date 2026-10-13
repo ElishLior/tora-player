@@ -19,8 +19,6 @@ import {
 } from 'lucide-react';
 import { usePushNotifications } from '@/components/notifications/use-push-notifications';
 import { PlatformShareIcon } from '@/components/shared/platform-share-icon';
-import { useHydrated } from '@/hooks/use-hydrated';
-import { HOME_INTRO_STORAGE_KEY, homeIntroChoice, homeIntroStart } from '@/lib/home-intro';
 import { cn } from '@/lib/utils';
 
 /** Inline icon inside a sentence: the same glyph the real button shows. */
@@ -57,107 +55,138 @@ const ITEMS = [
   { key: 'share', hue: 210, icons: [] },
 ] as const;
 
-function readStored(): string | null {
-  try {
-    return localStorage.getItem(HOME_INTRO_STORAGE_KEY);
-  } catch {
-    return null;
-  }
-}
+/** One tip in the collapsed row's rotating line. */
+type Tip = { message: 'lessonPage' | `items.${(typeof ITEMS)[number]['key']}`; item: (typeof ITEMS)[number] | null };
 
-function writeStored(value: string) {
-  try {
-    localStorage.setItem(HOME_INTRO_STORAGE_KEY, value);
-  } catch {
-    // Private mode or full storage: the intro simply opens again next time.
-  }
-}
+/** The rotating line: the lesson-page tip first, then every feature, each with its icon. */
+const TIPS: readonly Tip[] = [
+  { message: 'lessonPage', item: null },
+  ...ITEMS.map((item) => ({ message: `items.${item.key}` as const, item })),
+];
 
 /**
- * "כל מה שאפשר לעשות כאן": the feature intro at the top of the home page.
- * Collapsed it is one line plus the lesson-page tip; expanded it lists every
- * feature in a grid, each with the app's own icon. Starts collapsed on the
- * server and on later visits, open on the first visit, then remembers the choice.
+ * "טיפים ועדכונים": the tips box at the top of the home page (owner, October 13, 2026).
+ * It always loads collapsed: a title row, and under it one tip at a time with its icon,
+ * changing every `intervalSeconds` (admin-set in the panel, `app_settings`; 0 = no
+ * rotation), paused on hover, focus, a hidden tab and reduced motion. Only the arrow
+ * button opens and closes it; the open box lists every feature in a grid, each with the
+ * app's own icon, plus the lesson-page tip.
  */
-export function HomeIntro() {
+export function HomeIntro({ className, intervalSeconds }: { className?: string; intervalSeconds: number }) {
   const t = useTranslations('homeIntro');
-  const hydrated = useHydrated();
   const [open, setOpen] = useState(false);
+  const [tipIndex, setTipIndex] = useState(0);
+  const [held, setHeld] = useState(false);
 
-  // Device-only state: applied after hydration so the server HTML matches.
   useEffect(() => {
-    if (!hydrated) return;
-    const start = homeIntroStart(readStored());
-    if (start.write) writeStored(start.write);
-    setOpen(start.open);
-  }, [hydrated]);
+    if (open || held || intervalSeconds <= 0) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const timer = window.setInterval(() => {
+      if (!document.hidden) setTipIndex((index) => (index + 1) % TIPS.length);
+    }, intervalSeconds * 1000);
+    return () => window.clearInterval(timer);
+  }, [open, held, intervalSeconds]);
 
-  const toggle = () => {
-    const next = !open;
-    setOpen(next);
-    writeStored(homeIntroChoice(next));
-  };
-
-  const lessonPageTip = (
-    <div className="grid grid-cols-[auto_1fr] items-start gap-3 rounded-xl border border-primary/30 bg-gradient-to-r from-primary/14 to-primary/5 p-3 text-[13px] leading-relaxed text-foreground/80">
-      <span className="grid h-8 w-8 place-items-center rounded-lg bg-primary/20 text-[hsl(141_70%_62%)]">
-        <MousePointerClick aria-hidden="true" className="h-4 w-4" />
-      </span>
-      <p>{t.rich('lessonPage', RICH)}</p>
-    </div>
-  );
+  const tip = TIPS[tipIndex];
 
   return (
     <section
       aria-labelledby="home-intro-title"
-      className="rounded-2xl border border-border/60 bg-[linear-gradient(180deg,hsl(0_0%_12%),hsl(0_0%_10%))] px-3 pb-3 pt-1"
+      onPointerEnter={() => setHeld(true)}
+      onPointerLeave={() => setHeld(false)}
+      onFocus={() => setHeld(true)}
+      onBlur={() => setHeld(false)}
+      className={cn(
+        'rounded-2xl border border-border/60 bg-[linear-gradient(180deg,hsl(0_0%_12%),hsl(0_0%_10%))] px-3 py-1',
+        className,
+      )}
     >
-      <button
-        type="button"
-        onClick={toggle}
-        aria-expanded={open}
-        aria-controls="home-intro-body"
-        className="flex min-h-12 w-full items-center gap-3 rounded-xl text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-      >
-        <span className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg bg-primary/12 text-primary">
+      <div className="flex min-h-12 items-center gap-3">
+        <span className="bg-primary/12 grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg text-primary">
           <Sparkles aria-hidden="true" className="h-4 w-4" />
         </span>
-        <span id="home-intro-title" className="flex-1 text-[15px] font-bold text-foreground">
+        <h2 id="home-intro-title" className="flex-1 text-[15px] font-bold text-foreground">
           {t('title')}
-        </span>
-        <span className="text-[13px] text-muted-foreground">
+        </h2>
+        <button
+          type="button"
+          onClick={() => setOpen((value) => !value)}
+          aria-expanded={open}
+          aria-controls="home-intro-body"
+          className="-me-1.5 flex min-h-11 items-center gap-2 rounded-full ps-3 pe-1.5 text-[13px] text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+        >
           {open ? t('hide') : t('more', { count: ITEMS.length })}
-        </span>
-        <span className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-full bg-[hsl(var(--surface-elevated))]">
-          <ChevronDown
-            aria-hidden="true"
-            className={cn('h-4 w-4 transition-transform duration-200 motion-reduce:transition-none', open && 'rotate-180')}
-          />
-        </span>
-      </button>
+          <span className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-full bg-[hsl(var(--surface-elevated))] text-foreground">
+            <ChevronDown
+              aria-hidden="true"
+              className={cn(
+                'h-4 w-4 transition-transform duration-200 motion-reduce:transition-none',
+                open && 'rotate-180',
+              )}
+            />
+          </span>
+        </button>
+      </div>
 
-      <div id="home-intro-body" hidden={!open} className={cn('grid gap-3 pt-2', !open && 'hidden')}>
+      {/* One tip at a time while collapsed. Hidden from screen readers: it changes on its
+          own, and every tip is in the list the arrow opens. */}
+      {!open && (
+        <div
+          key={tipIndex}
+          aria-hidden="true"
+          className="grid grid-cols-[auto_1fr] items-start gap-3 pb-2.5 pt-0.5 text-[13px] leading-relaxed text-foreground/75 motion-safe:duration-300 motion-safe:animate-in motion-safe:fade-in-0"
+        >
+          {tip.item ? (
+            <FeatureIcons
+              hue={tip.item.hue}
+              icons={tip.item.icons}
+              controls={tip.item.key === 'controls'}
+              share={tip.item.key === 'share'}
+            />
+          ) : (
+            <LessonPageIcon />
+          )}
+          <p className="line-clamp-2 min-h-[2lh] self-center">{t.rich(tip.message, RICH)}</p>
+        </div>
+      )}
+
+      <div id="home-intro-body" hidden={!open} className={cn('grid gap-3 pb-2 pt-1', !open && 'hidden')}>
         <p className="text-sm leading-relaxed text-foreground/75">{t('lead')}</p>
-        <ul className="grid gap-2 sm:grid-cols-2">
+        {/* Two tinted cards per row on every screen (concept B). */}
+        <ul className="grid grid-cols-2 gap-2">
           {ITEMS.map((item) => (
             <li
               key={item.key}
               className="grid grid-cols-[auto_1fr] items-start gap-3 rounded-xl bg-[hsl(var(--surface-elevated))] p-3 text-[13px] leading-relaxed text-foreground/75"
             >
-              <FeatureIcons hue={item.hue} icons={item.icons} controls={item.key === 'controls'} />
+              <FeatureIcons
+                hue={item.hue}
+                icons={item.icons}
+                controls={item.key === 'controls'}
+                share={item.key === 'share'}
+              />
               <div className="grid gap-2">
                 <p>{t.rich(`items.${item.key}`, RICH)}</p>
                 {item.key === 'notifications' && <NotificationsAction />}
               </div>
             </li>
           ))}
-          <li className="sm:col-span-2">{lessonPageTip}</li>
+          <li className="from-primary/14 col-span-2 grid grid-cols-[auto_1fr] items-start gap-3 rounded-xl border border-primary/30 bg-gradient-to-r to-primary/5 p-3 text-[13px] leading-relaxed text-foreground/80">
+            <LessonPageIcon />
+            <p>{t.rich('lessonPage', RICH)}</p>
+          </li>
         </ul>
       </div>
-
-      {/* Collapsed: the lesson-page tip stays visible on its own. */}
-      {!open && <div className="pt-1">{lessonPageTip}</div>}
     </section>
+  );
+}
+
+/** The lesson-page tip's icon tile (the highlighted tip). */
+function LessonPageIcon() {
+  return (
+    <span aria-hidden="true" className="grid h-8 w-8 place-items-center rounded-lg bg-primary/20 text-[hsl(141_70%_62%)]">
+      <MousePointerClick className="h-4 w-4" />
+    </span>
   );
 }
 
@@ -165,10 +194,13 @@ function FeatureIcons({
   hue,
   icons,
   controls,
+  share,
 }: {
   hue: number;
   icons: readonly React.ComponentType<{ className?: string; 'aria-hidden'?: boolean }>[];
   controls?: boolean;
+  /** The device's own share glyph (Apple or Android), like the real share buttons. */
+  share?: boolean;
 }) {
   return (
     <span
@@ -178,10 +210,14 @@ function FeatureIcons({
     >
       {controls ? (
         <>
-          <span className="rounded border-[1.5px] border-current px-0.5 text-[11px] font-extrabold leading-none tabular-nums">1x</span>
+          <span className="rounded border-[1.5px] border-current px-0.5 text-[11px] font-extrabold tabular-nums leading-none">
+            1x
+          </span>
           <Moon className="h-4 w-4" />
           <Car className="h-4 w-4" />
         </>
+      ) : share ? (
+        <PlatformShareIcon className="h-4 w-4" />
       ) : (
         icons.map((Icon, index) => <Icon key={index} className="h-4 w-4" aria-hidden />)
       )}

@@ -1,13 +1,15 @@
 import { withLessonSlugSelect } from './lesson-slug-select';
 import { SupabaseClient } from '@supabase/supabase-js';
 import type { LessonWithRelations, Playlist, PlaylistWithLessons, Series, Category, CategoryWithChildren } from '@/types/database';
-import { LESSON_AUDIO_FILES, LESSON_CARD_COLUMNS } from './lesson-selects';
+import { LESSON_AUDIO_FILES, LESSON_CARD_COLUMNS, LESSON_CATEGORY } from './lesson-selects';
+import { buildCategoryTree, categoryOptions, descendantIds } from '@/lib/category-tree';
+import { withCategoryScope } from './category-scope';
 
 // ==================== LESSONS ====================
 
 /** Latest published daily lessons; short lessons have their own section (lib/supabase/shorts). */
 export async function getRecentLessons(supabase: SupabaseClient, limit = 20) {
-  const { data, error } = await withLessonSlugSelect(`${LESSON_CARD_COLUMNS}, series(id, name, hebrew_name), category:categories(id, hebrew_name), ${LESSON_AUDIO_FILES}`, (columns) => supabase
+  const { data, error } = await withLessonSlugSelect(`${LESSON_CARD_COLUMNS}, series(id, name, hebrew_name), ${LESSON_CATEGORY}, ${LESSON_AUDIO_FILES}`, (columns) => supabase
     .from('lessons')
     .select(columns)
     .eq('is_published', true)
@@ -23,7 +25,7 @@ export async function getRecentLessons(supabase: SupabaseClient, limit = 20) {
 export async function getLessonById(supabase: SupabaseClient, id: string) {
   const { data, error } = await supabase
     .from('lessons')
-    .select('*, series(*), category:categories(id, hebrew_name), snippets(*), audio_files:lesson_audio(*), images:lesson_images(*)')
+    .select('*, series(*), category:categories!lessons_category_id_fkey(id, hebrew_name, name), snippets(*), audio_files:lesson_audio(*), images:lesson_images(*)')
     .eq('id', id)
     .single();
 
@@ -68,15 +70,9 @@ export async function getAllCategories(supabase: SupabaseClient) {
   return data as Category[];
 }
 
+/** Every category as a tree of up to three levels (src/lib/category-tree.ts). */
 export async function getCategoriesTree(supabase: SupabaseClient): Promise<CategoryWithChildren[]> {
-  const all = await getAllCategories(supabase);
-
-  // Build tree: top-level categories with children nested
-  const topLevel = all.filter(c => !c.parent_id);
-  return topLevel.map(parent => ({
-    ...parent,
-    children: all.filter(c => c.parent_id === parent.id).sort((a, b) => a.sort_order - b.sort_order),
-  }));
+  return buildCategoryTree(await getAllCategories(supabase));
 }
 
 export async function getCategoryById(supabase: SupabaseClient, id: string) {
@@ -90,33 +86,51 @@ export async function getCategoryById(supabase: SupabaseClient, id: string) {
   return data as Category;
 }
 
+/**
+ * Published lessons in the category or any of its subcategories (up to three
+ * levels), each once: a lesson is listed when any of its categories is in the
+ * branch (src/lib/supabase/category-scope.ts).
+ */
 export async function getLessonsByCategory(supabase: SupabaseClient, categoryId: string, limit = 50) {
-  // Get this category's children (if any) to include sub-category lessons too
-  const { data: children } = await supabase
-    .from('categories')
-    .select('id')
-    .eq('parent_id', categoryId);
+  const categoryIds = descendantIds(await getCategoriesTree(supabase), categoryId);
 
-  const categoryIds = [categoryId, ...(children || []).map(c => c.id)];
-
-  const { data, error } = await withLessonSlugSelect(`${LESSON_CARD_COLUMNS}, series(id, name, hebrew_name), category:categories(id, hebrew_name), ${LESSON_AUDIO_FILES}`, (columns) => supabase
-    .from('lessons')
-    .select(columns)
-    .eq('is_published', true)
-    .in('category_id', categoryIds)
+  const { data, error } = await withCategoryScope(categoryIds, (scope) => withLessonSlugSelect(`${LESSON_CARD_COLUMNS}, series(id, name, hebrew_name), ${LESSON_CATEGORY}, ${LESSON_AUDIO_FILES}`, (columns) => scope
+    .filter(supabase.from('lessons').select(scope.select(columns)).eq('is_published', true))
+    // Same order as the category's continuous-play queue (src/lib/category-queue.ts).
     .order('date', { ascending: false })
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
     .limit(limit)
-    .overrideTypes<LessonWithRelations[], { merge: false }>());
+    .overrideTypes<LessonWithRelations[], { merge: false }>()));
 
   if (error) throw error;
   return data;
 }
 
-/** Published lessons per category id, counted in SQL by `category_lesson_counts()` (migration 018). */
-export async function getCategoryLessonCounts(supabase: SupabaseClient): Promise<Record<string, number>> {
-  const { data, error } = await supabase.rpc('category_lesson_counts');
-  if (error) throw error;
+/**
+ * Published lessons per category, including its subcategories, each lesson once
+ * (`category_subtree_lesson_counts()`, migration 026). Before 026 the direct
+ * counts (`category_lesson_counts()`, migration 018) are summed over each branch,
+ * which is exact while every lesson has one category.
+ */
+export async function getCategoryLessonTotals(supabase: SupabaseClient): Promise<Record<string, number>> {
+  const subtree = await supabase.rpc('category_subtree_lesson_counts');
+  if (!subtree.error) return countsByCategory(subtree.data);
+  if (!isMissingCountFunction(subtree.error, 'category_subtree_lesson_counts')) throw subtree.error;
 
+  const direct = await supabase.rpc('category_lesson_counts');
+  if (direct.error) throw direct.error;
+  const counts = countsByCategory(direct.data);
+
+  const tree = await getCategoriesTree(supabase);
+  const totals: Record<string, number> = {};
+  for (const { id } of categoryOptions(tree)) {
+    totals[id] = descendantIds(tree, id).reduce((sum, categoryId) => sum + (counts[categoryId] ?? 0), 0);
+  }
+  return totals;
+}
+
+function countsByCategory(data: unknown): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const row of (data ?? []) as { category_id: string; lesson_count: number | string }[]) {
     counts[row.category_id] = Number(row.lesson_count);
@@ -124,12 +138,18 @@ export async function getCategoryLessonCounts(supabase: SupabaseClient): Promise
   return counts;
 }
 
+/** The count function is missing from the database (42883, or PGRST202 from PostgREST). */
+function isMissingCountFunction(error: { code?: string; message?: string }, name: string): boolean {
+  return (['42883', 'PGRST202'].includes(error.code ?? '')) && (error.message ?? '').includes(name);
+}
+
 // ==================== SERIES ====================
 
 export async function getAllSeries(supabase: SupabaseClient) {
+  // `lessons(count)`: the series' lessons the client can see (published only, for the anon client); one FK (lessons.series_id).
   const { data, error } = await supabase
     .from('series')
-    .select('*')
+    .select('*, lessons(count)')
     .order('name');
 
   if (error) throw error;

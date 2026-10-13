@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { imagePresignWindow, servableImageContentType } from './image-keys';
+import { imagePresignWindow, servableImageContentType, servableImageExtension } from './image-keys';
+
+describe('servableImageExtension', () => {
+  it('returns the lower-case extension of a servable key, or null', () => {
+    expect(servableImageExtension('images/lesson-1/0_1.JPEG')).toBe('jpeg');
+    expect(servableImageExtension('images/lesson-1/thumbs/0_1.webp')).toBe('webp');
+    expect(servableImageExtension('images/lesson-1/x.svg')).toBeNull();
+    expect(servableImageExtension('audio/lesson-1/0_1.jpg')).toBeNull();
+  });
+});
 
 describe('servableImageContentType', () => {
   it('serves lesson originals and thumbnails with their raster type', () => {

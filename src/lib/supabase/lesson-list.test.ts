@@ -57,7 +57,7 @@ const lesson: LessonWithRelations = {
 function createReader(overrides: Partial<LessonListReader> = {}): LessonListReader {
   return {
     getAllCategories: vi.fn(async () => [category]),
-    getChildCategoryIds: vi.fn(async () => []),
+    getDescendantCategoryIds: vi.fn(async (id: string) => [id]),
     getTagCounts: vi.fn(async () => [
       { tag: 'אמונה ובטחון', lesson_count: 4 },
       { tag: 'שבת', lesson_count: 2 },
@@ -309,5 +309,19 @@ describe('mergeSearchResults', () => {
       2,
     );
     expect(merged.map((l) => l.id)).toEqual(['a', 'c']);
+  });
+});
+
+describe('lesson list category filter (membership mode, migration 026)', () => {
+  it('filters by any of a lesson categories through the scope embed', () => {
+    expect(applyLessonFilters(new RecordingQuery(), { categoryIds: ['cat-1', 'cat-2'] }, 'membership').calls).toEqual([
+      ['in', 'category_scope.category_id', ['cat-1', 'cat-2']],
+    ]);
+  });
+
+  it('keeps the primary-category filter when no mode is given (before migration 026)', () => {
+    expect(applyLessonFilters(new RecordingQuery(), { categoryIds: ['cat-1'] }).calls).toEqual([
+      ['in', 'category_id', ['cat-1']],
+    ]);
   });
 });
