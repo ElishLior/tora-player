@@ -2,7 +2,8 @@ import { withLessonSlugSelect } from './lesson-slug-select';
 import { SupabaseClient } from '@supabase/supabase-js';
 import type { LessonWithRelations, Playlist, PlaylistWithLessons, Series, Category, CategoryWithChildren } from '@/types/database';
 import { LESSON_AUDIO_FILES, LESSON_CARD_COLUMNS, LESSON_CATEGORY } from './lesson-selects';
-import { buildCategoryTree, descendantIds } from '@/lib/category-tree';
+import { buildCategoryTree, categoryOptions, descendantIds } from '@/lib/category-tree';
+import { withCategoryScope } from './category-scope';
 
 // ==================== LESSONS ====================
 
@@ -86,38 +87,60 @@ export async function getCategoryById(supabase: SupabaseClient, id: string) {
 }
 
 /**
- * Published lessons filed under the category or any of its subcategories (up to
- * three levels). A lesson has one category_id, so no lesson appears twice.
+ * Published lessons in the category or any of its subcategories (up to three
+ * levels), each once: a lesson is listed when any of its categories is in the
+ * branch (src/lib/supabase/category-scope.ts).
  */
 export async function getLessonsByCategory(supabase: SupabaseClient, categoryId: string, limit = 50) {
   const categoryIds = descendantIds(await getCategoriesTree(supabase), categoryId);
 
-  const { data, error } = await withLessonSlugSelect(`${LESSON_CARD_COLUMNS}, series(id, name, hebrew_name), ${LESSON_CATEGORY}, ${LESSON_AUDIO_FILES}`, (columns) => supabase
-    .from('lessons')
-    .select(columns)
-    .eq('is_published', true)
-    .in('category_id', categoryIds)
+  const { data, error } = await withCategoryScope(categoryIds, (scope) => withLessonSlugSelect(`${LESSON_CARD_COLUMNS}, series(id, name, hebrew_name), ${LESSON_CATEGORY}, ${LESSON_AUDIO_FILES}`, (columns) => scope
+    .filter(supabase.from('lessons').select(scope.select(columns)).eq('is_published', true))
     // Same order as the category's continuous-play queue (src/lib/category-queue.ts).
     .order('date', { ascending: false })
     .order('created_at', { ascending: false })
     .order('id', { ascending: false })
     .limit(limit)
-    .overrideTypes<LessonWithRelations[], { merge: false }>());
+    .overrideTypes<LessonWithRelations[], { merge: false }>()));
 
   if (error) throw error;
   return data;
 }
 
-/** Published lessons per category id, counted in SQL by `category_lesson_counts()` (migration 018). */
-export async function getCategoryLessonCounts(supabase: SupabaseClient): Promise<Record<string, number>> {
-  const { data, error } = await supabase.rpc('category_lesson_counts');
-  if (error) throw error;
+/**
+ * Published lessons per category, including its subcategories, each lesson once
+ * (`category_subtree_lesson_counts()`, migration 026). Before 026 the direct
+ * counts (`category_lesson_counts()`, migration 018) are summed over each branch,
+ * which is exact while every lesson has one category.
+ */
+export async function getCategoryLessonTotals(supabase: SupabaseClient): Promise<Record<string, number>> {
+  const subtree = await supabase.rpc('category_subtree_lesson_counts');
+  if (!subtree.error) return countsByCategory(subtree.data);
+  if (!isMissingCountFunction(subtree.error, 'category_subtree_lesson_counts')) throw subtree.error;
 
+  const direct = await supabase.rpc('category_lesson_counts');
+  if (direct.error) throw direct.error;
+  const counts = countsByCategory(direct.data);
+
+  const tree = await getCategoriesTree(supabase);
+  const totals: Record<string, number> = {};
+  for (const { id } of categoryOptions(tree)) {
+    totals[id] = descendantIds(tree, id).reduce((sum, categoryId) => sum + (counts[categoryId] ?? 0), 0);
+  }
+  return totals;
+}
+
+function countsByCategory(data: unknown): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const row of (data ?? []) as { category_id: string; lesson_count: number | string }[]) {
     counts[row.category_id] = Number(row.lesson_count);
   }
   return counts;
+}
+
+/** The count function is missing from the database (42883, or PGRST202 from PostgREST). */
+function isMissingCountFunction(error: { code?: string; message?: string }, name: string): boolean {
+  return (['42883', 'PGRST202'].includes(error.code ?? '')) && (error.message ?? '').includes(name);
 }
 
 // ==================== SERIES ====================

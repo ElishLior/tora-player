@@ -178,9 +178,13 @@ export function descendantIds(tree: CategoryWithChildren[], id: string): string[
   return descendantCategories(tree, id).map((node) => node.id);
 }
 
-/** Lessons in a category and all its descendants. Lessons have one category_id, so the sum never double counts. */
-export function categoryLessonTotal(tree: CategoryWithChildren[], counts: Record<string, number>, id: string): number {
-  return descendantIds(tree, id).reduce((sum, categoryId) => sum + (counts[categoryId] ?? 0), 0);
+/**
+ * Published lessons in a category's whole branch. `counts` are the subtree
+ * totals (getCategoryLessonTotals), where a lesson in a parent and in its child
+ * is counted once; summing direct counts would count it twice.
+ */
+export function categoryLessonTotal(counts: Record<string, number>, id: string): number {
+  return counts[id] ?? 0;
 }
 
 /** The category and its whole branch as a standalone tree, for a picker that offers one branch. Empty when unknown. */

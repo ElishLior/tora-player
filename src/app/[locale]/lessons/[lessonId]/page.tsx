@@ -13,7 +13,9 @@ import { isAdmin } from '@/lib/auth/admin';
 import { LessonPlayerClient, LessonTags } from './lesson-player-client';
 import { JsonLd } from '@/components/seo/json-ld';
 import { DEFAULT_LOCALE, OG_LOCALE, SITE_NAME, categoryPath, isSiteLocale, lessonPath, pageUrl, seriesPath } from '@/config/site';
-import { categoryLabel } from '@/lib/category-tree';
+import { categoryLabel, findCategory } from '@/lib/category-tree';
+import { categorySelectionFor } from '@/lib/lesson-categories';
+import { readLessonCategoryIds } from '@/lib/supabase/lesson-category-writes';
 import { breadcrumbJsonLd, lessonDescription, lessonJsonLd, pageAlternates } from '@/lib/seo';
 import { lessonsHref } from '@/lib/tag-links';
 import { getCachedCategoriesTree } from '@/lib/supabase/anon';
@@ -41,7 +43,10 @@ const loadLesson = cache(async (lessonId: string) => {
     const client = await lessonReadClient();
     const route = await resolveLessonRoute(client, lessonId);
     if (route.kind === 'not-found') return null;
-    return { route, lesson: await getLessonById(client, route.lessonId) };
+    const lesson = await getLessonById(client, route.lessonId);
+    // Every category of the lesson (migration 026). A failed or missing read shows the primary only.
+    const memberships = await readLessonCategoryIds(client, route.lessonId).catch(() => null);
+    return { route, lesson, categoryIds: categorySelectionFor(memberships, lesson.category_id) };
   } catch {
     return null;
   }
@@ -83,23 +88,33 @@ export default async function LessonDetailPage({ params, searchParams }: Props) 
 
   const loaded = await loadLesson(lessonId);
   if (!loaded) notFound();
-  const { lesson, route } = loaded;
+  const { lesson, route, categoryIds } = loaded;
   if (route.kind === 'redirect') {
     permanentRedirect(lessonRedirectUrl(route.pathname, isSiteLocale(locale) ? locale : 'he', await searchParams));
   }
 
   const admin = await isAdmin();
-  // The category tree is only needed by the admin's inline picker. A failed read hides the picker, not the lesson.
-  const categories = admin ? await getCachedCategoriesTree().catch(() => []) : undefined;
+  // The tree names the lesson's categories and feeds the admin picker. A failed read shows the primary category only.
+  const tree = await getCachedCategoriesTree().catch(() => []);
+  const categories = admin ? tree : undefined;
+  const named = categoryIds
+    .map((id) => findCategory(tree, id))
+    .filter((category) => category !== undefined);
+  const shownCategories: { id: string; label: string }[] =
+    named.length > 0
+      ? named.map((category) => ({ id: category.id, label: categoryLabel(category, locale) }))
+      : lesson.category
+        ? [{ id: lesson.category.id, label: categoryLabel(lesson.category, locale) }]
+        : [];
   const hasAudio = lesson.audio_url || (lesson.audio_files && lesson.audio_files.length > 0);
   const hasImages = lesson.images && lesson.images.length > 0;
   const hasParts = lesson.parts && lesson.parts.length > 1;
   const hasSnippets = Boolean(lesson.snippets && lesson.snippets.length > 0);
   const hasDescription = Boolean(lesson.description || lesson.summary);
 
-  // Side column (xl): description, then the category link (desktop only; phones show the category in the header tools).
+  // Side column (xl): description, then the category links (desktop only; phones show them in the header tools).
   const sideContent =
-    hasDescription || lesson.category ? (
+    hasDescription || shownCategories.length > 0 ? (
       <>
         {hasDescription && (
           <div className="order-1 mb-2 rounded-xl bg-[hsl(var(--surface-elevated))] p-4 xl:mb-0">
@@ -111,16 +126,22 @@ export default async function LessonDetailPage({ params, searchParams }: Props) 
             </p>
           </div>
         )}
-        {lesson.category && (
+        {shownCategories.length > 0 && (
           <div className="hidden rounded-xl bg-[hsl(var(--surface-elevated))] p-4 xl:block">
             <h2 className="mb-2 text-sm font-bold text-muted-foreground">{pageT('category')}</h2>
-            <Link
-              href={categoryPath(lesson.category.id)}
-              className="inline-block max-w-full rounded-sm text-sm text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-              dir="auto"
-            >
-              {categoryLabel(lesson.category, locale)}
-            </Link>
+            <ul className="space-y-1">
+              {shownCategories.map((category) => (
+                <li key={category.id}>
+                  <Link
+                    href={categoryPath(category.id)}
+                    className="inline-block max-w-full rounded-sm text-sm text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                    dir="auto"
+                  >
+                    {category.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
       </>
@@ -237,7 +258,7 @@ export default async function LessonDetailPage({ params, searchParams }: Props) 
             lessonId={lesson.id}
             tags={lesson.tags ?? []}
             admin={admin}
-            categoryId={lesson.category_id}
+            categoryIds={categoryIds}
             categories={categories}
           />
           {lesson.series && (
@@ -300,14 +321,15 @@ export default async function LessonDetailPage({ params, searchParams }: Props) 
             </span>
           )}
           {/* Category: a pill with the other details on phones; on xl it sits in the side column */}
-          {lesson.category && (
+          {shownCategories.map((category) => (
             <Link
-              href={categoryPath(lesson.category.id)}
+              key={category.id}
+              href={categoryPath(category.id)}
               className="inline-flex min-h-11 max-w-full items-center rounded-full bg-[hsl(var(--surface-elevated))] px-3 py-1 text-xs text-muted-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 xl:hidden"
             >
-              <bdi className="break-words">{categoryLabel(lesson.category, locale)}</bdi>
+              <bdi className="break-words">{category.label}</bdi>
             </Link>
-          )}
+          ))}
           {lesson.seder_number && (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-[hsl(var(--surface-elevated))] px-3 py-1 text-xs text-muted-foreground xl:text-sm">
               <Hash className="h-3.5 w-3.5" />

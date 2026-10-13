@@ -87,7 +87,10 @@ export interface LessonDraft {
   partsEdited: boolean;
   /** Topic from the filename, used as the short-lesson title. */
   label: string;
+  /** The primary category (the first of categoryIds). Kept for single-value readers. */
   categoryId: string;
+  /** Every category the lesson is filed under, primary first (migration 026). Absent means [categoryId]. */
+  categoryIds?: string[];
   description: string;
   tags: string[];
   /** Admin left this lesson out of the batch. */
@@ -497,8 +500,16 @@ export interface DraftLessonFields {
   location: string;
   lesson_type: string;
   category_id: string | null;
+  /** Ordered categories when there is more than one; createDraftLesson saves them after the insert. */
+  category_ids?: string[];
   description?: string;
   tags?: string[];
+}
+
+/** A draft's categories, primary first. */
+export function draftCategoryIds(draft: Pick<LessonDraft, 'categoryId' | 'categoryIds'>): string[] {
+  if (draft.categoryIds) return draft.categoryIds;
+  return draft.categoryId ? [draft.categoryId] : [];
 }
 
 export function lessonFieldsForDraft(draft: LessonDraft): DraftLessonFields {
@@ -514,7 +525,8 @@ export function lessonFieldsForDraft(draft: LessonDraft): DraftLessonFields {
     teacher: meta.teacher,
     location: meta.location,
     lesson_type: draft.isShort ? SHORT_LESSON_TYPE : meta.lessonType,
-    category_id: draft.categoryId || null,
+    category_id: draftCategoryIds(draft)[0] ?? null,
+    ...(draftCategoryIds(draft).length > 1 ? { category_ids: draftCategoryIds(draft) } : {}),
     ...(description ? { description } : {}),
     tags: normalizeTags(draft.tags),
   };

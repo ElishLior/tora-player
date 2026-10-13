@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { getLessonTracks } from '@/lib/lesson-tracks';
 import { LESSON_AUDIO_FILES, LESSON_CARD_COLUMNS, LESSON_CATEGORY } from '@/lib/supabase/lesson-selects';
 import { withLessonSlugSelect } from '@/lib/supabase/lesson-slug-select';
+import { withCategoryScope } from '@/lib/supabase/category-scope';
 import { newQueueSessionId, type CategoryQueueSource, type QueueCursor, type SegmentPage } from '@/lib/queue-source';
 import type { AudioTrack } from '@/stores/audio-store';
 import type { Category, LessonWithRelations } from '@/types/database';
@@ -139,20 +140,20 @@ export async function loadCategoryQueueSegment(
   request: CategorySegmentRequest,
 ): Promise<CategorySegment> {
   const { limit } = request;
-  const result = await withLessonSlugSelect(SEGMENT_SELECT, (columns) => {
-    const base = client
-      .from('lessons')
-      .select(columns)
-      .eq('is_published', true)
-      .in('category_id', request.scopeIds)
-      .lte('created_at', request.snapshotAt)
-      .order('date', { ascending: false })
-      .order('created_at', { ascending: false })
-      .order('id', { ascending: false })
-      .limit(limit + 1);
-    const filtered = request.cursor ? base.or(keysetFilter(request.cursor)) : base;
-    return filtered.overrideTypes<LessonWithRelations[], { merge: false }>();
-  });
+  // Same scope as the category page's list (getLessonsByCategory): a lesson is in when any of its categories is.
+  const result = await withCategoryScope(request.scopeIds, (scope) =>
+    withLessonSlugSelect(SEGMENT_SELECT, (columns) => {
+      const base = scope
+        .filter(client.from('lessons').select(scope.select(columns)).eq('is_published', true))
+        .lte('created_at', request.snapshotAt)
+        .order('date', { ascending: false })
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
+        .limit(limit + 1);
+      const filtered = request.cursor ? base.or(keysetFilter(request.cursor)) : base;
+      return filtered.overrideTypes<LessonWithRelations[], { merge: false }>();
+    }),
+  );
   if (result.error) throw result.error;
 
   const rows = (result.data ?? []) as LessonWithRelations[];

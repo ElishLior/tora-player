@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { setRequestLocale } from 'next-intl/server';
 import { isSupabaseConfigured } from '@/lib/supabase/server';
-import { getCachedCategoriesTree, getCachedCategoryLessonCounts } from '@/lib/supabase/anon';
+import { getCachedCategoriesTree, getCachedCategoryLessonTotals } from '@/lib/supabase/anon';
 import { categoryLabel, categoryLessonTotal, childrenOf } from '@/lib/category-tree';
 import { Link } from '@/i18n/routing';
 import { ListLoadError } from '@/components/shared/list-load-error';
@@ -33,7 +33,7 @@ export default async function CategoriesPage({ params }: Props) {
 
   if (isSupabaseConfigured()) {
     try {
-      [categories, counts] = await Promise.all([getCachedCategoriesTree(), getCachedCategoryLessonCounts()]);
+      [categories, counts] = await Promise.all([getCachedCategoriesTree(), getCachedCategoryLessonTotals()]);
     } catch {
       failed = true;
     }
@@ -43,7 +43,7 @@ export default async function CategoriesPage({ params }: Props) {
 
   /** A category and, nested under it, its subcategories (up to three levels). Each count is the whole branch. */
   function renderBranch(cat: CategoryWithChildren, depth: number) {
-    const total = categoryLessonTotal(categories, counts, cat.id);
+    const total = categoryLessonTotal(counts, cat.id);
     const children = childrenOf(categories, cat.id);
     const label = categoryLabel(cat, locale);
     const nested = children.length > 0 && (

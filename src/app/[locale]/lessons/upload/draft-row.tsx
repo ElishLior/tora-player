@@ -37,6 +37,7 @@ import { formatDuration } from '@/lib/utils';
 import type { CategoryWithChildren } from '@/types/database';
 import { CategoryPicker } from '@/components/categories/category-picker';
 import { categorySubtree } from '@/lib/category-tree';
+import { draftCategoryIds } from '@/lib/upload-drafts';
 import { inputClass, type DraftRun, type FileEntry, type RowStatus } from './upload-state';
 
 const iconButton = 'rounded p-0.5 disabled:opacity-30';
@@ -276,18 +277,18 @@ function DraftEditor({ draft, run, status, open, files, categories, onChange, on
               className={inputClass}
             />
           </label>
-          <label className="space-y-1">
+          <div className="space-y-1">
             <span className="text-xs font-bold text-muted-foreground">{t('category')}</span>
             <CategoryPicker
-              value={draft.categoryId}
+              multiple
+              values={draftCategoryIds(draft)}
               disabled={locked}
-              onChange={(categoryId) => onChange((d) => ({ ...d, categoryId }))}
+              onValuesChange={(categoryIds) =>
+                onChange((d) => ({ ...d, categoryId: categoryIds[0] ?? '', categoryIds }))
+              }
               categories={categoryChoices}
-              includeNone={!draft.isShort}
-              noneLabel={t('noCategory')}
-              className={inputClass}
             />
-          </label>
+          </div>
           <label className="space-y-1">
             <span className="text-xs font-bold text-muted-foreground">{t('description')}</span>
             <input

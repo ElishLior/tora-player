@@ -25,6 +25,7 @@ import { ImageUnreadableError, useUpload, uploadImageFile, type FileWithMeta } f
 import { UploadZone, type SelectedFile } from '@/components/upload/upload-zone';
 import type { LessonAudio, LessonImage, CategoryWithChildren } from '@/types/database';
 import { getCategories } from '@/actions/categories';
+import { getLessonCategoryIds } from '@/actions/lesson-categories';
 import { CategoryPicker } from '@/components/categories/category-picker';
 import { generateLessonMetadata } from '@/lib/hebrew-date';
 import { TagInput } from '@/components/tags/tag-input';
@@ -73,8 +74,9 @@ export default function EditLessonClient({ lessonId }: { lessonId: string }) {
   const [date, setDate] = useState('');
   const [isPublished, setIsPublished] = useState(false);
 
-  // Category
-  const [categoryId, setCategoryId] = useState<string>('');
+  // Categories (several; the first is primary). Saved with the lesson, in order.
+  const tCategories = useTranslations('lessonCategories');
+  const [categoryIds, setCategoryIds] = useState<string[]>([]);
   const [categories, setCategories] = useState<CategoryWithChildren[]>([]);
   const [tags, setTags] = useState<string[]>([]);
 
@@ -111,11 +113,12 @@ export default function EditLessonClient({ lessonId }: { lessonId: string }) {
   // Load data
   useEffect(() => {
     async function load() {
-      const [lessonResult, audioResult, imagesResult, categoriesResult] = await Promise.all([
+      const [lessonResult, audioResult, imagesResult, categoriesResult, categoryIdsResult] = await Promise.all([
         getLesson(lessonId),
         getAudioFiles(lessonId),
         getImages(lessonId),
         getCategories(),
+        getLessonCategoryIds(lessonId),
       ]);
       if (lessonResult.data) {
         const lesson = lessonResult.data;
@@ -126,7 +129,7 @@ export default function EditLessonClient({ lessonId }: { lessonId: string }) {
         setDescription(lesson.description || '');
         setDate(lesson.date || '');
         setIsPublished(lesson.is_published);
-        setCategoryId(lesson.category_id || '');
+        setCategoryIds('categoryIds' in categoryIdsResult ? categoryIdsResult.categoryIds : lesson.category_id ? [lesson.category_id] : []);
         setTags(lesson.tags ?? []);
         // Metadata
         setHebrewDate(lesson.hebrew_date || '');
@@ -194,7 +197,7 @@ export default function EditLessonClient({ lessonId }: { lessonId: string }) {
       formData.set('location', location);
       formData.set('summary', summary);
       formData.set('lesson_type', lessonType);
-      formData.set('category_id', categoryId || '');
+      formData.set('category_ids', JSON.stringify(categoryIds));
       formData.set('tags', JSON.stringify(tags));
       if (sederNumber) formData.set('seder_number', sederNumber);
 
@@ -212,6 +215,9 @@ export default function EditLessonClient({ lessonId }: { lessonId: string }) {
         setFormError(`שגיאה בעדכון השיעור: ${errMsg}`);
         setSaving(false);
         return;
+      }
+      if (result.membershipsSaved === false && categoryIds.length > 1) {
+        setFormError(tCategories('migrationNeeded'));
       }
 
       // Upload new images; failed ones stay queued so saving again retries them.
@@ -666,11 +672,10 @@ export default function EditLessonClient({ lessonId }: { lessonId: string }) {
           </div>
           <CategoryPicker
             id="lesson-category"
-            value={categoryId}
-            onChange={setCategoryId}
+            multiple
+            values={categoryIds}
+            onValuesChange={setCategoryIds}
             categories={categories}
-            includeNone
-            noneLabel="ללא קטגוריה"
           />
         </div>
 

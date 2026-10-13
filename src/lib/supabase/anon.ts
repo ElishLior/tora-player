@@ -7,7 +7,7 @@ import {
   getAllSeries,
   getCategoriesTree,
   getCategoryById,
-  getCategoryLessonCounts,
+  getCategoryLessonTotals,
   getLessonsByCategory,
   getLessonsBySeries,
   getRecentLessons,
@@ -84,9 +84,10 @@ export const getCachedCategoryById = unstable_cache(
   CATALOG_CACHE,
 );
 
-export const getCachedCategoryLessonCounts = unstable_cache(
-  () => getCategoryLessonCounts(createAnonSupabaseClient()),
-  ['catalog', 'category-lesson-counts'],
+/** Subtree totals per category (each lesson once). A new cache key, so old direct counts are never read as totals. */
+export const getCachedCategoryLessonTotals = unstable_cache(
+  () => getCategoryLessonTotals(createAnonSupabaseClient()),
+  ['catalog', 'category-lesson-totals'],
   CATALOG_CACHE,
 );
 

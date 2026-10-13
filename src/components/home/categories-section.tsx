@@ -32,7 +32,7 @@ export async function CategoriesSection({ categories, counts }: CategoriesSectio
       <ul className="grid gap-0.5 rounded-2xl bg-[hsl(var(--surface-elevated))] p-1">
         {categories.map((category) => {
           // The lesson count covers the whole branch, subcategories included.
-          const total = categoryLessonTotal(categories, counts, category.id);
+          const total = categoryLessonTotal(counts, category.id);
           const dot = DOT_CLASS[category.icon || ''] ?? 'bg-muted-foreground';
           return (
             <li key={category.id}>
