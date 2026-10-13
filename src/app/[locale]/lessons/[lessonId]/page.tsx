@@ -10,7 +10,9 @@ import { parshaLabel } from '@/lib/parsha-label';
 import { Link } from '@/i18n/routing';
 import { ArrowRight, Calendar, Clock, Edit, MapPin, User, BookOpen, Hash } from 'lucide-react';
 import { isAdmin } from '@/lib/auth/admin';
-import { LessonPlayerClient, LessonTags } from './lesson-player-client';
+import { LessonPlayerClient, LessonSourcesSection, LessonTags } from './lesson-player-client';
+import { readLessonSourceRow } from '@/lib/supabase/lesson-sources';
+import { lessonSourceFromRow } from '@/lib/lesson-sources';
 import { JsonLd } from '@/components/seo/json-ld';
 import { DEFAULT_LOCALE, OG_LOCALE, SITE_NAME, categoryPath, isSiteLocale, lessonPath, pageUrl, seriesPath } from '@/config/site';
 import { categoryLabel, findCategory } from '@/lib/category-tree';
@@ -45,8 +47,13 @@ const loadLesson = cache(async (lessonId: string) => {
     if (route.kind === 'not-found') return null;
     const lesson = await getLessonById(client, route.lessonId);
     // Every category of the lesson (migration 026). A missing table or failed read falls back to the primary.
-    const memberships = await readLessonCategoryIds(client, route.lessonId).catch(() => null);
-    return { route, lesson, categoryIds: categorySelectionFor(memberships, lesson.category_id) };
+    const [memberships, sourceRead] = await Promise.all([
+      readLessonCategoryIds(client, route.lessonId).catch(() => null),
+      readLessonSourceRow(client, route.lessonId),
+    ]);
+    // Sources (migration 029): a missing table or failed read just hides the section.
+    const source = sourceRead.ok && sourceRead.row ? lessonSourceFromRow(sourceRead.row) : null;
+    return { route, lesson, categoryIds: categorySelectionFor(memberships, lesson.category_id), source };
   } catch {
     return null;
   }
@@ -88,7 +95,7 @@ export default async function LessonDetailPage({ params, searchParams }: Props) 
 
   const loaded = await loadLesson(lessonId);
   if (!loaded) notFound();
-  const { lesson, route, categoryIds } = loaded;
+  const { lesson, route, categoryIds, source } = loaded;
   if (route.kind === 'redirect') {
     permanentRedirect(lessonRedirectUrl(route.pathname, isSiteLocale(locale) ? locale : 'he', await searchParams));
   }
@@ -343,11 +350,17 @@ export default async function LessonDetailPage({ params, searchParams }: Props) 
             images={hasImages ? lesson.images : undefined}
             sideSlot={sideContent}
             mainSlot={mainContent}
+            source={source}
           />
         </Suspense>
       ) : (
         <>
-          {mainContent && <div className={MAIN_COLUMN}>{mainContent}</div>}
+          {(mainContent || source) && (
+            <div className={MAIN_COLUMN}>
+              <LessonSourcesSection lessonId={lesson.id} source={source} className="order-2" />
+              {mainContent}
+            </div>
+          )}
           {sideContent && <div className={SIDE_COLUMN}>{sideContent}</div>}
         </>
       )}

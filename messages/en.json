@@ -1068,8 +1068,40 @@
   },
   "adminLessons": {
     "title": "Lessons",
-    "subtitle": "Assign categories to several lessons at once. To edit one lesson, open it and tap the pencil.",
+    "subtitle": "Assign categories to several lessons at once, or use the pencil beside a lesson to edit it: details, categories, tags and the sources PDF.",
     "back": "Back to the dashboard",
-    "cardDescription": "Assign categories to lessons and edit them"
+    "cardDescription": "Edit lessons, categories and sources PDFs",
+    "editLesson": "Edit lesson {title}"
+  },
+  "lessonSources": {
+    "title": "Lesson sources",
+    "open": "Open PDF",
+    "download": "Download PDF to device",
+    "expected": "The lesson's sources will be added later",
+    "adminHint": "The PDF the rabbi uses in the lesson. You can add it days after the lesson went up. Adding or replacing it sends no notification.",
+    "loading": "Loading",
+    "none": "This lesson has no sources file yet.",
+    "expectedAdmin": "Marked: \"sources will be added later\"",
+    "expectedToggle": "Show \"will be added later\"",
+    "upload": "Upload PDF",
+    "replace": "Replace the PDF",
+    "uploading": "Uploading… {percent}%",
+    "remove": "Remove the PDF",
+    "confirmRemove": "Remove the lesson's sources file? It will disappear from the lesson page.",
+    "published": "Uploaded. It shows on the lesson page.",
+    "replaced": "Replaced. The previous file was deleted.",
+    "removed": "Removed.",
+    "updated": "Updated {date}",
+    "errors": {
+      "not-pdf": "Only PDF files can be uploaded.",
+      "too-large": "The file is too large (up to {size}).",
+      "schema_missing": "Lesson sources aren't available yet: migration 029 must be applied to the database.",
+      "failed": "That didn't work. The previous file, if any, is unchanged. Try again.",
+      "unauthorized": "Not authorized. Sign in again as an admin.",
+      "has-file": "There is already a file. Remove it first.",
+      "incomplete": "The upload didn't finish. Try again.",
+      "not-found": "Lesson not found.",
+      "invalid": "Invalid request. Try again."
+    }
   }
 }

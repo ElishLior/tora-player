@@ -24,6 +24,9 @@ import {
   Loader2,
   Bookmark,
   FileDown,
+  FileText,
+  ExternalLink,
+  Clock3,
   ImagePlus,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -63,6 +66,7 @@ import { getImageStreamUrl } from '@/lib/image-keys';
 import { sortLessonImages } from '@/lib/image-download';
 import { ImageDownloadButton } from '@/components/lessons/image-download-button';
 import { useModalDialog } from '@/hooks/use-modal-dialog';
+import { formatFileSize, lessonSourcePath, type LessonSource } from '@/lib/lesson-sources';
 
 function formatDur(seconds: number): string {
   if (!seconds || seconds <= 0) return '';
@@ -339,9 +343,11 @@ interface LessonPlayerClientProps {
   sideSlot?: ReactNode;
   /** Server-rendered content after the notes in the main column (parts, snippets). */
   mainSlot?: ReactNode;
+  /** The lesson's sources PDF ("מקורות השיעור"); shown as the first block after the player. */
+  source?: LessonSource | null;
 }
 
-export function LessonPlayerClient({ lesson, images, sideSlot, mainSlot }: LessonPlayerClientProps) {
+export function LessonPlayerClient({ lesson, images, sideSlot, mainSlot, source }: LessonPlayerClientProps) {
   const locale = useLocale();
   const t = useTranslations('player');
   const router = useRouter();
@@ -966,6 +972,9 @@ export function LessonPlayerClient({ lesson, images, sideSlot, mainSlot }: Lesso
           </div>
         </div>
 
+        {/* Sources: the first block after the player (owner, October 13, 2026). */}
+        <LessonSourcesSection lessonId={lesson.id} source={source ?? null} className="order-2" />
+
         {/* Audio files list (inlined to avoid webpack dev chunk issue) */}
         {lessonAudioAssets.length > 1 && (
           <div className="order-3 rounded-xl bg-[hsl(var(--surface-elevated))] p-4">
@@ -1565,5 +1574,80 @@ export function LessonTags({ tags }: LessonTagsProps) {
         </li>
       ))}
     </ul>
+  );
+}
+
+/**
+ * "מקורות השיעור": the PDF the rabbi uses in the lesson, with open (the browser's
+ * viewer, in a new tab, so playback keeps going) and download-to-device actions.
+ * "Expected" shows a short note instead; no row shows nothing. Exported for the
+ * lesson page's no-audio branch.
+ */
+export function LessonSourcesSection({
+  lessonId,
+  source,
+  className,
+}: {
+  lessonId: string;
+  source: LessonSource | null;
+  className?: string;
+}) {
+  const t = useTranslations('lessonSources');
+  if (!source) return null;
+
+  if (source.status === 'expected') {
+    return (
+      <p className={`flex items-center gap-2 rounded-xl bg-[hsl(var(--surface-elevated))] px-4 py-3 text-sm text-muted-foreground ${className ?? ''}`}>
+        <Clock3 className="h-4 w-4 flex-shrink-0 text-primary" aria-hidden="true" />
+        {t('expected')}
+      </p>
+    );
+  }
+
+  const size = formatFileSize(source.fileSize ?? 0);
+  return (
+    <section
+      aria-labelledby="lesson-sources-title"
+      className={`rounded-xl border border-primary/25 bg-gradient-to-l from-primary/10 to-transparent bg-[hsl(var(--surface-elevated))] p-4 xl:p-5 ${className ?? ''}`}
+    >
+      <div className="flex items-start gap-3">
+        <span className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-xl bg-primary/15 text-primary">
+          <FileText className="h-5 w-5" aria-hidden="true" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 id="lesson-sources-title" className="text-base font-bold text-foreground">
+            {t('title')}
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            PDF{size && ` · ${size}`}
+          </p>
+        </div>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <a
+          href={lessonSourcePath(lessonId, 'open')}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex min-h-11 items-center gap-2 rounded-full bg-primary px-4 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+        >
+          <ExternalLink className="h-4 w-4" aria-hidden="true" />
+          {t('open')}
+        </a>
+        <a
+          href={lessonSourcePath(lessonId, 'download')}
+          onClick={(event) => {
+            // iPhone/iPad home-screen apps can't save attachments: open it, then Share → Save to Files.
+            if ((navigator as Navigator & { standalone?: boolean }).standalone === true) {
+              event.preventDefault();
+              window.open(event.currentTarget.href, '_blank', 'noopener');
+            }
+          }}
+          className="inline-flex min-h-11 items-center gap-2 rounded-full bg-[hsl(var(--surface-highlight))] px-4 text-sm font-semibold text-foreground transition-colors hover:bg-[hsl(var(--surface-highlight))]/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+        >
+          <FileDown className="h-4 w-4" aria-hidden="true" />
+          {t('download')}
+        </a>
+      </div>
+    </section>
   );
 }
