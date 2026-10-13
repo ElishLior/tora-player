@@ -3,8 +3,10 @@
 -- "A lesson in several categories": the admin ticks any categories or
 -- subcategories at any of the three levels, and the lesson appears in each).
 --
--- WRITTEN, NOT APPLIED. Production is the only database; apply only after the
--- owner approves the exact plan.
+-- Applied to production on October 13, 2026 (owner-approved). It was first applied WITH a foreign
+-- key from category_id to categories, which made unhinted lessons→categories embeds ambiguous
+-- (PGRST201) and broke the live 1.1.4 site for a few minutes; the key was dropped live and is
+-- not created here any more. See migration 027.
 --
 -- 1. lesson_categories(lesson_id, category_id, position): one row per lesson and
 --    category. Primary key (lesson_id, category_id), index (category_id,
@@ -47,7 +49,10 @@
 
 CREATE TABLE IF NOT EXISTS public.lesson_categories (
   lesson_id uuid NOT NULL REFERENCES public.lessons(id) ON DELETE CASCADE,
-  category_id uuid NOT NULL REFERENCES public.categories(id) ON DELETE CASCADE,
+  -- No foreign key to categories ON PURPOSE (incident, October 13, 2026): with one, PostgREST sees a
+  -- second lessons→categories path and every unhinted `categories(...)` embed (the 1.1.4 code) fails
+  -- with PGRST201. Migration 027 cleans memberships up when a category is deleted instead.
+  category_id uuid NOT NULL,
   position smallint NOT NULL DEFAULT 0,
   created_at timestamptz DEFAULT now(),
   PRIMARY KEY (lesson_id, category_id)

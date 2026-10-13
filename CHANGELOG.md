@@ -30,7 +30,7 @@ Migrations 023, 024 and 025 applied in production on October 13, 2026, before th
   - The lesson page links all its categories.
   - The bulk bar can set, add or remove a category on many lessons at once.
   - Shorts, feeds and notifications use the primary category.
-  - Needs migration 026. Before it, lessons keep a single category.
+  - Migrations 026 and 027 were applied on October 13. Applying 026 briefly broke the live 1.1.4 site; the cause was a foreign key that made the lessons→categories embeds ambiguous. 027 removed the key and replaced it with a delete trigger.
 - Every page in the 1.2 design (owner, October 13):
   - Shorts are rows with a rose tile, in the same grid as lessons, on the shorts page and on home.
   - Playlists and series get cover tiles and a header band.
