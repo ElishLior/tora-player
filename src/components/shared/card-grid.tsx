@@ -15,14 +15,17 @@ import { cn } from '@/lib/utils';
  *
  * - `rows` (lesson rows, bookmark groups): one column on phones; two at 1100px of pane,
  *   three at 1900px, four at 2400px. A row needs about 380px.
- * - `tiles` (playlists, series, categories): two columns on phones; three from 1100px,
- *   four from 1900px. A tile needs about 220px.
+ * - `tiles` (playlists, series): two columns on phones (a cover on top, the title beside a chevron);
+ *   three from 1100px, four from 1900px. A tile needs about 220px.
+ * - `cards` (categories, with a leading mark and footer links): one column on phones, two from
+ *   640px, three from 1400px, four from 1900px. A title beside its mark needs about 260px on phones.
  * Grid items stretch to equal heights in a row. Full-width blocks sit outside the grid.
  */
 const VARIANT = {
   rows: 'grid grid-cols-1 gap-y-0.5 min-[1100px]:max-[1279px]:grid-cols-2 min-[1100px]:gap-x-6 min-[1400px]:grid-cols-2 min-[1900px]:grid-cols-3 min-[2400px]:grid-cols-4',
   tiles:
     'grid grid-cols-2 gap-3 sm:gap-4 min-[1100px]:max-[1279px]:grid-cols-3 min-[1400px]:grid-cols-3 min-[1900px]:grid-cols-4',
+  cards: 'grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 min-[1400px]:grid-cols-3 min-[1900px]:grid-cols-4',
 } as const;
 
 export function CardGrid({

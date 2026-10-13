@@ -79,6 +79,7 @@ export default async function TagPage({ params }: Props) {
 
       {!result.ok ? (
         <EmptyState
+          tone="muted"
           icon={AlertTriangle}
           title={t('loadFailed')}
           action={

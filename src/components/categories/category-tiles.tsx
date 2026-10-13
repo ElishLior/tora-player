@@ -27,7 +27,7 @@ interface CategoryTilesProps {
  */
 export function CategoryTiles({ nodes, tree, counts, locale, emptyLabel, leading }: CategoryTilesProps) {
   return (
-    <CardGrid variant="tiles">
+    <CardGrid variant="cards">
       {nodes.map((node) => {
         const total = categoryLessonTotal(tree, counts, node.id);
         return (

@@ -8,8 +8,8 @@ interface EmptyStateProps {
   description?: string;
   /** A primary action (a link or button) where one makes sense. */
   action?: ReactNode;
-  /** rose = the shorts accent; neutral = the app's green primary. */
-  tone?: 'neutral' | 'rose';
+  /** rose = the shorts accent; neutral = the app's green primary; muted = a failed read (not success). */
+  tone?: 'neutral' | 'rose' | 'muted';
   /** Inside a card: less padding, same anatomy. */
   compact?: boolean;
 }
@@ -17,6 +17,7 @@ interface EmptyStateProps {
 const TONE = {
   neutral: 'bg-primary/10 text-primary',
   rose: 'bg-rose-400/15 text-rose-400',
+  muted: 'bg-[hsl(var(--surface-highlight))] text-muted-foreground',
 } as const;
 
 /**

@@ -38,7 +38,7 @@ export function CollectionHeader({
     <div className={cn('space-y-3', className)}>
       {back}
       <section
-        className="relative overflow-hidden rounded-2xl border border-border/40 p-4 sm:p-6"
+        className="relative rounded-2xl border border-border/40 p-4 sm:p-6"
         style={{
           background: `linear-gradient(160deg, hsl(${hue} 42% 22% / 0.9), hsl(var(--surface-elevated)) 80%)`,
         }}

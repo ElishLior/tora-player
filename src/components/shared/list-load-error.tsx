@@ -13,6 +13,7 @@ export async function ListLoadError() {
   return (
     <div role="alert">
       <EmptyState
+        tone="muted"
         icon={AlertTriangle}
         title={t('errorTitle')}
         description={t('errorHint')}

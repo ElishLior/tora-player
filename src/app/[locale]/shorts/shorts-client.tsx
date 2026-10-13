@@ -222,6 +222,7 @@ export default function ShortsClient({ lessons, topics, loadFailed, initialTag }
 
       {loadFailed ? (
         <EmptyState
+          tone="muted"
           icon={AlertTriangle}
           title={tLessons('loadErrorTitle')}
           description={tLessons('loadErrorDescription')}

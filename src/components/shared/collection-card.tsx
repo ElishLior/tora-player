@@ -44,13 +44,18 @@ export function CollectionCard({ href, title, description, meta, cover, leading,
             {title}
           </Link>
         </h2>
-        {meta && <span className="flex-shrink-0 text-[13px] tabular-nums text-muted-foreground">{meta}</span>}
         <ChevronLeft aria-hidden="true" className="h-5 w-5 flex-shrink-0 text-muted-foreground ltr:rotate-180" />
       </div>
-      {description && (
-        <p dir="auto" className="line-clamp-2 text-[13px] leading-relaxed text-muted-foreground">
-          {description}
-        </p>
+      {/* The count and the description sit under the title, so a narrow tile keeps the title's width. */}
+      {(meta || description) && (
+        <div className="space-y-0.5">
+          {meta && <p className="text-[13px] tabular-nums text-muted-foreground">{meta}</p>}
+          {description && (
+            <p dir="auto" className="line-clamp-2 text-[13px] leading-relaxed text-muted-foreground">
+              {description}
+            </p>
+          )}
+        </div>
       )}
       {footer && <div className="relative z-10">{footer}</div>}
     </article>

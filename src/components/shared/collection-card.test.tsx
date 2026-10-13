@@ -61,4 +61,21 @@ describe('CardGrid', () => {
     expect(tiles).toContain('grid-cols-2');
     expect(tiles).toContain('min-[1900px]:grid-cols-4');
   });
+
+  it('stacks category cards in one column on phones and opens a second column from sm', () => {
+    const cards = renderToStaticMarkup(
+      <CardGrid variant="cards">
+        <span />
+      </CardGrid>,
+    );
+    expect(cards).toContain('grid-cols-1');
+    expect(cards).toContain('sm:grid-cols-2');
+  });
+
+  it('keeps the count under the title, so a narrow tile keeps the title wide', () => {
+    const html = renderToStaticMarkup(
+      <CollectionCard href="/playlists/p1" title="רשימה" meta="3 שיעורים" description="תיאור" />,
+    );
+    expect(html.indexOf('3 שיעורים')).toBeGreaterThan(html.indexOf('</h2>'));
+  });
 });

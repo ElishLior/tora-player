@@ -48,7 +48,7 @@ export default function TagsClient({ tagCounts, loadFailed }: TagsClientProps) {
       )}
 
       {loadFailed ? (
-        <EmptyState icon={AlertTriangle} title={t('loadFailed')} />
+        <EmptyState tone="muted" icon={AlertTriangle} title={t('loadFailed')} />
       ) : tagCounts.length === 0 ? (
         <EmptyState icon={Hash} title={t('empty')} />
       ) : visible.length === 0 ? (

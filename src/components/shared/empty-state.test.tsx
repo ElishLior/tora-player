@@ -26,6 +26,12 @@ describe('EmptyState', () => {
     expect(neutral).not.toContain('bg-rose-400');
   });
 
+  it('uses a muted tone for a failed read, never the success green', () => {
+    const muted = renderToStaticMarkup(<EmptyState tone="muted" icon={Scissors} title="x" />);
+    expect(muted).toContain('text-muted-foreground');
+    expect(muted).not.toContain('bg-primary/10');
+  });
+
   it('is smaller inside a card when compact', () => {
     const compact = renderToStaticMarkup(<EmptyState compact icon={Scissors} title="x" />);
     const full = renderToStaticMarkup(<EmptyState icon={Scissors} title="x" />);

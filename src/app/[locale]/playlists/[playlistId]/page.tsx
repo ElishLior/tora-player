@@ -70,7 +70,7 @@ export default async function PlaylistDetailPage({ params }: Props) {
             href="/playlists"
             className="inline-flex min-h-11 items-center gap-1.5 rounded-full px-3 text-[13px] font-bold text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
           >
-            <ArrowRight aria-hidden="true" className="h-4 w-4" />
+            <ArrowRight aria-hidden="true" className="h-4 w-4 ltr:rotate-180" />
             {tCommon('playlists')}
           </Link>
         }
