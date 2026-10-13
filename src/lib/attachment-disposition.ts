@@ -52,12 +52,17 @@ export function asciiFallbackFilename(filename: string): string {
  * the default ASCII rendering would be misleading (a Hebrew-only name would
  * otherwise reduce to its digits).
  */
-export function attachmentDisposition(filename: string, asciiFilename?: string): string {
+export function attachmentDisposition(
+  filename: string,
+  asciiFilename?: string,
+  /** `inline` opens in the browser (a PDF viewer) but keeps the name for its own save button. */
+  type: 'attachment' | 'inline' = 'attachment',
+): string {
   const safeFilename = sanitizeAttachmentName(filename) || 'file';
   const fallback = asciiFilename ?? asciiFallbackFilename(safeFilename);
   const encoded = encodeURIComponent(safeFilename).replace(
     /['()*]/g,
     (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
   );
-  return `attachment; filename="${fallback}"; filename*=UTF-8''${encoded}`;
+  return `${type}; filename="${fallback}"; filename*=UTF-8''${encoded}`;
 }

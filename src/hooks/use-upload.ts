@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import type { AudioMetadata } from '@/lib/audio-utils';
 import { transcodeToOpus } from '@/lib/audio-transcode';
+import type { LessonSource } from '@/lib/lesson-sources';
 
 // 3.5 MB chunks stay well under Vercel's 4.5 MB request body limit.
 const CHUNK_SIZE = 3.5 * 1024 * 1024;
@@ -38,6 +39,58 @@ function postChunk(form: FormData, onChunkProgress: (fraction: number) => void):
   return promise;
 }
 
+/**
+ * Send a file to /api/upload/chunk in 3.5 MB pieces (parked in R2 for one lesson).
+ * A completion route then joins them. `onProgress` gets 0..1 of the bytes sent.
+ */
+export async function uploadChunks(
+  file: Blob,
+  lessonId: string,
+  onProgress?: (fraction: number) => void,
+): Promise<{ uploadId: string; totalParts: number }> {
+  const uploadId = crypto.randomUUID();
+  const totalParts = Math.max(1, Math.ceil(file.size / CHUNK_SIZE));
+  for (let partNumber = 0; partNumber < totalParts; partNumber++) {
+    const form = new FormData();
+    form.append('uploadId', uploadId);
+    form.append('lessonId', lessonId);
+    form.append('partNumber', String(partNumber));
+    form.append('chunk', file.slice(partNumber * CHUNK_SIZE, (partNumber + 1) * CHUNK_SIZE), `chunk_${partNumber}`);
+    await postChunk(form, (fraction) => onProgress?.((partNumber + fraction) / totalParts));
+  }
+  return { uploadId, totalParts };
+}
+
+/** Why a sources PDF upload failed: the server's code (`not-pdf`, `schema_missing`, ...) or `failed`. */
+export class LessonSourceUploadError extends Error {
+  constructor(public readonly code: string) {
+    super(code);
+  }
+}
+
+/**
+ * Upload a lesson's sources PDF ("מקורות השיעור") and publish it on the lesson,
+ * replacing any earlier one. Resolves with the stored sources.
+ */
+export async function uploadLessonSourcePdf(
+  file: File,
+  lessonId: string,
+  onProgress?: (percent: number) => void,
+): Promise<LessonSource> {
+  const { uploadId, totalParts } = await uploadChunks(file, lessonId, (fraction) =>
+    onProgress?.(Math.round(fraction * 95)),
+  );
+  const res = await fetch('/api/upload/source', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uploadId, lessonId, totalParts, fileName: file.name, fileSize: file.size }),
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data?.source) throw new LessonSourceUploadError(typeof data?.error === 'string' ? data.error : 'failed');
+  onProgress?.(100);
+  return data.source as LessonSource;
+}
+
 export interface AudioUploadOptions {
   lessonId: string;
   sortOrder: number;
@@ -66,21 +119,11 @@ export async function uploadAudioFile(file: File, options: AudioUploadOptions): 
     }
   }
 
-  const uploadId = crypto.randomUUID();
-  const totalParts = Math.max(1, Math.ceil(source.size / CHUNK_SIZE));
   const offset = source === file ? 0 : 40;
   const range = 95 - offset;
-
-  for (let partNumber = 0; partNumber < totalParts; partNumber++) {
-    const form = new FormData();
-    form.append('uploadId', uploadId);
-    form.append('lessonId', lessonId);
-    form.append('partNumber', String(partNumber));
-    form.append('chunk', source.slice(partNumber * CHUNK_SIZE, (partNumber + 1) * CHUNK_SIZE), `chunk_${partNumber}`);
-    await postChunk(form, (fraction) =>
-      onProgress?.(Math.round(offset + ((partNumber + fraction) / totalParts) * range)),
-    );
-  }
+  const { uploadId, totalParts } = await uploadChunks(source, lessonId, (fraction) =>
+    onProgress?.(Math.round(offset + fraction * range)),
+  );
 
   const res = await fetch('/api/upload/complete', {
     method: 'POST',

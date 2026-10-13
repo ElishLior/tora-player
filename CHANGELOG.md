@@ -4,6 +4,10 @@ Versions follow `MAJOR.MINOR.PATCH`. The version in `package.json` is the releas
 
 ## 1.2.1 — in progress
 
+- Lesson sources ("מקורות השיעור", owner, October 13): an admin uploads the PDF the rabbi uses on the lesson's edit page (Admin → שיעורים → pencil), even days after the lesson went up, and can replace or remove it. The lesson page shows it as the first block after the player with "פתיחת PDF" and "הורדת PDF למכשיר". Before the file arrives the admin can show "מקורות השיעור יתווספו בהמשך". Adding a PDF sends no notification. Needs migration 029.
+
+- Editing lives in the admin panel only (owner, October 13): lesson pages no longer show the tag and category editors, and the lesson lists no longer show "עריכת קטגוריות". The bulk category bar moved to Admin → שיעורים (/admin/lessons); one lesson is edited on its edit page.
+
 ## 1.2.0 — October 13, 2026
 
 Production release of `main` at `2fcc5da` (PRs #57, #58), deployment `dpl_ETd6f6SzSGBmoXEDkt3KniyL6QpC`, tag `v1.2.0`. Migrations 023–028 applied in production on October 13, 2026, before the deploy (checked read-only; a stale `move_category` call returns `CAT01` through PostgREST). Production smoke: health, home, lists, category, lesson page, feed, sitemap, and the Playwright offline-download, player-behavior and smoke specs (20 passed).

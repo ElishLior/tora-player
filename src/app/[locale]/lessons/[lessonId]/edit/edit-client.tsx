@@ -29,6 +29,7 @@ import { getLessonCategoryIds } from '@/actions/lesson-categories';
 import { CategoryPicker } from '@/components/categories/category-picker';
 import { generateLessonMetadata } from '@/lib/hebrew-date';
 import { TagInput } from '@/components/tags/tag-input';
+import { LessonSourceEditor } from '@/components/lessons/lesson-source-editor';
 import { lessonPath } from '@/config/site';
 import { isValidLessonSlug } from '@/lib/lesson-slugs';
 import { PartTypeField } from '@/components/lessons/part-type-field';
@@ -708,6 +709,9 @@ export default function EditLessonClient({ lessonId }: { lessonId: string }) {
           {saving ? tCommon('loading') : uploadingImages ? 'מעלה תמונות...' : uploadingAudio ? 'מעלה קבצי שמע...' : tCommon('save')}
         </button>
       </form>
+
+      {/* Sources PDF ("מקורות השיעור"): its own upload and publish step, independent of Save. */}
+      <LessonSourceEditor lessonId={lessonId} />
 
       {/* Image Management Section */}
       <div className="border-t border-[hsl(0,0%,18%)] pt-6">

@@ -13,7 +13,9 @@ import {
   canAutoLoadMore,
   getLoadMoreErrorMessage,
 } from '@/lib/lessons/pagination-state';
-import { CheckSquare, X, Save, Loader2, Play } from 'lucide-react';
+import { CheckSquare, X, Save, Loader2, Play, Pencil } from 'lucide-react';
+import { Link } from '@/i18n/routing';
+import { lessonPath } from '@/config/site';
 import { getLessonTracks } from '@/lib/lesson-tracks';
 import { buildCategoryTree } from '@/lib/category-tree';
 import { playLessons } from '@/lib/play-lesson';
@@ -34,7 +36,8 @@ interface LessonsClientProps {
   dateFilter?: string;
   /** Show a "play all" button that queues the loaded lessons (tag pages). */
   showPlayAll?: boolean;
-  admin?: boolean;
+  /** The admin bulk bar (set/add/remove a category on many lessons). Only /admin/lessons turns it on. */
+  bulkCategoryEdit?: boolean;
   categories?: Category[];
   searchLessons?: LessonWithRelations[];
 }
@@ -73,12 +76,13 @@ export function LessonsClient({
   tagFilter,
   dateFilter,
   showPlayAll,
-  admin,
+  bulkCategoryEdit,
   categories,
   searchLessons,
 }: LessonsClientProps) {
   const tTags = useTranslations('tagBrowse');
   const tCategories = useTranslations('lessonCategories');
+  const tAdmin = useTranslations('adminLessons');
   const isSearchMode = !!searchLessons;
 
   // Infinite scroll state (normal mode only)
@@ -229,8 +233,8 @@ export function LessonsClient({
         </button>
       )}
 
-      {/* Bulk edit toggle button (admin only) */}
-      {admin && !selectionMode && (
+      {/* Bulk edit toggle button (admin page only) */}
+      {bulkCategoryEdit && !selectionMode && (
         <button
           onClick={() => setSelectionMode(true)}
           className="flex items-center gap-1.5 rounded-full bg-[hsl(var(--surface-elevated))] px-3.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--surface-highlight))] transition-colors mb-3"
@@ -286,15 +290,38 @@ export function LessonsClient({
             {group.label}
           </h2>
           <LessonCardList>
-            {group.lessons.map((lesson) => (
-              <LessonCard
-                key={lesson.id}
-                lesson={lesson}
-                selectable={selectionMode}
-                selected={selectedIds.has(lesson.id)}
-                onToggleSelect={toggleSelect}
-              />
-            ))}
+            {group.lessons.map((lesson) =>
+              bulkCategoryEdit ? (
+                // Admin page: each row gets an edit link (details, categories, tags, sources PDF).
+                <div key={lesson.id} className="flex items-center gap-1">
+                  <div className="min-w-0 flex-1">
+                    <LessonCard
+                      lesson={lesson}
+                      selectable={selectionMode}
+                      selected={selectedIds.has(lesson.id)}
+                      onToggleSelect={toggleSelect}
+                    />
+                  </div>
+                  {!selectionMode && (
+                    <Link
+                      href={`${lessonPath(lesson)}/edit`}
+                      aria-label={tAdmin('editLesson', { title: lesson.hebrew_title || lesson.title })}
+                      className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-[hsl(var(--surface-highlight))] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                    >
+                      <Pencil className="h-4 w-4" aria-hidden="true" />
+                    </Link>
+                  )}
+                </div>
+              ) : (
+                <LessonCard
+                  key={lesson.id}
+                  lesson={lesson}
+                  selectable={selectionMode}
+                  selected={selectedIds.has(lesson.id)}
+                  onToggleSelect={toggleSelect}
+                />
+              ),
+            )}
           </LessonCardList>
         </section>
       ))}

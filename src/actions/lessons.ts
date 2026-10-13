@@ -129,29 +129,6 @@ function parseTagList(field: FormDataEntryValue): string[] | null {
   }
 }
 
-/** Replace a lesson's tags (lesson page inline editor). Returns the stored tags. */
-export async function updateLessonTags(
-  id: string,
-  tags: string[],
-): Promise<{ tags: string[] } | { error: string }> {
-  await requireAdmin();
-  if (!Array.isArray(tags) || !tags.every((tag) => typeof tag === 'string')) {
-    return { error: 'Invalid tags' };
-  }
-
-  const { data, error } = await createAdminSupabaseClient()
-    .from('lessons')
-    .update({ tags: normalizeTags(tags) })
-    .eq('id', id)
-    .select('tags')
-    .single();
-
-  if (error) return { error: error.message };
-
-  revalidateCatalog();
-  return { tags: (data as { tags: string[] }).tags };
-}
-
 export async function deleteLesson(id: string) {
   if (!(await isAdmin())) {
     return { error: 'Unauthorized' };
