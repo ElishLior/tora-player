@@ -32,7 +32,7 @@ ALTER TABLE public.lesson_sources ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS lesson_sources_public_read ON public.lesson_sources;
 CREATE POLICY lesson_sources_public_read ON public.lesson_sources
   FOR SELECT TO anon, authenticated
-  USING (EXISTS (SELECT 1 FROM public.lessons l WHERE l.id = lesson_id AND l.is_published));
+  USING (EXISTS (SELECT 1 FROM public.lessons l WHERE l.id = lesson_sources.lesson_id AND l.is_published));
 
 REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON TABLE public.lesson_sources FROM anon, authenticated;
 GRANT SELECT ON TABLE public.lesson_sources TO anon, authenticated;
