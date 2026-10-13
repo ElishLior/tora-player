@@ -82,7 +82,7 @@ test('lesson tags open their tag list, clear it, and preserve browser Back', asy
   await expect.poll(() => new URL(page.url()).pathname).toBe(href);
   await expect(page.locator('[data-active-tag]:visible')).toHaveAttribute('data-active-tag', tag);
   await expect(page.locator('main h1')).toContainText(tag);
-  const cards = page.locator('main .group.relative');
+  const cards = page.locator('main article');
   await expect(cards.first()).toBeVisible();
   for (const card of await cards.all()) {
     await expect(card.locator('[data-lesson-tag]').filter({ hasText: `#${tag}` })).toHaveCount(1);

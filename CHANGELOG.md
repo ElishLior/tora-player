@@ -15,6 +15,24 @@ Migrations 023, 024 and 025 applied in production on October 13, 2026, before th
   - A proper bottom bar from 1024px: transport, timeline with times, speed, volume (from 1280px), bookmark, share, cast, up next.
   - The home side panel (from 1360px) is a full player. With nothing loaded it shows the last-played lesson with a "continue" button, and it never autoplays.
   - The duplicate "המשך האזנה" strip is hidden where the panel shows.
+- Wide desktop (owner feedback, October 13):
+  - The app is a three-pane layout: the side menu, a fluid centre and the now-playing panel. The panel is on every page from 1280px.
+  - The latest lesson is the first box on home, with its reading cover and part count. The panel shows the latest lesson when nothing has been played yet.
+  - Lesson lists spread to 2–4 columns with the screen width. Shorts and categories sit side by side.
+  - Hovering a lesson lifts the row, highlights the title, turns the play button green and shows an arrow.
+  - The lesson page has two columns: the player and parts, beside a column with the description, category and images.
+  - Failed catalog reads show an error with a retry button instead of an empty list.
+  - "קטגוריות" is in the menu.
+  - On phones, the mini player sits above the tab bar, and the latest lesson shows its cover, part count and series.
+- Fixes from the requirements audit:
+  - Pause cancels a pending retry. A blocked autoplay offers "המשך ניגון" in the mini player and the desktop bar.
+  - The desktop bar links the series and the date.
+  - Bookmarks stay in sync across open tabs.
+  - Renaming a category refuses to overwrite another admin's newer edit.
+  - English category names are loaded everywhere.
+  - /me and the admin dashboard show the running and the live version.
+  - The lesson page shows its category as a link.
+  - The image viewer's download button resets per image, and the viewer's labels are translated.
 - One lesson row everywhere: categories, /lessons, tags, search, series and playlists all use the home page's row (date tile, part chips, tags, progress, play button). List play buttons play in place.
 - Version 1.2.0:
   - The version is shown on /me and on the admin dashboard, and `/api/health` reports the real version.
