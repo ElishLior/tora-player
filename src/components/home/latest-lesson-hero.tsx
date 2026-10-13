@@ -105,14 +105,8 @@ export function LatestLessonHero({ eyebrow, lesson, className }: LatestLessonHer
 
   return (
     <section aria-labelledby={`hero-${lesson.id}`} className={cn('relative isolate rounded-3xl p-5 lg:p-8', className)}>
-      {/* Backdrop and the decorative reading: clipped here so the share menu is not. */}
-      <div aria-hidden="true" className="absolute inset-0 -z-10 overflow-hidden rounded-3xl" style={BACKDROP}>
-        {reading && (
-          <span className="pointer-events-none absolute -end-3 top-12 select-none text-[160px] font-extrabold leading-none tracking-tight text-[hsl(45_80%_80%/0.08)]">
-            {reading}
-          </span>
-        )}
-      </div>
+      {/* Backdrop: clipped here so the share menu is not. The reading shows on the cover tile. */}
+      <div aria-hidden="true" className="absolute inset-0 -z-10 overflow-hidden rounded-3xl" style={BACKDROP} />
 
       <div className="flex items-stretch gap-4 lg:gap-8">
         <div className="grid min-w-0 flex-1 content-start gap-4">
