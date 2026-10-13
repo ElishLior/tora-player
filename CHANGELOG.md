@@ -24,6 +24,13 @@ Migrations 023, 024 and 025 applied in production on October 13, 2026, before th
   - Failed catalog reads show an error with a retry button instead of an empty list.
   - "קטגוריות" is in the menu.
   - On phones, the mini player sits above the tab bar, and the latest lesson shows its cover, part count and series.
+- A lesson can belong to several categories at any level (owner, October 13):
+  - The admin ticks them in a checkbox tree. The first one is the lesson's primary category, and another can be made primary.
+  - Category pages, category playback and the category filter include a lesson when any of its categories matches. Counts count each lesson once per branch.
+  - The lesson page links all its categories.
+  - The bulk bar can set, add or remove a category on many lessons at once.
+  - Shorts, feeds and notifications use the primary category.
+  - Needs migration 026. Before it, lessons keep a single category.
 - Every page in the 1.2 design (owner, October 13):
   - Shorts are rows with a rose tile, in the same grid as lessons, on the shorts page and on home.
   - Playlists and series get cover tiles and a header band.
