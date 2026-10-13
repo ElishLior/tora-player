@@ -275,7 +275,6 @@ export default async function LessonsPage({ params, searchParams }: Props) {
             initialLessons={[]}
             initialHasMore={false}
             locale={locale}
-            admin={admin}
             categories={allCategories}
             searchLessons={lessons}
           />
@@ -289,7 +288,6 @@ export default async function LessonsPage({ params, searchParams }: Props) {
             categoryFilter={categoryFilter}
             tagFilter={tagFilter}
             dateFilter={dateFilter}
-            admin={admin}
             categories={allCategories}
           />
         )

@@ -9,7 +9,6 @@ import { isSupabaseConfigured } from '@/lib/supabase/server';
 import { createCatalogLessonListReader } from '@/lib/supabase/anon';
 import { loadInitialLessonList } from '@/lib/supabase/lesson-list';
 import { tagFromSegment, tagPath } from '@/lib/tag-links';
-import { isAdmin } from '@/lib/auth/admin';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PageHeader } from '@/components/shared/page-header';
 import { LessonsClient } from '../../lessons/lessons-client';
@@ -41,7 +40,6 @@ export default async function TagPage({ params }: Props) {
   const t = await getTranslations('tagBrowse');
   const commonT = await getTranslations('common');
   const browseT = await getTranslations('lessonBrowse');
-  const admin = await isAdmin();
 
   const result = await loadInitialLessonList(isSupabaseConfigured() ? createCatalogLessonListReader() : null, {
     tagFilter: tag,
@@ -109,7 +107,6 @@ export default async function TagPage({ params }: Props) {
           locale={locale}
           tagFilter={tag}
           showPlayAll
-          admin={admin}
           categories={result.allCategories}
         />
       )}

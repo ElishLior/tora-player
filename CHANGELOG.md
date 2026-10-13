@@ -2,9 +2,15 @@
 
 Versions follow `MAJOR.MINOR.PATCH`. The version in `package.json` is the release being worked on; a version is released when it is deployed to production from `main` (tag `vX.Y.Z` on that commit). Add each change under the in-progress version as it lands in `dev`.
 
-## 1.2.0 — in progress
+## 1.2.1 — in progress
 
-Migrations 023, 024 and 025 applied in production on October 13, 2026, before the deploy (checked read-only; a stale `move_category` call returns `CAT01` through PostgREST).
+- Lesson sources ("מקורות השיעור", owner, October 13): an admin uploads the PDF the rabbi uses on the lesson's edit page (Admin → שיעורים → pencil), even days after the lesson went up, and can replace or remove it. The lesson page shows it as the first block after the player with "פתיחת PDF" and "הורדת PDF למכשיר". Before the file arrives the admin can show "מקורות השיעור יתווספו בהמשך". Adding a PDF sends no notification. Needs migration 029.
+
+- Editing lives in the admin panel only (owner, October 13): lesson pages no longer show the tag and category editors, and the lesson lists no longer show "עריכת קטגוריות". The bulk category bar moved to Admin → שיעורים (/admin/lessons); one lesson is edited on its edit page.
+
+## 1.2.0 — October 13, 2026
+
+Production release of `main` at `2fcc5da` (PRs #57, #58), deployment `dpl_ETd6f6SzSGBmoXEDkt3KniyL6QpC`, tag `v1.2.0`. Migrations 023–028 applied in production on October 13, 2026, before the deploy (checked read-only; a stale `move_category` call returns `CAT01` through PostgREST). Production smoke: health, home, lists, category, lesson page, feed, sitemap, and the Playwright offline-download, player-behavior and smoke specs (20 passed).
 
 
 - Continuous category playback: "ניגון רציף של הקטגוריה" on a category page plays the category and all its subcategories in one session. Order: date, then upload time. The queue is frozen when it starts, so new uploads don't reshuffle it. Multipart lessons finish before the next lesson, more lessons load ahead in segments of 25, and unavailable lessons are skipped with a notice (at most 3 in a row). It ends with a "category finished" notice, with no repeat or shuffle. A restored session never autoplays. A source error skips a lesson only after one retry. While the next lesson loads, the player shows loading and Play keeps waiting (only Pause cancels). Skipped, stopped and finished notices show on the mini player and the desktop bar. The saved queue keeps 50 tracks behind the current one.

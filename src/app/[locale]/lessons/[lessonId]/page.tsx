@@ -10,7 +10,9 @@ import { parshaLabel } from '@/lib/parsha-label';
 import { Link } from '@/i18n/routing';
 import { ArrowRight, Calendar, Clock, Edit, MapPin, User, BookOpen, Hash } from 'lucide-react';
 import { isAdmin } from '@/lib/auth/admin';
-import { LessonPlayerClient, LessonTags } from './lesson-player-client';
+import { LessonPlayerClient, LessonSourcesSection, LessonTags } from './lesson-player-client';
+import { readLessonSourceRow } from '@/lib/supabase/lesson-sources';
+import { lessonSourceFromRow } from '@/lib/lesson-sources';
 import { JsonLd } from '@/components/seo/json-ld';
 import { DEFAULT_LOCALE, OG_LOCALE, SITE_NAME, categoryPath, isSiteLocale, lessonPath, pageUrl, seriesPath } from '@/config/site';
 import { categoryLabel, findCategory } from '@/lib/category-tree';
@@ -44,16 +46,14 @@ const loadLesson = cache(async (lessonId: string) => {
     const route = await resolveLessonRoute(client, lessonId);
     if (route.kind === 'not-found') return null;
     const lesson = await getLessonById(client, route.lessonId);
-    // Every category of the lesson (migration 026). A missing table (null) falls back to the primary.
-    // A failed read is kept apart: the admin editor would otherwise save over the hidden categories.
-    let memberships: string[] | null = null;
-    let membershipsReadFailed = false;
-    try {
-      memberships = await readLessonCategoryIds(client, route.lessonId);
-    } catch {
-      membershipsReadFailed = true;
-    }
-    return { route, lesson, categoryIds: categorySelectionFor(memberships, lesson.category_id), membershipsReadFailed };
+    // Every category of the lesson (migration 026). A missing table or failed read falls back to the primary.
+    const [memberships, sourceRead] = await Promise.all([
+      readLessonCategoryIds(client, route.lessonId).catch(() => null),
+      readLessonSourceRow(client, route.lessonId),
+    ]);
+    // Sources (migration 029): a missing table or failed read just hides the section.
+    const source = sourceRead.ok && sourceRead.row ? lessonSourceFromRow(sourceRead.row) : null;
+    return { route, lesson, categoryIds: categorySelectionFor(memberships, lesson.category_id), source };
   } catch {
     return null;
   }
@@ -95,15 +95,14 @@ export default async function LessonDetailPage({ params, searchParams }: Props) 
 
   const loaded = await loadLesson(lessonId);
   if (!loaded) notFound();
-  const { lesson, route, categoryIds, membershipsReadFailed } = loaded;
+  const { lesson, route, categoryIds, source } = loaded;
   if (route.kind === 'redirect') {
     permanentRedirect(lessonRedirectUrl(route.pathname, isSiteLocale(locale) ? locale : 'he', await searchParams));
   }
 
   const admin = await isAdmin();
-  // The tree names the lesson's categories and feeds the admin picker. A failed read shows the primary category only.
+  // The tree names the lesson's categories. A failed read shows the primary category only.
   const tree = await getCachedCategoriesTree().catch(() => []);
-  const categories = admin && !membershipsReadFailed ? tree : undefined;
   const named = categoryIds
     .map((id) => findCategory(tree, id))
     .filter((category) => category !== undefined);
@@ -261,13 +260,7 @@ export default async function LessonDetailPage({ params, searchParams }: Props) 
           <h1 className="text-xl font-bold xl:text-2xl" dir="auto">
             {lesson.hebrew_title || lesson.title}
           </h1>
-          <LessonTags
-            lessonId={lesson.id}
-            tags={lesson.tags ?? []}
-            admin={admin}
-            categoryIds={categoryIds}
-            categories={categories}
-          />
+          <LessonTags tags={lesson.tags ?? []} />
           {lesson.series && (
             <Link
               href={seriesPath(lesson.series.id)}
@@ -357,11 +350,17 @@ export default async function LessonDetailPage({ params, searchParams }: Props) 
             images={hasImages ? lesson.images : undefined}
             sideSlot={sideContent}
             mainSlot={mainContent}
+            source={source}
           />
         </Suspense>
       ) : (
         <>
-          {mainContent && <div className={MAIN_COLUMN}>{mainContent}</div>}
+          {(mainContent || source) && (
+            <div className={MAIN_COLUMN}>
+              <LessonSourcesSection lessonId={lesson.id} source={source} className="order-2" />
+              {mainContent}
+            </div>
+          )}
           {sideContent && <div className={SIDE_COLUMN}>{sideContent}</div>}
         </>
       )}
