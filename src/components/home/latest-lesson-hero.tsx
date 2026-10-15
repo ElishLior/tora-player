@@ -110,7 +110,7 @@ export function LatestLessonHero({ eyebrow, lesson, className }: LatestLessonHer
 
       <div className="flex items-stretch gap-4 lg:gap-8">
         <div className="grid min-w-0 flex-1 content-start gap-4">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 pe-28 lg:pe-0">
             <p className="flex items-center gap-2 text-[13px] font-bold tracking-wide text-[hsl(48_90%_82%)]">
               <span
                 aria-hidden="true"
@@ -127,7 +127,7 @@ export function LatestLessonHero({ eyebrow, lesson, className }: LatestLessonHer
 
           <h2
             id={`hero-${lesson.id}`}
-            className="text-[26px] font-extrabold leading-tight tracking-tight text-foreground lg:text-[32px]"
+            className="pe-28 text-[26px] font-extrabold leading-tight tracking-tight text-foreground lg:pe-0 lg:text-[32px]"
           >
             <Link
               href={lessonPath(lesson)}
@@ -139,7 +139,7 @@ export function LatestLessonHero({ eyebrow, lesson, className }: LatestLessonHer
           </h2>
 
           {/* Date · part count · reading, then the series link. Each is a sibling of the stretched title link. */}
-          <div className="flex flex-wrap items-center gap-2 text-sm">
+          <div className="flex flex-wrap items-center gap-2 pe-28 text-sm lg:pe-0">
             <LessonDateLink date={lesson.date} hebrewDate={lesson.hebrew_date} className="text-sm text-foreground/75" />
             <span aria-hidden="true" className="text-foreground/40">
               ·
@@ -233,10 +233,10 @@ export function LatestLessonHero({ eyebrow, lesson, className }: LatestLessonHer
           )}
         </div>
 
-        {/* The reading cover (concept B): decorative, the title link covers it. Left of the text in Hebrew. */}
+        {/* Reserve the cover's space beside the heading on mobile; controls use the full width below it. */}
         <ReadingCover
           lesson={lesson}
-          className="h-24 w-24 lg:h-56 lg:w-56 xl:h-60 xl:w-60"
+          className="pointer-events-none absolute end-5 top-5 h-24 w-24 lg:static lg:h-56 lg:w-56 xl:h-60 xl:w-60"
           textClassName="text-[34px] lg:text-[56px]"
         />
       </div>

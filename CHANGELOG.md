@@ -4,6 +4,8 @@ Versions follow `MAJOR.MINOR.PATCH`. The version in `package.json` is the releas
 
 ## 1.2.1 — in progress
 
+- Playable part chips wrap so every part stays visible and tappable on phones. The home hero gives its controls the full mobile width; compact lesson rows keep their single-line part previews.
+
 - Lesson sources ("מקורות השיעור", owner, October 13): an admin uploads the PDF the rabbi uses on the lesson's edit page (Admin → שיעורים → pencil), even days after the lesson went up, and can replace or remove it. The lesson page shows it as the first block after the player with "פתיחת PDF" and "הורדת PDF למכשיר". Before the file arrives the admin can show "מקורות השיעור יתווספו בהמשך". Adding a PDF sends no notification. Needs migration 029.
 
 - Editing lives in the admin panel only (owner, October 13): lesson pages no longer show the tag and category editors, and the lesson lists no longer show "עריכת קטגוריות". The bulk category bar moved to Admin → שיעורים (/admin/lessons); one lesson is edited on its edit page.
