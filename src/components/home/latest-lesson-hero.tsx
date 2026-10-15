@@ -110,41 +110,49 @@ export function LatestLessonHero({ eyebrow, lesson, className }: LatestLessonHer
 
       <div className="flex items-stretch gap-4 lg:gap-8">
         <div className="grid min-w-0 flex-1 content-start gap-4">
-          <div className="flex items-center gap-2 pe-28 lg:pe-0">
-            <p className="flex items-center gap-2 text-[13px] font-bold tracking-wide text-[hsl(48_90%_82%)]">
-              <span
-                aria-hidden="true"
-                className="h-2 w-2 rounded-full bg-[hsl(45_95%_62%)] motion-safe:animate-pulse"
-              />
-              {eyebrow}
-            </p>
-            {isNew && (
-              <span className="rounded-full bg-primary px-2 py-0.5 text-[13px] font-extrabold text-primary-foreground">
-                {t('newBadge')}
-              </span>
-            )}
+          <div className="grid min-h-16 content-start gap-3 pe-20 min-[360px]:min-h-20 min-[360px]:pe-24 lg:min-h-0 lg:gap-4 lg:pe-0">
+            <div className="flex flex-wrap items-center gap-2 lg:flex-nowrap">
+              <p className="flex items-center gap-2 text-[13px] font-bold tracking-wide text-[hsl(48_90%_82%)]">
+                <span
+                  aria-hidden="true"
+                  className="h-2 w-2 rounded-full bg-[hsl(45_95%_62%)] motion-safe:animate-pulse"
+                />
+                {eyebrow}
+              </p>
+              {isNew && (
+                <span className="rounded-full bg-primary px-2 py-0.5 text-[13px] font-extrabold text-primary-foreground">
+                  {t('newBadge')}
+                </span>
+              )}
+            </div>
+
+            <h2
+              id={`hero-${lesson.id}`}
+              className="text-[22px] font-extrabold leading-tight tracking-tight text-foreground min-[360px]:text-[26px] lg:text-[32px]"
+            >
+              <Link
+                href={lessonPath(lesson)}
+                dir="auto"
+                className="before:absolute before:inset-0 before:content-[''] hover:underline focus-visible:outline-none"
+              >
+                {title}
+              </Link>
+            </h2>
           </div>
 
-          <h2
-            id={`hero-${lesson.id}`}
-            className="pe-28 text-[26px] font-extrabold leading-tight tracking-tight text-foreground lg:pe-0 lg:text-[32px]"
-          >
-            <Link
-              href={lessonPath(lesson)}
-              dir="auto"
-              className="before:absolute before:inset-0 before:content-[''] hover:underline focus-visible:outline-none"
-            >
-              {title}
-            </Link>
-          </h2>
-
           {/* Date · part count · reading, then the series link. Each is a sibling of the stretched title link. */}
-          <div className="flex flex-wrap items-center gap-2 pe-28 text-sm lg:pe-0">
-            <LessonDateLink date={lesson.date} hebrewDate={lesson.hebrew_date} className="text-sm text-foreground/75" />
-            <span aria-hidden="true" className="text-foreground/40">
-              ·
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="inline-flex items-center gap-2 whitespace-nowrap">
+              <LessonDateLink
+                date={lesson.date}
+                hebrewDate={lesson.hebrew_date}
+                className="text-sm text-foreground/75"
+              />
+              <span aria-hidden="true" className="text-foreground/40">
+                ·
+              </span>
+              <span className="text-sm text-foreground/75">{tShell('partsCount', { count: tracks.length })}</span>
             </span>
-            <span className="text-sm text-foreground/75">{tShell('partsCount', { count: tracks.length })}</span>
             {reading && (
               <span className="bg-foreground/12 rounded-full px-2.5 py-0.5 font-bold text-foreground" dir="rtl">
                 {reading}
@@ -164,6 +172,7 @@ export function LatestLessonHero({ eyebrow, lesson, className }: LatestLessonHer
             variant="chips"
             seconds={partSeconds}
             onPlayPart={(index) => playLesson(tracks, { startPart: index })}
+            className="max-lg:grid max-lg:grid-cols-[repeat(auto-fit,minmax(7.25rem,1fr))] max-lg:[&>button]:justify-center max-lg:[&>button]:gap-1 max-lg:[&>button]:px-1.5"
           />
 
           <LessonTagList tags={lesson.tags} />
@@ -236,8 +245,8 @@ export function LatestLessonHero({ eyebrow, lesson, className }: LatestLessonHer
         {/* Reserve the cover's space beside the heading on mobile; controls use the full width below it. */}
         <ReadingCover
           lesson={lesson}
-          className="pointer-events-none absolute end-5 top-5 h-24 w-24 lg:static lg:h-56 lg:w-56 xl:h-60 xl:w-60"
-          textClassName="text-[34px] lg:text-[56px]"
+          className="pointer-events-none absolute end-5 top-5 h-16 w-16 min-[360px]:h-20 min-[360px]:w-20 lg:static lg:h-56 lg:w-56 xl:h-60 xl:w-60"
+          textClassName="text-[28px] min-[360px]:text-[34px] lg:text-[56px]"
         />
       </div>
     </section>
