@@ -8,6 +8,8 @@ Versions follow `MAJOR.MINOR.PATCH`. The version in `package.json` is the releas
 
 Production release of `main` at `9898698` (PRs #60, #61), deployment `dpl_2Y1MwXqAV1dqgrxotHthcDqXc2WP`, tag `v1.2.1`. Migration 029 applied in production before the deploy. The owner's sample PDF was attached to the October 12 lesson (noach-12-10-2026) as the first real sources file. Production smoke: health, pages, feed, sitemap, sources open/download (bytes identical), Playwright offline-download, player-behavior and smoke (20 passed).
 
+- Playable part chips wrap so every part stays visible and tappable on phones. The home hero pairs its title with a smaller cover, gives metadata the full width, and spreads part chips evenly across each mobile row. Compact lesson rows keep their single-line part previews.
+
 - Lesson sources ("מקורות השיעור", owner, October 13): an admin uploads the PDF the rabbi uses on the lesson's edit page (Admin → שיעורים → pencil), even days after the lesson went up, and can replace or remove it. The lesson page shows it as the first block after the player with "פתיחת PDF" and "הורדת PDF למכשיר". Before the file arrives the admin can show "מקורות השיעור יתווספו בהמשך". Adding a PDF sends no notification. Needs migration 029.
 
 - Editing lives in the admin panel only (owner, October 13): lesson pages no longer show the tag and category editors, and the lesson lists no longer show "עריכת קטגוריות". The bulk category bar moved to Admin → שיעורים (/admin/lessons); one lesson is edited on its edit page.

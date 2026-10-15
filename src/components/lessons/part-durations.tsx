@@ -44,14 +44,15 @@ function prefersReducedMotion() {
 }
 
 /**
- * "חלק 1: 82 דק׳ · חלק 2: 70 דק׳" on one line that never wraps. When it does
- * not fit, the hidden side fades and the rest is reachable without a second
- * line: swipe or tap on touch screens, hover or keyboard focus with a mouse.
- * Reduced motion jumps instead of scrolling smoothly.
+ * Text and non-playable chips stay on one line. When they do not fit, the
+ * hidden side fades: swipe or tap on touch screens, hover or keyboard focus
+ * with a mouse. Reduced motion jumps instead of scrolling smoothly.
+ * Playable chips wrap without scrolling or fading so every control is visible.
  *
  * Inside a card with a stretched link, render it as a sibling of the link:
  * while it fits it stays unpositioned so a tap still opens the lesson; once it
- * overflows it lifts above the link so the swipe and tap reach it.
+ * overflows it lifts above the link so the swipe and tap reach it. Playable
+ * chips lift only their buttons; empty space still opens the lesson.
  */
 export function PartDurations({ seconds, className, variant = 'text', onPlayPart }: PartDurationsProps) {
   const t = useTranslations('partDurations');
@@ -60,28 +61,30 @@ export function PartDurations({ seconds, className, variant = 'text', onPlayPart
   const items = formatPartDurations(seconds, t);
   const text = items.join(PART_SEPARATOR);
   const chips = variant === 'chips';
+  const wrapping = chips && Boolean(onPlayPart);
+  const overflow = !wrapping && edges.overflow;
 
   const measure = useCallback(() => {
     const el = ref.current;
-    if (!el) return;
+    if (!el || wrapping) return;
     const next = readEdges(el);
     setEdges((prev) =>
       prev.overflow === next.overflow && prev.left === next.left && prev.right === next.right ? prev : next,
     );
-  }, []);
+  }, [wrapping]);
 
   useEffect(() => {
     const el = ref.current;
-    if (!el) return;
+    if (!el || wrapping) return;
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(el);
     return () => observer.disconnect();
-  }, [measure, text]);
+  }, [measure, text, wrapping]);
 
   const reveal = (toEnd: boolean) => {
     const el = ref.current;
-    if (!el || !edges.overflow) return;
+    if (!el || !overflow) return;
     const max = el.scrollWidth - el.clientWidth;
     const rtl = getComputedStyle(el).direction === 'rtl';
     el.scrollTo({ left: toEnd ? (rtl ? -max : max) : 0, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
@@ -95,7 +98,7 @@ export function PartDurations({ seconds, className, variant = 'text', onPlayPart
   if (items.length === 0) return null;
 
   const mask =
-    edges.left || edges.right
+    !wrapping && (edges.left || edges.right)
       ? `linear-gradient(to right, ${edges.left ? 'transparent' : '#000'}, #000 ${FADE}, #000 calc(100% - ${FADE}), ${edges.right ? 'transparent' : '#000'})`
       : undefined;
 
@@ -105,9 +108,9 @@ export function PartDurations({ seconds, className, variant = 'text', onPlayPart
   return (
     <div
       ref={ref}
-      role={edges.overflow ? 'group' : undefined}
-      aria-label={edges.overflow ? t('label') : undefined}
-      tabIndex={edges.overflow ? 0 : undefined}
+      role={overflow ? 'group' : undefined}
+      aria-label={overflow ? t('label') : undefined}
+      tabIndex={overflow ? 0 : undefined}
       onScroll={measure}
       onPointerEnter={(e) => e.pointerType === 'mouse' && reveal(true)}
       onPointerLeave={(e) => e.pointerType === 'mouse' && document.activeElement !== ref.current && reveal(false)}
@@ -116,17 +119,19 @@ export function PartDurations({ seconds, className, variant = 'text', onPlayPart
       onClick={(e) => {
         // A chip button handles its own tap (it plays that part).
         if ((e.target as HTMLElement).closest('button')) return;
-        if (!edges.overflow) return;
+        if (!overflow) return;
         // A tap on a clipped line shows the other end instead of opening the card.
         e.stopPropagation();
         reveal(!atEnd());
       }}
       style={mask ? { maskImage: mask, WebkitMaskImage: mask } : undefined}
       className={cn(
-        'min-w-0 overflow-x-auto overscroll-x-contain whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+        'min-w-0',
+        wrapping
+          ? 'flex-wrap'
+          : 'overflow-x-auto overscroll-x-contain whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
         chips && 'flex items-center gap-1.5 py-0.5',
-        edges.overflow &&
-          'relative z-10 rounded-sm outline-none focus-visible:ring-1 focus-visible:ring-primary/70',
+        overflow && 'relative z-10 rounded-sm outline-none focus-visible:ring-1 focus-visible:ring-primary/70',
         className,
       )}
     >
@@ -135,7 +140,11 @@ export function PartDurations({ seconds, className, variant = 'text', onPlayPart
             const style = { '--pc': partColor(index) } as React.CSSProperties;
             if (!onPlayPart) {
               return (
-                <span key={index} style={style} className={cn(chipBase, 'min-h-7 px-2 text-xs sm:px-2.5 sm:text-[13px] lg:px-2 lg:text-[13px]')}>
+                <span
+                  key={index}
+                  style={style}
+                  className={cn(chipBase, 'min-h-7 px-2 text-xs sm:px-2.5 sm:text-[13px] lg:px-2 lg:text-[13px]')}
+                >
                   <i aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-[hsl(var(--pc))]" />
                   <bdi>{item}</bdi>
                 </span>
